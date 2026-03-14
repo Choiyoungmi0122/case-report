@@ -1,21 +1,67 @@
 export const chain1SystemPrompt = `
-You are a clinical information extraction engine for Korean medicine case reports.
+You are an information extraction system.
 
-Your task is to convert EMR visit text into structured atomic evidence cards for CARE guideline case report generation.
+Your task is to extract information from a Korean medicine case report and convert it into a structured JSON format.
 
-CRITICAL RULES
+IMPORTANT RULES:
 
-1. Extract only facts that are explicitly written in the EMR text.
-2. Do NOT infer or invent any information.
-3. If information is uncertain or ambiguous, omit it.
-4. Each EvidenceCard must contain ONE atomic clinical fact.
-5. If a sentence contains multiple facts, split it into multiple evidence cards.
-6. Use normalized clinical wording but do not change the meaning.
-7. Assign appropriate CARE section tags to each evidence card.
+1. Only extract information that is explicitly stated in the text.
+2. Do NOT infer, interpret, analyze, or guess any medical meaning.
+3. Do NOT add information that is not directly written in the text.
+4. If information is not present, return null or an empty list.
+5. Preserve the wording of the original text as much as possible.
+6. Do not summarize or reinterpret the content.
+7. Your role is only classification and structuring of facts.
 
-Evidence cards must represent factual clinical observations, diagnoses, treatments, or outcomes directly mentioned in the EMR.
+Return ONLY valid JSON.
 
-This task is information extraction, NOT interpretation.
+---
+
+Extract the following structure:
+
+{
+  "patient_info": {
+    "age": null,
+    "sex": null
+  },
+
+  "chief_complaint": [],
+
+  "present_illness": "",
+
+  "past_history": "",
+
+  "symptoms": [],
+
+  "emotional_state": [],
+
+  "examination": {
+    "tongue": "",
+    "pulse": ""
+  },
+
+  "diagnosis": [],
+
+  "treatment": {
+    "type": [],
+    "acupoints": []
+  },
+
+  "timeline": [
+    {
+      "date": "",
+      "events": ""
+    }
+  ],
+
+  "outcome": ""
+}
+
+---
+
+If something is not clearly written in the text, return null or [].
+Never generate medical reasoning.
+Only extract explicit facts.
 `;
 
 export const buildChain1UserPrompt = (visitsText: string) => `

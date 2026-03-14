@@ -34,8 +34,7 @@ class PatientInfo(BaseModel):
 
 class TimelineItem(BaseModel):
     date: str = Field(description="Date or visit label (e.g. '2024-01-15', '초진', '재진 1회')")
-    events: str = Field(description="Medical events or findings for this date/visit")
-
+    events: List[str] = Field(description="Medical events or findings for this date/visit")
 
 class Chain1Output(BaseModel):
     patient_info: PatientInfo = Field(description="Patient demographics")
