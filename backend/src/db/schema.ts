@@ -28,7 +28,8 @@ const CaseSchema = new mongoose.Schema(
     evidenceCards: { type: Array, default: [] },      // Chain 1
     sectionStates: { type: Array, default: [] },      // Chain 2
     sectionDrafts: { type: Array, default: [] },      // Chain 3/4
-    finalDraft: { type: Object, default: null }       // Chain 5
+    finalDraft: { type: Object, default: null },      // Chain 5
+    aiPipeline: { type: Object, default: null }       // ai_server Chain1~7 결과
   },
   {
     collection: 'cases'

@@ -17,6 +17,12 @@
   margin-bottom: 1rem;
 }
 
+.header-top-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .btn-home {
   padding: 0.5rem 1rem;
   background-color: #6c757d;
@@ -29,6 +35,20 @@
 
 .btn-home:hover {
   background-color: #5a6268;
+}
+
+.btn-manuscript {
+  padding: 0.5rem 1rem;
+  background-color: #0d6efd;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-manuscript:hover {
+  background-color: #0b5ed7;
 }
 
 .header-title-section {
@@ -130,6 +150,99 @@
 .case-id {
   color: #666;
   font-size: 0.9rem;
+}
+
+.ai-final-card {
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.ai-final-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.ai-final-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #1e3a8a;
+}
+
+.btn-copy-final {
+  padding: 0.4rem 0.8rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-copy-final:hover {
+  background: #1d4ed8;
+}
+
+.ai-final-markdown {
+  margin: 0;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.8rem;
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  color: #334155;
+  max-height: 360px;
+  overflow: auto;
+}
+
+.ai-sections-fallback {
+  margin-bottom: 1.25rem;
+}
+
+.ai-sections-fallback h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.ai-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.ai-section-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.ai-section-card h4 {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.92rem;
+  color: #1f2937;
+}
+
+.ai-section-card p {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #4b5563;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.empty-sections-message {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  border-radius: 8px;
+  padding: 0.8rem;
 }
 
 .sections-grid {

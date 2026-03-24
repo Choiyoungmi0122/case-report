@@ -15,6 +15,7 @@ EMR(전자의무기록) 데이터를 기반으로 CARE(Case Report) 증례보고
 ## 기술 스택
 
 - **Backend**: Node.js + Express + TypeScript
+- **AI Server**: FastAPI + Python
 - **Frontend**: React + Vite + TypeScript
 - **Database**: MongoDB
 - **LLM**: OpenAI GPT-4 (structured output)
@@ -25,19 +26,35 @@ EMR(전자의무기록) 데이터를 기반으로 CARE(Case Report) 증례보고
 
 - Node.js 18+ 
 - npm 또는 yarn
+- Python 3.10+
+- pip
 - MongoDB (로컬 또는 원격)
 - OpenAI API Key
 
 ### 1. 환경 변수 설정
 
-백엔드 디렉토리에 `.env` 파일을 생성하세요:
+#### 1-1. backend/.env
+
+백엔드 디렉토리에 `.env` 파일을 생성하세요.
 
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 PORT=5000
+AI_SERVER_URL=http://127.0.0.1:8000
 MONGODB_URI=mongodb+srv://choiyoungmi2252_db_user:YOUR_PASSWORD@v1.cedix7t.mongodb.net/care?retryWrites=true&w=majority
 STORE_ORIGINAL_TEXT=false
 USE_MOCK=false
+```
+
+`AI_SERVER_URL`은 프론트 요청(`/api/ai/*`)을 ai_server로 프록시할 때 사용됩니다.
+
+#### 1-2. ai_server/.env (선택)
+
+`ai_server`에서 모델/키를 별도로 제어하려면 `ai_server/.env`를 생성하세요.
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1
 ```
 
 **MongoDB 연결:**
@@ -74,7 +91,17 @@ mongod --dbpath C:\data\db
 docker run -d -p 27017:27017 --name mongodb mongo:latest
 ```
 
-### 3. 백엔드 설정
+### 3. AI Server 실행 (Chain1~7)
+
+```bash
+cd ai_server
+pip install -r requirement.txt
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+ai_server는 `http://localhost:8000`에서 실행됩니다.
+
+### 4. 백엔드 설정
 
 ```bash
 cd backend
@@ -84,7 +111,7 @@ npm run dev
 
 백엔드는 `http://localhost:5000`에서 실행됩니다.
 
-### 4. 프론트엔드 설정
+### 5. 프론트엔드 설정
 
 새 터미널에서:
 
@@ -132,8 +159,21 @@ casereport/
 ### Sections
 
 - `GET /api/cases/:id/sections/:sectionId` - 섹션 상세 조회
-- `POST /api/cases/:id/sections/:sectionId/next-question` - 다음 질문 생성
-- `POST /api/cases/:id/sections/:sectionId/answer` - 답변 제출 및 초안 업데이트
+- `POST /api/cases/:id/sections/:sectionId/next` - 질문 생성/답변 반영(Q&A 1 step)
+
+### AI Pipeline (신규, Chain1~7)
+
+백엔드 프록시 경로:
+
+- `POST /api/ai/pipeline/start` - Chain1~5 실행
+- `POST /api/ai/pipeline/answer` - Chain6 실행 후 Chain4/5 재평가 (완료 시 Chain7 포함)
+- `POST /api/ai/pipeline/run-full` - Chain1~7 원샷 실행
+
+ai_server 원본 경로:
+
+- `POST /pipeline/start`
+- `POST /pipeline/answer`
+- `POST /pipeline/run-full`
 
 ## CARE 섹션
 
@@ -347,6 +387,7 @@ MongoDB 업데이트
 2. **처리**: "제출 및 처리" 버튼을 클릭하여 자동 처리합니다.
 3. **섹션 확인**: 섹션 목록에서 각 섹션의 상태와 초안 미리보기를 확인합니다.
 4. **상세 보완**: 섹션을 클릭하여 상세 페이지로 이동하고, 질문에 답변하여 초안을 보완합니다.
+5. **신규 AI 플로우**: 메인 페이지에서 **"AI 체인(1~7) 실행"** 버튼으로 start/answer/run-full 기반 파이프라인을 실행할 수 있습니다.
 
 ## 비식별화 규칙
 

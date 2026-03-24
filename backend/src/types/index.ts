@@ -47,6 +47,7 @@ export interface Case {
   sectionEvidenceMap?: Record<CareSection, string[]>;
   sectionStatusMap?: Record<CareSection, SectionStatusInfo>;
   draftsBySection?: Record<CareSection, string>;
+  aiPipeline?: any;
 }
 
 export interface SectionStatusInfo {

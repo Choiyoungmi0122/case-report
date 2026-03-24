@@ -7,6 +7,7 @@ import cors from 'cors';
 import { initDatabase } from './db/schema';
 import casesRouter from './routes/cases';
 import sectionsRouter from './routes/sections';
+import aiPipelineRouter from './routes/aiPipeline';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,6 +26,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use('/api/cases', casesRouter);
 app.use('/api/cases', sectionsRouter);
+app.use('/api/ai', aiPipelineRouter);
 
 // Health check
 app.get('/health', (req, res) => {

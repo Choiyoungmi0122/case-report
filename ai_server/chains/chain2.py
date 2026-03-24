@@ -1,6 +1,9 @@
-from openai import AsyncOpenAI
-from schemas.case_schema import Chain1Output, Chain2Output
-from prompts.chain2_prompt import chain2SystemPrompt
+try:
+    from schemas.case_schema import Chain1Output, Chain2Output
+    from prompts.chain2_prompt import chain2SystemPrompt
+except ModuleNotFoundError:
+    from ai_server.schemas.case_schema import Chain1Output, Chain2Output
+    from ai_server.prompts.chain2_prompt import chain2SystemPrompt
 
 import json
 

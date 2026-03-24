@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { caseApi, Visit, Case } from '../services/api';
+import { caseApi, aiPipelineApi, Visit, Case } from '../services/api';
 import './CaseInputPage.css';
 
 function CaseInputPage() {
   const navigate = useNavigate();
+
   const [visits, setVisits] = useState<Visit[]>([
     {
       type: '초진',
@@ -28,8 +29,37 @@ function CaseInputPage() {
   const [currentDraftCaseId, setCurrentDraftCaseId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetCaseId, setDeleteTargetCaseId] = useState<string | null>(null);
+  const [isAiRunning, setIsAiRunning] = useState(false);
   const visitRefs = useRef<(HTMLDivElement | null)[]>([]);
   const prevVisitsLength = useRef(visits.length);
+
+  const buildPipelineInputText = (items: Visit[]) => {
+    return items
+      .map((visit, index) => {
+        return [
+          `방문 ${index + 1}`,
+          `유형: ${visit.type}`,
+          `일시: ${visit.date}`,
+          'SOAP:',
+          visit.soapText
+        ].join('\n');
+      })
+      .join('\n\n---\n\n');
+  };
+
+  const normalizeVisits = (items: Visit[]) => {
+    return items.map(v => ({
+      ...v,
+      soapText: v.soapText.replace(/\\n/g, '\n')
+    }));
+  };
+
+  const validateVisits = (items: Visit[]) => {
+    const hasEmptyText = items.some(v => !v.soapText.trim());
+    if (hasEmptyText) {
+      throw new Error('모든 방문의 SOAP 기록을 입력해주세요. (최소 1글자 이상)');
+    }
+  };
 
   const addVisit = () => {
     setVisits([
@@ -97,7 +127,9 @@ function CaseInputPage() {
       const data = await caseApi.getAllCases();
       // 임시 저장된 케이스만 필터링 (sectionStatusMap이 없거나 비어있음)
       const drafts = data.cases.filter(
-        (case_) => !case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0
+        (case_) =>
+          (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
+          !case_.aiPipeline?.chain7
       );
       setDraftCases(drafts);
     } catch (err: any) {
@@ -135,7 +167,9 @@ function CaseInputPage() {
 
   const handleCaseClick = (case_: Case) => {
     // 임시 저장된 케이스인지 확인
-    const isDraft = !case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0;
+    const isDraft =
+      (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
+      !case_.aiPipeline?.chain7;
     
     if (isDraft) {
       // 임시 저장된 케이스면 "새 EMR 입력" 탭으로 전환하고 방문 정보 로드
@@ -180,7 +214,9 @@ function CaseInputPage() {
     // 필터링
     const filtered = cases.filter((case_) => {
       const caseDate = new Date(case_.createdAt);
-      const isDraft = !case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0;
+      const isDraft =
+        (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
+        !case_.aiPipeline?.chain7;
       
       switch (selectedFilter) {
         case '이번 주':
@@ -334,37 +370,52 @@ function CaseInputPage() {
   const handleSubmit = async () => {
     setError(null);
     setIsSubmitting(true);
+    setIsAiRunning(true);
 
     try {
-      // Validate - 최소 1글자 이상 입력 필요
-      const hasEmptyText = visits.some(v => !v.soapText.trim());
-      if (hasEmptyText) {
-        throw new Error('모든 방문의 SOAP 기록을 입력해주세요. (최소 1글자 이상)');
-      }
+      validateVisits(visits);
+      const normalizedVisits = normalizeVisits(visits);
+      const inputText = buildPipelineInputText(normalizedVisits);
 
-      // '\n' 같은 이스케이프 문자열을 실제 줄바꿈으로 변환
-      const normalizedVisits: Visit[] = visits.map(v => ({
-        ...v,
-        soapText: v.soapText.replace(/\\n/g, '\n')
-      }));
-
-      // Create case
+      // 1) 케이스 저장
       const { caseId } = await caseApi.createCase({ visits: normalizedVisits });
 
-      // Process case (Chain A/B/C)
-      await caseApi.processCase(caseId);
+      // 2) Chain1~5 실행 (초기 제출 단계에서는 질문 UI를 띄우지 않음)
+      const startResult = await aiPipelineApi.start(inputText);
 
-      // Navigate to overview
+      // 3) 초기 초안/누락정보 저장 (chain7은 섹션 상세 질문 이후 스냅샷용으로 저장)
+      await caseApi.saveAiPipelineResult(caseId, {
+        chain1: startResult.chain1,
+        chain2: startResult.chain2,
+        chain3: startResult.chain3,
+        chain4: startResult.chain4,
+        chain5: startResult.chain5,
+        chain7: null,
+        qnaHistory: []
+      });
+
+      // 4) 바로 섹션 Overview 페이지로 이동
       navigate(`/cases/${caseId}`);
     } catch (err: any) {
       setError(err.message || '오류가 발생했습니다.');
     } finally {
+      setIsAiRunning(false);
       setIsSubmitting(false);
     }
   };
 
   return (
     <div className="case-input-page">
+      {isSubmitting && (
+        <div className="global-loading-overlay">
+          <div className="global-loading-content">
+            <div className="spinner" />
+            <div className="global-loading-text">
+              증례를 분석하고 CARE 섹션 초안을 생성하는 중입니다...
+            </div>
+          </div>
+        </div>
+      )}
       <div className="container">
         <div className="header">
           <h1>EMR 기반 증례보고 작성 지원 도구</h1>
@@ -586,21 +637,21 @@ function CaseInputPage() {
             <div className="actions">
               <button
                 onClick={handleSaveDraftClick}
-                disabled={isSaving || isSubmitting}
+                disabled={isSaving || isSubmitting || isAiRunning}
                 className="btn-save-draft"
               >
                 임시 저장
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting || isSaving}
+                disabled={isSubmitting || isSaving || isAiRunning}
                 className="btn-submit"
               >
-                {isSubmitting ? '처리 중...' : '제출 및 처리'}
+                {isSubmitting ? '처리 시작 중...' : '제출 및 처리'}
               </button>
               <button
                 onClick={() => handleDeleteClick()}
-                disabled={!hasTextInput() || isSaving || isSubmitting}
+                disabled={!hasTextInput() || isSaving || isSubmitting || isAiRunning}
                 className="btn-delete-action"
               >
                 삭제

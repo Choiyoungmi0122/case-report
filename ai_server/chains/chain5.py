@@ -1,25 +1,28 @@
-# [Chain3] chains/chain3.py
+# [Chain5] chains/chain5.py
 
 try:
-    from schemas.case_schema import Chain3Output
-    from prompts.chain3_prompt import chain3SystemPrompt
+    from schemas.case_schema import Chain5Output
+    from prompts.chain5_prompt import chain5SystemPrompt
 except ModuleNotFoundError:
-    from ai_server.schemas.case_schema import Chain3Output
-    from ai_server.prompts.chain3_prompt import chain3SystemPrompt
+    from ai_server.schemas.case_schema import Chain5Output
+    from ai_server.prompts.chain5_prompt import chain5SystemPrompt
 
 import json
 import os
 from openai import OpenAI
 
 
-def run_chain3(chain2_result):
+def run_chain5(chain3_result, chain4_result):
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set.")
 
     client = OpenAI(api_key=api_key)
 
-    payload = chain2_result.model_dump()
+    payload = {
+        "draft": chain3_result.model_dump(),
+        "missing": chain4_result.model_dump()
+    }
 
     response = client.chat.completions.create(
         model=os.environ.get("OPENAI_MODEL", "gpt-4.1"),
@@ -27,7 +30,7 @@ def run_chain3(chain2_result):
         messages=[
             {
                 "role": "system",
-                "content": chain3SystemPrompt
+                "content": chain5SystemPrompt
             },
             {
                 "role": "user",
@@ -39,13 +42,13 @@ def run_chain3(chain2_result):
 
     content = response.choices[0].message.content
 
-    print("===== CHAIN3 INPUT =====")
+    print("===== CHAIN5 INPUT =====")
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    print("===== CHAIN3 RAW =====")
+    print("===== CHAIN5 RAW =====")
     print(content)
     print("========================")
 
     parsed_json = json.loads(content)
-    result = Chain3Output.model_validate(parsed_json)
+    result = Chain5Output.model_validate(parsed_json)
 
     return result

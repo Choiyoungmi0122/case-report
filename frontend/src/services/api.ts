@@ -34,6 +34,13 @@ export interface Case {
   sectionEvidenceMap?: Record<string, string[]>;
   sectionStatusMap?: Record<string, SectionStatusInfo>;
   draftsBySection?: Record<string, string>;
+  aiPipeline?: {
+    chain7?: {
+      final_sections?: Record<string, string>;
+    };
+    [key: string]: any;
+  } | null;
+  finalDraft?: FinalDraft | null;
 }
 
 export interface SectionStatusInfo {
@@ -56,13 +63,66 @@ export interface SectionDetail {
   rationaleText: string;
   missingInfoBullets: string[];
   recommendedQuestions: string[];
+  sectionMissingInfo?: string[];
+  commonMissingInfo?: string[];
+  sectionQuestions?: string[];
+  commonQuestions?: string[];
   currentDraft: string;
-  evidence: string[];
+  evidence: string[]; // NOTE: backend actually returns evidenceCards; mapped in component
   qnaHistory: Array<{
     question: string;
     answer: string;
     timestamp: string;
   }>;
+}
+
+export interface AiPipelineStartResponse {
+  chain1: any;
+  chain2: any;
+  chain3: any;
+  chain4: { missing: string[] };
+  chain5: { clarification_questions: string[] };
+  is_complete: boolean;
+}
+
+export interface AiPipelineAnswerResponse {
+  chain6: any;
+  chain4: { missing: string[] };
+  chain5: { clarification_questions: string[] };
+  chain7: {
+    final_sections: Record<string, string>;
+  } | null;
+  is_complete: boolean;
+}
+
+export interface AiPipelineRunFullResponse {
+  chain1: any;
+  chain2: any;
+  chain3: any;
+  chain4: { missing: string[] };
+  chain5: { clarification_questions: string[] };
+  interactive_trace: Array<{
+    qa: { question: string; answer: string };
+    chain6: any;
+    chain4_after_chain6: { missing: string[] };
+    chain5_after_chain6: { clarification_questions: string[] };
+  }>;
+  chain7: {
+    final_sections: Record<string, string>;
+  };
+}
+
+export interface FinalDraft {
+  fullTextBySection: Record<string, string>;
+  titleSuggestions: string[];
+  abstractSuggestion: string;
+  careChecklistEvaluation: Record<
+    string,
+    {
+      status: 'FULFILLED' | 'INSUFFICIENT' | 'MISSING';
+      rationale: string;
+    }
+  >;
 }
 
 export const caseApi = {
@@ -102,15 +162,43 @@ export const caseApi = {
     return response.data;
   },
 
-  getNextQuestion: async (caseId: string, sectionId: string, userAnswers?: any[]) => {
+  /**
+   * Chain4 Q&A: get next question (or mark complete).
+   * This is an adapter over POST /cases/:id/sections/:sectionId/next.
+   */
+  getNextQuestion: async (caseId: string, sectionId: string, _userAnswers?: any[]) => {
+    // For initial question we don't send userAnswer/question.
     const response = await api.post<{
-      question: string;
-      context?: string;
-      isComplete: boolean;
-    }>(`/cases/${caseId}/sections/${sectionId}/next-question`, { userAnswers });
-    return response.data;
+      nextQuestion: string | null;
+      whyThisQuestion: string;
+      updatedDraftText: string;
+      needMore: boolean;
+      remainingItems: string[];
+      sectionQuestions?: string[];
+      commonQuestions?: string[];
+      sectionMissingInfo?: string[];
+      commonMissingInfo?: string[];
+      insufficiencyReason: string | null;
+      qnaHistory: any[];
+    }>(`/cases/${caseId}/sections/${sectionId}/next`, {});
+
+    const data = response.data;
+
+    return {
+      question: data.nextQuestion || '',
+      sectionQuestions: data.sectionQuestions || [],
+      commonQuestions: data.commonQuestions || [],
+      sectionMissingInfo: data.sectionMissingInfo || [],
+      commonMissingInfo: data.commonMissingInfo || [],
+      context: data.whyThisQuestion,
+      isComplete: !data.needMore
+    };
   },
 
+  /**
+   * Chain4 Q&A: submit an answer and receive updated draft + next question.
+   * Adapter over POST /cases/:id/sections/:sectionId/next.
+   */
   submitAnswer: async (
     caseId: string,
     sectionId: string,
@@ -118,15 +206,38 @@ export const caseApi = {
     question?: string
   ) => {
     const response = await api.post<{
-      updatedDraft: string;
-      isComplete: boolean;
-      nextQuestion?: string;
+      nextQuestion: string | null;
+      whyThisQuestion: string;
+      updatedDraftText: string;
+      updatedDraftsBySection?: Record<string, string>;
+      needMore: boolean;
+      remainingItems: string[];
+      sectionQuestions?: string[];
+      commonQuestions?: string[];
+      sectionMissingInfo?: string[];
+      commonMissingInfo?: string[];
+      insufficiencyReason: string | null;
       qnaHistory: any[];
-    }>(`/cases/${caseId}/sections/${sectionId}/answer`, {
-      answerText,
+      lightweight?: boolean;
+    }>(`/cases/${caseId}/sections/${sectionId}/next`, {
+      userAnswer: answerText,
       question
     });
-    return response.data;
+
+    const data = response.data;
+
+    return {
+      updatedDraft: data.updatedDraftText,
+      updatedDraftsBySection: data.updatedDraftsBySection || {},
+      isComplete: !data.needMore,
+      nextQuestion: data.nextQuestion || undefined,
+      sectionQuestions: data.sectionQuestions || [],
+      commonQuestions: data.commonQuestions || [],
+      sectionMissingInfo: data.sectionMissingInfo || [],
+      commonMissingInfo: data.commonMissingInfo || [],
+      qnaHistory: data.qnaHistory,
+      lightweight: Boolean(data.lightweight)
+    };
   },
 
   updateCaseTitle: async (caseId: string, title: string) => {
@@ -139,6 +250,65 @@ export const caseApi = {
 
   deleteCase: async (caseId: string) => {
     const response = await api.delete<{ success: boolean }>(`/cases/${caseId}`);
+    return response.data;
+  },
+
+  saveAiPipelineResult: async (
+    caseId: string,
+    payload: {
+      chain1: any;
+      chain2: any;
+      chain3: any;
+      chain4: any;
+      chain5: any;
+      chain7: any;
+      qnaHistory: Array<{ question: string; answer: string }>;
+    }
+  ) => {
+    const response = await api.post<{ success: boolean; caseId: string }>(
+      `/cases/${caseId}/ai-pipeline`,
+      payload
+    );
+    return response.data;
+  },
+
+  composeFinalDraft: async (
+    caseId: string,
+    payload?: {
+      contributionAnswers?: Array<{ question: string; answer: string }>;
+    }
+  ) => {
+    const response = await api.post<{ caseId: string; finalDraft: FinalDraft }>(
+      `/cases/${caseId}/final-compose`,
+      payload || {}
+    );
+    return response.data;
+  }
+};
+
+export const aiPipelineApi = {
+  start: async (text: string) => {
+    const response = await api.post<AiPipelineStartResponse>('/ai/pipeline/start', { text });
+    return response.data;
+  },
+
+  answer: async (params: {
+    current_draft: Record<string, any>;
+    question: string;
+    answer: string;
+  }) => {
+    const response = await api.post<AiPipelineAnswerResponse>('/ai/pipeline/answer', params);
+    return response.data;
+  },
+
+  runFull: async (params: {
+    text: string;
+    qa_items?: Array<{ question: string; answer: string }>;
+  }) => {
+    const response = await api.post<AiPipelineRunFullResponse>('/ai/pipeline/run-full', {
+      text: params.text,
+      qa_items: params.qa_items || []
+    });
     return response.data;
   }
 };

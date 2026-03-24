@@ -19,7 +19,8 @@ export const EvidenceCardSchema = z.object({
 });
 
 export const Chain1OutputSchema = z.object({
-  evidenceCards: z.array(EvidenceCardSchema)
+  // LLM이 evidenceCards 키를 누락하는 경우가 있어서, 기본값을 빈 배열로 둔다.
+  evidenceCards: z.array(EvidenceCardSchema).default([])
 });
 
 export type EvidenceCard = z.infer<typeof EvidenceCardSchema>;

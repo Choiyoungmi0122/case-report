@@ -36,6 +36,7 @@ export class CaseModel {
       sectionEvidenceMap: doc.sectionEvidenceMap || {},
       sectionStatusMap: doc.sectionStatusMap || {},
       draftsBySection: doc.draftsBySection || {},
+      aiPipeline: (doc as any).aiPipeline || null,
       // 새 체인 필드는 Case 타입에 아직 없을 수 있으므로 any로 유지
       // (필요 시 types/index.ts 확장)
     }));
@@ -45,6 +46,22 @@ export class CaseModel {
     const doc = await CaseMongoModel.findOne({ id }).exec();
     if (!doc) return null;
 
+    // draftsBySection는 예전 체인용 필드이고,
+    // sectionDrafts는 새 체인(Chain3/4)에서 사용하는 배열 필드다.
+    // 기존 필드가 남아 있어도, 최신 sectionDrafts 값을 우선 반영해
+    // 프론트엔드가 stale draftsBySection을 읽지 않도록 맞춘다.
+    const rawDraftsBySection = doc.draftsBySection || {};
+    const rawSectionDrafts: any[] = (doc as any).sectionDrafts || [];
+    const draftsBySection = rawSectionDrafts.reduce(
+      (acc: Record<string, string>, d: any) => {
+        if (d && typeof d.sectionId === 'string') {
+          acc[d.sectionId] = d.draftText || '';
+        }
+        return acc;
+      },
+      { ...rawDraftsBySection }
+    );
+
     return {
       id: doc.id,
       createdAt: doc.createdAt.toISOString(),
@@ -52,8 +69,13 @@ export class CaseModel {
       visits: doc.visits,
       sectionEvidenceMap: doc.sectionEvidenceMap || {},
       sectionStatusMap: doc.sectionStatusMap || {},
-      draftsBySection: doc.draftsBySection || {}
-    };
+      draftsBySection,
+      // 새 체인(Chain2/3) 결과 — GET /cases/:id/sections 및 Q&A에서 사용
+      sectionStates: (doc as any).sectionStates || [],
+      sectionDrafts: rawSectionDrafts,
+      aiPipeline: (doc as any).aiPipeline || null,
+      finalDraft: (doc as any).finalDraft || null
+    } as Case & { sectionStates?: any[]; sectionDrafts?: any[]; aiPipeline?: any; finalDraft?: any };
   }
 
   async updateCase(id: string, updates: Partial<Case>): Promise<void> {
@@ -71,6 +93,7 @@ export class CaseModel {
     if ((updates as any).sectionStates !== undefined) updateData.sectionStates = (updates as any).sectionStates;
     if ((updates as any).sectionDrafts !== undefined) updateData.sectionDrafts = (updates as any).sectionDrafts;
     if ((updates as any).finalDraft !== undefined) updateData.finalDraft = (updates as any).finalDraft;
+    if ((updates as any).aiPipeline !== undefined) updateData.aiPipeline = (updates as any).aiPipeline;
 
     await CaseMongoModel.updateOne({ id }, { $set: updateData }).exec();
   }

@@ -22,7 +22,7 @@ export async function runChain1_splitEvidence(visits: Array<{ index: number; dat
     buildChain1UserPrompt(visitsText)
   );
 
-  return output.evidenceCards;
+  return output.evidenceCards ?? [];
 }
 
 // Chain 2: EvidenceCards -> SectionStates
@@ -44,7 +44,7 @@ export async function runChain2_assess(evidenceCards: EvidenceCard[]): Promise<S
     buildChain2UserPrompt(evidenceSummary)
   );
 
-  return output.sectionStates;
+  return output.sectionStates ?? [];
 }
 
 // Chain 3: EvidenceCards + SectionStates -> SectionDrafts v0
@@ -74,7 +74,7 @@ export async function runChain3_initialDrafts(
     buildChain3UserPrompt(evidenceText, statusSummary)
   );
 
-  return output.sectionDrafts;
+  return output.sectionDrafts ?? [];
 }
 
 // Chain 4: Q&A 1 step

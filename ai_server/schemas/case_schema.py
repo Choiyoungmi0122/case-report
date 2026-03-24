@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import List
+import json
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Dict, Any
 
 
 # -------------------------
@@ -7,13 +8,13 @@ from typing import List
 # -------------------------
 
 class PatientInfo(BaseModel):
-    age: str = Field(description="Patient age mentioned in the case text")
-    sex: str = Field(description="Patient sex mentioned in the case text")
+    age: str
+    sex: str
 
 
 class TimelineItem(BaseModel):
-    date: str = Field(description="Date or visit label (e.g., 2023-03-14, 초진, 재진)")
-    events: List[str] = Field(description="Medical events or findings mentioned for this visit")
+    date: str
+    events: List[str]
 
 
 class Chain1Output(BaseModel):
@@ -29,20 +30,20 @@ class Chain1Output(BaseModel):
 # -------------------------
 
 class SymptomGroup(BaseModel):
-    physical: List[str] = Field(description="Physical symptoms explicitly mentioned")
-    sleep: List[str] = Field(description="Sleep related symptoms")
-    emotional: List[str] = Field(description="Emotional or psychological symptoms")
+    physical: List[str]
+    sleep: List[str]
+    emotional: List[str]
 
 
 class TreatmentGroup(BaseModel):
-    type: List[str] = Field(description="Treatment types such as acupuncture, herbal medicine")
-    acupoints: List[str] = Field(description="Acupuncture points mentioned in the text")
+    type: List[str]
+    acupoints: List[str]
 
 
 class TimelineStructuredItem(BaseModel):
-    date: str = Field(description="Date or visit label")
-    visit_type: str = Field(description="Visit type such as initial_visit or follow_up")
-    events: List[str] = Field(description="Events mentioned in the case text")
+    date: str
+    visit_type: str
+    events: List[str]
 
 
 class Chain2Output(BaseModel):
@@ -51,46 +52,135 @@ class Chain2Output(BaseModel):
     diagnosis: List[str]
     treatment: TreatmentGroup
     timeline: List[TimelineStructuredItem]
-# -------------------------
-# Chain3 Schema
-# -------------------------
-
-from typing import Dict, Any
 
 
-class DiagnosticAssessment(BaseModel):
-    diagnosis: List[str]
-    missing: List[str]
+def _flatten_strings(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, (int, float, bool)):
+        return [str(value)]
+    if isinstance(value, list):
+        items: List[str] = []
+        for item in value:
+            items.extend(_flatten_strings(item))
+        return items
+    if isinstance(value, dict):
+        if isinstance(value.get("reported_experiences"), list):
+            return _flatten_strings(value.get("reported_experiences"))
+        if isinstance(value.get("reported_experiences"), str):
+            return _flatten_strings(value.get("reported_experiences"))
+        if isinstance(value.get("text"), str):
+            text_value = value.get("text", "").strip()
+            if text_value.startswith("{") or text_value.startswith("["):
+                try:
+                    return _flatten_strings(json.loads(text_value))
+                except Exception:
+                    return [text_value] if text_value else []
+        items: List[str] = []
+        for item in value.values():
+            items.extend(_flatten_strings(item))
+        return items
+    return []
 
 
-class TherapeuticIntervention(BaseModel):
-    treatment_type: List[str]
-    acupoints: List[str]
-    frequency: str | None = None
-    missing: List[str]
+def _normalize_patient_perspective(value: Any) -> Dict[str, List[str]]:
+    if value is None or value == "":
+        return {"reported_experiences": []}
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {"reported_experiences": []}
+        if text.startswith("{") or text.startswith("["):
+            try:
+                return _normalize_patient_perspective(json.loads(text))
+            except Exception:
+                return {"reported_experiences": [text]}
+        return {"reported_experiences": [text]}
+    if isinstance(value, list):
+        return {"reported_experiences": _flatten_strings(value)}
+    if isinstance(value, dict):
+        if "reported_experiences" in value:
+            return {"reported_experiences": _flatten_strings(value.get("reported_experiences"))}
+        return {"reported_experiences": _flatten_strings(value)}
+    return {"reported_experiences": _flatten_strings(value)}
 
 
 class PatientPerspective(BaseModel):
-    missing: List[str]
+    reported_experiences: List[str] = Field(default_factory=list)
+
+    @field_validator("reported_experiences", mode="before")
+    @classmethod
+    def normalize_reported_experiences(cls, value: Any) -> List[str]:
+        return _flatten_strings(value)
 
 
+# -------------------------
+# Chain3 Schema (🔥 수정됨)
+# -------------------------
 
 class Chain3Output(BaseModel):
-
     patient_information: Dict[str, Any]
-
     clinical_findings: Dict[str, Any]
-
     timeline: List[Dict[str, Any]]
-
     diagnostic_assessment: Dict[str, Any]
-
     therapeutic_intervention: Dict[str, Any]
-
     follow_up_outcomes: Dict[str, Any]
+    patient_perspective: PatientPerspective = Field(default_factory=PatientPerspective)
 
-    patient_perspective: Any
+    @field_validator("patient_perspective", mode="before")
+    @classmethod
+    def normalize_patient_perspective(cls, value: Any) -> Dict[str, List[str]]:
+        return _normalize_patient_perspective(value)
 
-    missing: List[str] | None = None
 
+# -------------------------
+# Chain4 Schema (🔥 NEW)
+# -------------------------
+
+class Chain4Output(BaseModel):
+    missing: List[str]
+
+class Chain5Output(BaseModel):
     clarification_questions: List[str]
+
+
+# -------------------------
+# Chain6 / Chain7 Schema
+# -------------------------
+
+class QAItem(BaseModel):
+    question: str
+    answer: str
+
+
+class Chain6Output(BaseModel):
+    patient_information: Dict[str, Any]
+    clinical_findings: Dict[str, Any]
+    timeline: List[Dict[str, Any]]
+    diagnostic_assessment: Dict[str, Any]
+    therapeutic_intervention: Dict[str, Any]
+    follow_up_outcomes: Dict[str, Any]
+    patient_perspective: PatientPerspective = Field(default_factory=PatientPerspective)
+
+    @field_validator("patient_perspective", mode="before")
+    @classmethod
+    def normalize_patient_perspective(cls, value: Any) -> Dict[str, List[str]]:
+        return _normalize_patient_perspective(value)
+
+
+class Chain7Sections(BaseModel):
+    patient_information: str
+    clinical_findings: str
+    timeline: str
+    diagnostic_assessment: str
+    therapeutic_intervention: str
+    follow_up_outcomes: str
+    patient_perspective: str
+
+
+class Chain7Output(BaseModel):
+    final_sections: Chain7Sections
+    final_markdown: str
