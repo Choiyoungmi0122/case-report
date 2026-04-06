@@ -2,6 +2,68 @@ import { CareSection } from '../../types';
 
 type JsonObj = Record<string, any>;
 
+const QUESTION_TEMPLATE_BY_KEY: Record<string, string> = {
+  occupation: '환자의 직업은 무엇이었나요?',
+  job: '환자의 직업은 무엇이었나요?',
+  employment: '환자의 직업 또는 사회적 역할은 어떠했나요?',
+  treatmentduration: '치료는 총 얼마나 시행되었나요?',
+  durationoftreatment: '치료는 총 얼마나 시행되었나요?',
+  duration: '치료나 관찰 기간은 얼마나 되었나요?',
+  adherence: '치료는 계획대로 잘 유지되었나요?',
+  compliance: '치료는 계획대로 잘 유지되었나요?',
+  adverseevents: '치료 중 이상반응이나 불편감은 있었나요?',
+  adverseevent: '치료 중 이상반응이나 불편감은 있었나요?',
+  sideeffects: '치료 중 이상반응이나 불편감은 있었나요?',
+  followupduration: '추적 관찰 기간은 얼마나 되었나요?',
+  followupperiod: '추적 관찰 기간은 얼마나 되었나요?',
+  followup: '추적 관찰은 얼마나 이루어졌나요?',
+  familyhistory: '가족력에 특이사항이 있었나요?',
+  pastmedicalhistory: '과거력에 특이사항이 있었나요?',
+  medicationhistory: '복용 중이거나 기존에 사용한 약물이 있었나요?',
+  onset: '증상은 언제부터 시작되었나요?',
+  symptomonset: '증상은 언제부터 시작되었나요?',
+  chiefcomplaint: '가장 불편했던 주된 증상은 무엇이었나요?',
+  presentillness: '현재 증상의 경과를 조금 더 자세히 설명해 주실 수 있나요?',
+  psychosocialhistory: '심리사회적 배경이나 스트레스 요인이 있었나요?',
+  stressors: '증상과 관련된 스트레스 요인이 있었나요?',
+  responsetotreatment: '치료 후 변화는 어떠했나요?',
+  treatmentresponse: '치료 후 변화는 어떠했나요?',
+  outcome: '치료 후 결과나 경과는 어떠했나요?',
+  patientperspective: '환자는 치료 과정과 결과를 어떻게 느꼈나요?',
+  informedconsent: '환자 동의 여부를 확인할 수 있나요?'
+};
+
+const LABEL_BY_KEY: Record<string, string> = {
+  occupation: '직업',
+  job: '직업',
+  employment: '직업 또는 사회적 역할',
+  treatmentduration: '치료 기간',
+  durationoftreatment: '치료 기간',
+  duration: '기간',
+  adherence: '치료 유지 여부',
+  compliance: '치료 유지 여부',
+  adverseevents: '이상반응',
+  adverseevent: '이상반응',
+  sideeffects: '이상반응',
+  followupduration: '추적 관찰 기간',
+  followupperiod: '추적 관찰 기간',
+  followup: '추적 관찰',
+  familyhistory: '가족력',
+  pastmedicalhistory: '과거력',
+  medicationhistory: '약물력',
+  onset: '증상 시작 시점',
+  symptomonset: '증상 시작 시점',
+  chiefcomplaint: '주된 증상',
+  presentillness: '현병력',
+  psychosocialhistory: '심리사회적 배경',
+  stressors: '스트레스 요인',
+  responsetotreatment: '치료 후 변화',
+  treatmentresponse: '치료 후 변화',
+  outcome: '치료 결과',
+  patientperspective: '환자 관점',
+  informedconsent: '환자 동의'
+};
+
 export type AiDraft = {
   patient_information: JsonObj;
   clinical_findings: JsonObj;
@@ -89,6 +151,37 @@ function normalizeText(value: any): string {
   } catch {
     return String(value);
   }
+}
+
+function normalizeQuestionLookupKey(value: string): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^다음 정보를 알려주세요:\s*/i, '')
+    .replace(/^다음 항목을 보완할 수 있는 정보를 알려주세요:\s*/i, '')
+    .replace(/[?？!！.,:;()[\]{}"']/g, '')
+    .replace(/[\s_-]+/g, '');
+}
+
+function humanizeEnglishKey(value: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function toQuestionLabel(value: string): string {
+  const normalized = normalizeQuestionLookupKey(value);
+  if (LABEL_BY_KEY[normalized]) {
+    return LABEL_BY_KEY[normalized];
+  }
+
+  if (/[가-힣]/.test(value)) {
+    return value.trim();
+  }
+
+  return humanizeEnglishKey(value);
 }
 
 export function buildAiDraftFromSectionDrafts(sectionDrafts: any[]): AiDraft {
@@ -209,5 +302,25 @@ export function filterQuestionsForSection(questions: string[], sectionId: CareSe
 }
 
 export function buildQuestionFromMissing(missingItem: string): string {
-  return `다음 항목을 보완할 수 있는 정보를 알려주세요: ${missingItem}`;
+  const raw = String(missingItem || '').trim();
+  if (!raw) return '';
+  if (/[가-힣]/.test(raw) && /[?？]$/.test(raw)) return raw;
+
+  const normalized = normalizeQuestionLookupKey(raw);
+  if (QUESTION_TEMPLATE_BY_KEY[normalized]) {
+    return QUESTION_TEMPLATE_BY_KEY[normalized];
+  }
+
+  const label = toQuestionLabel(raw);
+  if (!label) return '';
+  return `${label}에 대해 조금 더 알려주실 수 있나요?`;
+}
+
+export function toNaturalKoreanQuestion(text: string): string {
+  const raw = String(text || '').trim();
+  if (!raw) return '';
+  if (/[가-힣]/.test(raw)) return raw;
+  if (/[?？]$/.test(raw)) return buildQuestionFromMissing(raw);
+
+  return buildQuestionFromMissing(raw);
 }

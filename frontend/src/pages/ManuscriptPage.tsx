@@ -61,8 +61,9 @@ function ManuscriptPage() {
     try {
       const caseResult = await caseApi.getCase(caseId);
       setCaseData(caseResult);
-      if (caseResult.finalDraft) {
+      if (caseResult.finalDraft && !showRefreshState) {
         setFinalDraft(caseResult.finalDraft);
+        return;
       }
 
       const composeResult = await caseApi.composeFinalDraft(caseId);

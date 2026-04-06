@@ -3,15 +3,17 @@ import { Chain1OutputSchema, EvidenceCard } from './schemas/chain1_splitTag';
 import { Chain2OutputSchema, SectionState } from './schemas/chain2_assess';
 import { Chain3OutputSchema, SectionDraft } from './schemas/chain3_draft';
 import { Chain4OutputSchema, Chain4Output } from './schemas/chain4_qa_update';
+import { FastSectionUpdateOutputSchema, FastSectionUpdateOutput } from './schemas/fast_section_update';
 import { FinalDraftSchema, FinalDraft } from './schemas/chain5_final';
 import { chain1SystemPrompt, buildChain1UserPrompt } from './prompts/chain1_splitTag';
 import { chain2SystemPrompt, buildChain2UserPrompt } from './prompts/chain2_assess';
 import { chain3SystemPrompt, buildChain3UserPrompt } from './prompts/chain3_draft';
 import { chain4SystemPrompt, buildChain4UserPrompt } from './prompts/chain4_qa_update';
+import { fastSectionUpdateSystemPrompt, buildFastSectionUpdateUserPrompt } from './prompts/fast_section_update';
 import { chain5SystemPrompt, buildChain5UserPrompt } from './prompts/chain5_final';
 
-// Chain 1: visits -> EvidenceCards
-export async function runChain1_splitEvidence(visits: Array<{ index: number; date: string; text: string }>): Promise<EvidenceCard[]> {
+// Legacy numeric alias retained for compatibility.
+export async function runEvidenceSplit(visits: Array<{ index: number; date: string; text: string }>): Promise<EvidenceCard[]> {
   const visitsText = visits
     .map(v => `방문 ${v.index} (${v.date}):\n${v.text}`)
     .join('\n\n---\n\n');
@@ -25,8 +27,7 @@ export async function runChain1_splitEvidence(visits: Array<{ index: number; dat
   return output.evidenceCards ?? [];
 }
 
-// Chain 2: EvidenceCards -> SectionStates
-export async function runChain2_assess(evidenceCards: EvidenceCard[]): Promise<SectionState[]> {
+export async function runSectionAssessment(evidenceCards: EvidenceCard[]): Promise<SectionState[]> {
   const summary = evidenceCards
     .flatMap(card => card.tags.map(tag => ({ tag, id: card.id })))
     .reduce<Record<string, number>>((acc, cur) => {
@@ -47,8 +48,7 @@ export async function runChain2_assess(evidenceCards: EvidenceCard[]): Promise<S
   return output.sectionStates ?? [];
 }
 
-// Chain 3: EvidenceCards + SectionStates -> SectionDrafts v0
-export async function runChain3_initialDrafts(
+export async function runInitialSectionDrafts(
   evidenceCards: EvidenceCard[],
   sectionStates: SectionState[]
 ): Promise<SectionDraft[]> {
@@ -77,8 +77,7 @@ export async function runChain3_initialDrafts(
   return output.sectionDrafts ?? [];
 }
 
-// Chain 4: Q&A 1 step
-export async function runChain4_updateDraft(params: {
+export async function runLegacySectionDraftUpdate(params: {
   sectionId: string;
   currentDraft: string;
   evidenceCards: EvidenceCard[];
@@ -105,8 +104,34 @@ export async function runChain4_updateDraft(params: {
   );
 }
 
-// Chain 5: Final compose
-export async function runChain5_finalCompose(params: {
+export async function runFastSectionDraftUpdate(params: {
+  sectionId: string;
+  currentDraft: string;
+  evidenceCards: EvidenceCard[];
+  qnaHistory: Array<{ question: string; answer: string; timestamp: string }>;
+  pendingItems: string[];
+  latestAnswer?: string;
+}): Promise<FastSectionUpdateOutput> {
+  const evidenceText = params.evidenceCards.map(c => c.normalizedText).join('\n');
+  const qnaHistoryText = params.qnaHistory
+    .map((qna, idx) => `Q${idx + 1}: ${qna.question}\nA${idx + 1}: ${qna.answer}`)
+    .join('\n\n');
+
+  return callLLMWithSchema(
+    FastSectionUpdateOutputSchema,
+    fastSectionUpdateSystemPrompt,
+    buildFastSectionUpdateUserPrompt({
+      sectionId: params.sectionId,
+      currentDraft: params.currentDraft,
+      evidenceText,
+      qnaHistoryText,
+      pendingItems: params.pendingItems,
+      latestAnswer: params.latestAnswer
+    })
+  );
+}
+
+export async function runFinalManuscriptCompose(params: {
   sectionDrafts: SectionDraft[];
   evidenceCards: EvidenceCard[];
   qnaHistoryBySection: Record<string, Array<{ question: string; answer: string }>>;
@@ -144,4 +169,11 @@ export async function runChain5_finalCompose(params: {
     })
   );
 }
+
+export const runChain1_splitEvidence = runEvidenceSplit;
+export const runChain2_assess = runSectionAssessment;
+export const runChain3_initialDrafts = runInitialSectionDrafts;
+export const runChain4_updateDraft = runLegacySectionDraftUpdate;
+export const runFinalDraftCompose = runFinalManuscriptCompose;
+export const runChain5_finalCompose = runFinalManuscriptCompose;
 

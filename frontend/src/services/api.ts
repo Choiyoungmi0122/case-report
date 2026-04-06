@@ -33,7 +33,22 @@ export interface Case {
   visits: Visit[];
   sectionEvidenceMap?: Record<string, string[]>;
   sectionStatusMap?: Record<string, SectionStatusInfo>;
+  sectionStates?: Array<{
+    sectionId: string;
+    status: string;
+    rationaleText: string;
+    missingInfoBullets: string[];
+    recommendedQuestions: string[];
+  }>;
+  sectionDrafts?: Array<{
+    sectionId: string;
+    evidenceCardIdsUsed: string[];
+    draftText: string;
+    openIssues: string[];
+  }>;
+  // Derived/cache map for quick rendering. Canonical draft truth is sectionDrafts.
   draftsBySection?: Record<string, string>;
+  // Snapshot/debug only. UI should not treat this as canonical runtime source.
   aiPipeline?: {
     chain7?: {
       final_sections?: Record<string, string>;
@@ -74,42 +89,14 @@ export interface SectionDetail {
     answer: string;
     timestamp: string;
   }>;
+  uiHints?: SectionUiHints;
 }
 
-export interface AiPipelineStartResponse {
-  chain1: any;
-  chain2: any;
-  chain3: any;
-  chain4: { missing: string[] };
-  chain5: { clarification_questions: string[] };
-  is_complete: boolean;
-}
-
-export interface AiPipelineAnswerResponse {
-  chain6: any;
-  chain4: { missing: string[] };
-  chain5: { clarification_questions: string[] };
-  chain7: {
-    final_sections: Record<string, string>;
-  } | null;
-  is_complete: boolean;
-}
-
-export interface AiPipelineRunFullResponse {
-  chain1: any;
-  chain2: any;
-  chain3: any;
-  chain4: { missing: string[] };
-  chain5: { clarification_questions: string[] };
-  interactive_trace: Array<{
-    qa: { question: string; answer: string };
-    chain6: any;
-    chain4_after_chain6: { missing: string[] };
-    chain5_after_chain6: { clarification_questions: string[] };
-  }>;
-  chain7: {
-    final_sections: Record<string, string>;
-  };
+export interface SectionUiHints {
+  stage: 'empty' | 'draft_created' | 'questions_available' | 'refined_no_questions';
+  subtitle: string;
+  emptyMessage: string;
+  hideStartButton: boolean;
 }
 
 export interface FinalDraft {
@@ -123,6 +110,16 @@ export interface FinalDraft {
       rationale: string;
     }
   >;
+}
+
+export interface CommonQuestionResponse {
+  questions: string[];
+  qnaHistory: Array<{
+    question: string;
+    answer: string;
+    timestamp: string;
+  }>;
+  missingInfo: string[];
 }
 
 export const caseApi = {
@@ -180,6 +177,7 @@ export const caseApi = {
       commonMissingInfo?: string[];
       insufficiencyReason: string | null;
       qnaHistory: any[];
+      uiHints?: SectionUiHints;
     }>(`/cases/${caseId}/sections/${sectionId}/next`, {});
 
     const data = response.data;
@@ -191,7 +189,8 @@ export const caseApi = {
       sectionMissingInfo: data.sectionMissingInfo || [],
       commonMissingInfo: data.commonMissingInfo || [],
       context: data.whyThisQuestion,
-      isComplete: !data.needMore
+      isComplete: !data.needMore,
+      uiHints: data.uiHints
     };
   },
 
@@ -219,6 +218,7 @@ export const caseApi = {
       insufficiencyReason: string | null;
       qnaHistory: any[];
       lightweight?: boolean;
+      uiHints?: SectionUiHints;
     }>(`/cases/${caseId}/sections/${sectionId}/next`, {
       userAnswer: answerText,
       question
@@ -236,7 +236,8 @@ export const caseApi = {
       sectionMissingInfo: data.sectionMissingInfo || [],
       commonMissingInfo: data.commonMissingInfo || [],
       qnaHistory: data.qnaHistory,
-      lightweight: Boolean(data.lightweight)
+      lightweight: Boolean(data.lightweight),
+      uiHints: data.uiHints
     };
   },
 
@@ -253,7 +254,7 @@ export const caseApi = {
     return response.data;
   },
 
-  saveAiPipelineResult: async (
+  bridgePipelineSnapshotToCanonicalCase: async (
     caseId: string,
     payload: {
       chain1: any;
@@ -272,6 +273,36 @@ export const caseApi = {
     return response.data;
   },
 
+  hydrateCanonicalCaseDataFromPipeline: async (
+    caseId: string,
+    payload: {
+      chain1: any;
+      chain2: any;
+      chain3: any;
+      chain4: any;
+      chain5: any;
+      chain7: any;
+      qnaHistory: Array<{ question: string; answer: string }>;
+    }
+  ) => {
+    return caseApi.bridgePipelineSnapshotToCanonicalCase(caseId, payload);
+  },
+
+  saveAiPipelineResult: async (
+    caseId: string,
+    payload: {
+      chain1: any;
+      chain2: any;
+      chain3: any;
+      chain4: any;
+      chain5: any;
+      chain7: any;
+      qnaHistory: Array<{ question: string; answer: string }>;
+    }
+  ) => {
+    return caseApi.bridgePipelineSnapshotToCanonicalCase(caseId, payload);
+  },
+
   composeFinalDraft: async (
     caseId: string,
     payload?: {
@@ -283,31 +314,20 @@ export const caseApi = {
       payload || {}
     );
     return response.data;
-  }
-};
+  },
 
-export const aiPipelineApi = {
-  start: async (text: string) => {
-    const response = await api.post<AiPipelineStartResponse>('/ai/pipeline/start', { text });
+  getCommonQuestions: async (caseId: string) => {
+    const response = await api.get<CommonQuestionResponse>(`/cases/${caseId}/common-questions`);
     return response.data;
   },
 
-  answer: async (params: {
-    current_draft: Record<string, any>;
-    question: string;
-    answer: string;
-  }) => {
-    const response = await api.post<AiPipelineAnswerResponse>('/ai/pipeline/answer', params);
-    return response.data;
-  },
-
-  runFull: async (params: {
-    text: string;
-    qa_items?: Array<{ question: string; answer: string }>;
-  }) => {
-    const response = await api.post<AiPipelineRunFullResponse>('/ai/pipeline/run-full', {
-      text: params.text,
-      qa_items: params.qa_items || []
+  submitCommonAnswer: async (caseId: string, question: string, answer: string) => {
+    const response = await api.post<{
+      updatedDraftsBySection: Record<string, string>;
+      qnaHistory: CommonQuestionResponse['qnaHistory'];
+    }>(`/cases/${caseId}/common-questions/answer`, {
+      question,
+      answer
     });
     return response.data;
   }

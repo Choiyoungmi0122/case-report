@@ -1,7 +1,46 @@
 import { Case, SectionInteraction, CareSection } from '../types';
 import { CaseModel as CaseMongoModel, SectionInteractionModel } from '../db/schema';
 
+function deriveDraftsBySection(rawSectionDrafts: any[], rawDraftsBySection: Record<string, string>) {
+  if (Array.isArray(rawSectionDrafts) && rawSectionDrafts.length > 0) {
+    return rawSectionDrafts.reduce((acc: Record<string, string>, d: any) => {
+      if (d && typeof d.sectionId === 'string') {
+        acc[d.sectionId] = d.draftText || '';
+      }
+      return acc;
+    }, {} as Record<string, string>);
+  }
+
+  return { ...(rawDraftsBySection || {}) };
+}
+
 export class CaseModel {
+  async getInteractionByKey(caseId: string, sectionKey: string): Promise<{ sectionId: string; qnaHistory: any[] } | null> {
+    const doc = await SectionInteractionModel.findOne({ caseId, sectionId: sectionKey }).exec();
+
+    if (!doc) return null;
+
+    return {
+      sectionId: doc.sectionId,
+      qnaHistory: doc.qnaHistory || []
+    };
+  }
+
+  async saveInteractionByKey(
+    caseId: string,
+    interaction: { sectionId: string; qnaHistory: any[] }
+  ): Promise<void> {
+    await SectionInteractionModel.findOneAndUpdate(
+      { caseId, sectionId: interaction.sectionId },
+      {
+        caseId,
+        sectionId: interaction.sectionId,
+        qnaHistory: interaction.qnaHistory
+      },
+      { upsert: true, new: true }
+    ).exec();
+  }
+
   async createCase(caseData: Omit<Case, 'id' | 'createdAt'>): Promise<string> {
     const id = `case_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const createdAt = new Date();
@@ -13,8 +52,7 @@ export class CaseModel {
         title: caseData.title || null,
         visits: caseData.visits,
         sectionEvidenceMap: caseData.sectionEvidenceMap || {},
-        sectionStatusMap: caseData.sectionStatusMap || {},
-        draftsBySection: caseData.draftsBySection || {}
+        sectionStatusMap: caseData.sectionStatusMap || {}
       });
 
       await newCase.save();
@@ -35,7 +73,10 @@ export class CaseModel {
       visits: doc.visits,
       sectionEvidenceMap: doc.sectionEvidenceMap || {},
       sectionStatusMap: doc.sectionStatusMap || {},
-      draftsBySection: doc.draftsBySection || {},
+      draftsBySection: deriveDraftsBySection((doc as any).sectionDrafts || [], doc.draftsBySection || {}),
+      sectionStates: (doc as any).sectionStates || [],
+      sectionDrafts: (doc as any).sectionDrafts || [],
+      finalDraft: (doc as any).finalDraft || null,
       aiPipeline: (doc as any).aiPipeline || null,
       // 새 체인 필드는 Case 타입에 아직 없을 수 있으므로 any로 유지
       // (필요 시 types/index.ts 확장)
@@ -46,21 +87,9 @@ export class CaseModel {
     const doc = await CaseMongoModel.findOne({ id }).exec();
     if (!doc) return null;
 
-    // draftsBySection는 예전 체인용 필드이고,
-    // sectionDrafts는 새 체인(Chain3/4)에서 사용하는 배열 필드다.
-    // 기존 필드가 남아 있어도, 최신 sectionDrafts 값을 우선 반영해
-    // 프론트엔드가 stale draftsBySection을 읽지 않도록 맞춘다.
     const rawDraftsBySection = doc.draftsBySection || {};
     const rawSectionDrafts: any[] = (doc as any).sectionDrafts || [];
-    const draftsBySection = rawSectionDrafts.reduce(
-      (acc: Record<string, string>, d: any) => {
-        if (d && typeof d.sectionId === 'string') {
-          acc[d.sectionId] = d.draftText || '';
-        }
-        return acc;
-      },
-      { ...rawDraftsBySection }
-    );
+    const draftsBySection = deriveDraftsBySection(rawSectionDrafts, rawDraftsBySection);
 
     return {
       id: doc.id,
@@ -87,7 +116,8 @@ export class CaseModel {
     if (updates.visits !== undefined) updateData.visits = updates.visits;
     if (updates.sectionEvidenceMap !== undefined) updateData.sectionEvidenceMap = updates.sectionEvidenceMap;
     if (updates.sectionStatusMap !== undefined) updateData.sectionStatusMap = updates.sectionStatusMap;
-    if (updates.draftsBySection !== undefined) updateData.draftsBySection = updates.draftsBySection;
+    // draftsBySection is now treated as a derived response/cache field.
+    // Do not persist route-level writes; derive it from sectionDrafts on reads.
     // 새 체인용 필드 (Case 타입에 없을 수 있으므로 any로 처리)
     if ((updates as any).evidenceCards !== undefined) updateData.evidenceCards = (updates as any).evidenceCards;
     if ((updates as any).sectionStates !== undefined) updateData.sectionStates = (updates as any).sectionStates;
@@ -99,26 +129,17 @@ export class CaseModel {
   }
 
   async getSectionInteraction(caseId: string, sectionId: CareSection): Promise<SectionInteraction | null> {
-    const doc = await SectionInteractionModel.findOne({ caseId, sectionId }).exec();
-
-    if (!doc) return null;
+    const interaction = await this.getInteractionByKey(caseId, sectionId);
+    if (!interaction) return null;
 
     return {
-      sectionId: doc.sectionId as CareSection,
-      qnaHistory: doc.qnaHistory || []
+      sectionId: interaction.sectionId as CareSection,
+      qnaHistory: interaction.qnaHistory || []
     };
   }
 
   async saveSectionInteraction(caseId: string, interaction: SectionInteraction): Promise<void> {
-    await SectionInteractionModel.findOneAndUpdate(
-      { caseId, sectionId: interaction.sectionId },
-      { 
-        caseId,
-        sectionId: interaction.sectionId,
-        qnaHistory: interaction.qnaHistory
-      },
-      { upsert: true, new: true }
-    ).exec();
+    await this.saveInteractionByKey(caseId, interaction);
   }
 
   async deleteCase(id: string): Promise<void> {

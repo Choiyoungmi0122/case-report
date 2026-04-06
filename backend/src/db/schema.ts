@@ -23,13 +23,13 @@ const CaseSchema = new mongoose.Schema(
     // 기존 체인(A/B/C)용 필드 (호환성 유지)
     sectionEvidenceMap: { type: Object, default: {} },
     sectionStatusMap: { type: Object, default: {} },
-    draftsBySection: { type: Object, default: {} },
+    draftsBySection: { type: Object, default: {} },   // legacy derived/cache field
     // 새 체인용 필드
     evidenceCards: { type: Array, default: [] },      // Chain 1
     sectionStates: { type: Array, default: [] },      // Chain 2
     sectionDrafts: { type: Array, default: [] },      // Chain 3/4
     finalDraft: { type: Object, default: null },      // Chain 5
-    aiPipeline: { type: Object, default: null }       // ai_server Chain1~7 결과
+    aiPipeline: { type: Object, default: null }       // ai_server snapshot/debug 결과
   },
   {
     collection: 'cases'

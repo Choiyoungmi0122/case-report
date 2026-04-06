@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { caseApi, aiPipelineApi, Visit, Case } from '../services/api';
+import { caseApi, Visit, Case } from '../services/api';
 import './CaseInputPage.css';
+
+function isProcessedCase(caseData: Case): boolean {
+  return Boolean(caseData.sectionStates?.length || caseData.sectionDrafts?.length || caseData.finalDraft);
+}
 
 function CaseInputPage() {
   const navigate = useNavigate();
@@ -32,20 +36,6 @@ function CaseInputPage() {
   const [isAiRunning, setIsAiRunning] = useState(false);
   const visitRefs = useRef<(HTMLDivElement | null)[]>([]);
   const prevVisitsLength = useRef(visits.length);
-
-  const buildPipelineInputText = (items: Visit[]) => {
-    return items
-      .map((visit, index) => {
-        return [
-          `방문 ${index + 1}`,
-          `유형: ${visit.type}`,
-          `일시: ${visit.date}`,
-          'SOAP:',
-          visit.soapText
-        ].join('\n');
-      })
-      .join('\n\n---\n\n');
-  };
 
   const normalizeVisits = (items: Visit[]) => {
     return items.map(v => ({
@@ -127,9 +117,7 @@ function CaseInputPage() {
       const data = await caseApi.getAllCases();
       // 임시 저장된 케이스만 필터링 (sectionStatusMap이 없거나 비어있음)
       const drafts = data.cases.filter(
-        (case_) =>
-          (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
-          !case_.aiPipeline?.chain7
+        (case_) => !isProcessedCase(case_)
       );
       setDraftCases(drafts);
     } catch (err: any) {
@@ -167,9 +155,7 @@ function CaseInputPage() {
 
   const handleCaseClick = (case_: Case) => {
     // 임시 저장된 케이스인지 확인
-    const isDraft =
-      (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
-      !case_.aiPipeline?.chain7;
+    const isDraft = !isProcessedCase(case_);
     
     if (isDraft) {
       // 임시 저장된 케이스면 "새 EMR 입력" 탭으로 전환하고 방문 정보 로드
@@ -215,8 +201,7 @@ function CaseInputPage() {
     const filtered = cases.filter((case_) => {
       const caseDate = new Date(case_.createdAt);
       const isDraft =
-        (!case_.sectionStatusMap || Object.keys(case_.sectionStatusMap).length === 0) &&
-        !case_.aiPipeline?.chain7;
+        !isProcessedCase(case_);
       
       switch (selectedFilter) {
         case '이번 주':
@@ -375,26 +360,13 @@ function CaseInputPage() {
     try {
       validateVisits(visits);
       const normalizedVisits = normalizeVisits(visits);
-      const inputText = buildPipelineInputText(normalizedVisits);
-
       // 1) 케이스 저장
       const { caseId } = await caseApi.createCase({ visits: normalizedVisits });
 
-      // 2) Chain1~5 실행 (초기 제출 단계에서는 질문 UI를 띄우지 않음)
-      const startResult = await aiPipelineApi.start(inputText);
+      // 2) backend TS chain으로 초기 초안 생성
+      await caseApi.processCase(caseId);
 
-      // 3) 초기 초안/누락정보 저장 (chain7은 섹션 상세 질문 이후 스냅샷용으로 저장)
-      await caseApi.saveAiPipelineResult(caseId, {
-        chain1: startResult.chain1,
-        chain2: startResult.chain2,
-        chain3: startResult.chain3,
-        chain4: startResult.chain4,
-        chain5: startResult.chain5,
-        chain7: null,
-        qnaHistory: []
-      });
-
-      // 4) 바로 섹션 Overview 페이지로 이동
+      // 3) 바로 섹션 Overview 페이지로 이동
       navigate(`/cases/${caseId}`);
     } catch (err: any) {
       setError(err.message || '오류가 발생했습니다.');

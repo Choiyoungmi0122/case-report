@@ -1,18 +1,18 @@
 import express, { Request, Response } from 'express';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, QnAPair } from '../types';
+import { runFastSectionDraftUpdate, runLegacySectionDraftUpdate } from '../llm/chains';
 import {
-  buildAiDraftFromSectionDrafts,
-  extractSectionDraftTextFromAiDraft,
-  filterMissingForSection,
   splitSectionAndCommonItems,
   buildQuestionFromMissing,
-  CARE_TO_AI_FIELD
+  CARE_TO_AI_FIELD,
+  toNaturalKoreanQuestion
 } from './utils/aiSectionMapping';
 
 const router = express.Router();
 const caseModel = new CaseModel();
-const AI_SERVER_URL = process.env.AI_SERVER_URL || 'http://127.0.0.1:8000';
+const FAST_UPDATE_ONLY = process.env.FAST_UPDATE_ONLY !== 'false';
+const REFRESH_QUESTIONS_ON_DEMAND = process.env.REFRESH_QUESTIONS_ON_DEMAND !== 'false';
 const ALL_CARE_SECTIONS = Object.values(CareSection) as CareSection[];
 const AI_TO_CARE_SECTION: Record<string, CareSection> = {
   patient_information: CareSection.PATIENT_INFORMATION,
@@ -22,6 +22,13 @@ const AI_TO_CARE_SECTION: Record<string, CareSection> = {
   therapeutic_intervention: CareSection.THERAPEUTIC_INTERVENTIONS,
   follow_up_outcomes: CareSection.FOLLOW_UP_OUTCOMES,
   patient_perspective: CareSection.PATIENT_PERSPECTIVE
+};
+
+type SectionUiHints = {
+  stage: 'empty' | 'draft_created' | 'questions_available' | 'refined_no_questions';
+  subtitle: string;
+  emptyMessage: string;
+  hideStartButton: boolean;
 };
 
 function isCareSection(value: string): value is CareSection {
@@ -38,15 +45,67 @@ function getFallbackDraftFromAiPipeline(caseData: any, section: CareSection): st
   return '';
 }
 
-function toKoreanQuestion(text: string): string {
-  const input = String(text || '').trim();
-  if (!input) return '';
-  if (/[가-힣]/.test(input)) return input;
-  return `다음 정보를 알려주세요: ${input}`;
+function deriveDraftMapFromSectionDrafts(sectionDrafts: any[]): Record<string, string> {
+  return (sectionDrafts || []).reduce((acc: Record<string, string>, draft: any) => {
+    if (draft && typeof draft.sectionId === 'string') {
+      acc[draft.sectionId] = draft.draftText || '';
+    }
+    return acc;
+  }, {});
 }
 
 function uniqueStrings(items: string[]): string[] {
   return Array.from(new Set((items || []).filter(Boolean)));
+}
+
+function buildSectionUiHints(params: {
+  currentDraft: string;
+  qnaHistory: QnAPair[];
+  sectionQuestions: string[];
+  sectionMissingInfo: string[];
+}): SectionUiHints {
+  const hasDraft = Boolean(String(params.currentDraft || '').trim());
+  const hasQnaHistory = (params.qnaHistory || []).length > 0;
+  const hasSectionQuestions = (params.sectionQuestions || []).length > 0;
+  const hasSectionMissingInfo = (params.sectionMissingInfo || []).length > 0;
+
+  if (hasDraft && hasQnaHistory && !hasSectionQuestions && !hasSectionMissingInfo) {
+    return {
+      stage: 'refined_no_questions',
+      subtitle: '현재까지 반영된 답변 기준으로 추가 질문은 없습니다. 가운데 초안을 검토하고 필요 시 다시 보완하세요.',
+      emptyMessage: '현재까지 반영된 답변 기준으로 이 섹션에서 추가로 확인할 질문은 없습니다.',
+      hideStartButton: true
+    };
+  }
+
+  if (hasDraft && !hasQnaHistory && !hasSectionQuestions && !hasSectionMissingInfo) {
+    return {
+      stage: 'draft_created',
+      subtitle: '기본 초안이 생성되었습니다. 현재 제안할 세부 질문은 없지만, 보완 가능한 정보가 없는지 초안을 검토해 주세요.',
+      emptyMessage: '기본 초안이 생성되었습니다. 현재 바로 제안할 세부 질문은 없습니다. 가운데 초안을 검토하고 필요 시 보완하세요.',
+      hideStartButton: true
+    };
+  }
+
+  if (hasSectionQuestions || hasSectionMissingInfo) {
+    return {
+      stage: 'questions_available',
+      subtitle: '현재 섹션 초안을 정교하게 만드는 질문 및 답변',
+      emptyMessage: '현재 이 섹션에서 추가로 확인할 세부 질문이 없습니다.',
+      hideStartButton: false
+    };
+  }
+
+  return {
+    stage: hasDraft ? 'draft_created' : 'empty',
+    subtitle: hasDraft
+      ? '기본 초안이 생성되었습니다. 현재 제안할 세부 질문은 없지만, 보완 가능한 정보가 없는지 초안을 검토해 주세요.'
+      : '현재 섹션 초안을 정교하게 만드는 질문 및 답변',
+    emptyMessage: hasDraft
+      ? '기본 초안이 생성되었습니다. 현재 바로 제안할 세부 질문은 없습니다. 가운데 초안을 검토하고 필요 시 보완하세요.'
+      : '현재 이 섹션에서 추가로 확인할 세부 질문이 없습니다.',
+    hideStartButton: hasDraft
+  };
 }
 
 function normalizeQuestionKey(text: string): string {
@@ -75,34 +134,43 @@ function filterAnsweredQuestions(items: string[], qnaHistory: QnAPair[]): string
   );
 }
 
-async function callAiPipelineAnswer(payload: {
-  current_draft: Record<string, any>;
-  question: string;
-  answer: string;
-  refresh_missing?: boolean;
+function getOptionalNextQuestion(result: { nextQuestion?: unknown }): string | null {
+  return typeof result.nextQuestion === 'string' && result.nextQuestion.trim()
+    ? result.nextQuestion
+    : null;
+}
+
+async function runLocalSectionAnswerUpdate(params: {
+  sectionId: CareSection;
+  currentDraft: string;
+  evidenceCards: any[];
+  qnaHistory: QnAPair[];
+  pendingItems: string[];
+  latestAnswer: string;
 }) {
-  const response = await fetch(`${AI_SERVER_URL}/pipeline/answer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+  const compactEvidenceCards = (params.evidenceCards || []).slice(0, 8);
+  const compactQnaHistory = (params.qnaHistory || []).slice(-3);
+  const compactPendingItems = (params.pendingItems || []).slice(0, 6);
+
+  if (FAST_UPDATE_ONLY) {
+    return runFastSectionDraftUpdate({
+      sectionId: params.sectionId,
+      currentDraft: params.currentDraft,
+      evidenceCards: compactEvidenceCards,
+      qnaHistory: compactQnaHistory,
+      pendingItems: compactPendingItems,
+      latestAnswer: params.latestAnswer
+    });
+  }
+
+  return runLegacySectionDraftUpdate({
+    sectionId: params.sectionId,
+    currentDraft: params.currentDraft,
+    evidenceCards: compactEvidenceCards,
+    qnaHistory: compactQnaHistory,
+    pendingItems: compactPendingItems,
+    latestAnswer: params.latestAnswer
   });
-
-  let data: any = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
-  }
-
-  if (!response.ok) {
-    throw new Error(data?.detail || data?.error || `ai_server /pipeline/answer failed (${response.status})`);
-  }
-
-  if (!data || data.error) {
-    throw new Error(data?.error || 'Invalid ai_server response from /pipeline/answer');
-  }
-
-  return data;
 }
 
 // GET /api/cases/:id/sections/:sectionId - Get section details (새 체인 기반)
@@ -124,6 +192,7 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
     const sectionStates: any[] = anyCase.sectionStates || [];
     const sectionDrafts: any[] = anyCase.sectionDrafts || [];
     const evidenceCards: any[] = anyCase.evidenceCards || [];
+    const useAiPipelineFallback = sectionStates.length === 0 && sectionDrafts.length === 0;
 
     let state = sectionStates.find((s) => s.sectionId === section);
     let draftEntry = sectionDrafts.find((d) => d.sectionId === section);
@@ -134,8 +203,7 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
     const interaction = await caseModel.getSectionInteraction(id, section);
 
     if (!state) {
-      // Some legacy cases only have aiPipeline snapshots; provide section fallback
-      const fallbackDraft = getFallbackDraftFromAiPipeline(anyCase, section);
+      const fallbackDraft = useAiPipelineFallback ? getFallbackDraftFromAiPipeline(anyCase, section) : '';
       state = {
         sectionId: section,
         status: fallbackDraft.trim() ? 'FULLY_POSSIBLE' : 'IMPOSSIBLE',
@@ -149,7 +217,7 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
     if (!draftEntry) {
       draftEntry = {
         sectionId: section,
-        draftText: getFallbackDraftFromAiPipeline(anyCase, section),
+        draftText: useAiPipelineFallback ? getFallbackDraftFromAiPipeline(anyCase, section) : '',
         evidenceCardIdsUsed: [],
         openIssues: []
       };
@@ -158,23 +226,35 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
     const baselineMissing =
       (state.missingInfoBullets && state.missingInfoBullets.length > 0
         ? state.missingInfoBullets
-        : anyCase?.aiPipeline?.chain4?.missing) || [];
+        : useAiPipelineFallback
+          ? anyCase?.aiPipeline?.chain4?.missing
+          : []) || [];
     const baselineQuestions =
       (state.recommendedQuestions && state.recommendedQuestions.length > 0
         ? state.recommendedQuestions
-        : anyCase?.aiPipeline?.chain5?.clarification_questions) || [];
+        : useAiPipelineFallback
+          ? anyCase?.aiPipeline?.chain5?.clarification_questions
+          : []) || [];
 
     const qnaHistory = interaction?.qnaHistory || [];
     const missingSplit = splitSectionAndCommonItems(baselineMissing, section);
     const questionSplit = splitSectionAndCommonItems(baselineQuestions, section);
     const sectionQuestions = filterAnsweredQuestions(
-      uniqueStrings(questionSplit.sectionItems.map(toKoreanQuestion)),
+      uniqueStrings(questionSplit.sectionItems.map(toNaturalKoreanQuestion)),
       qnaHistory
     );
     const commonQuestions = filterAnsweredQuestions(
-      uniqueStrings(questionSplit.commonItems.map(toKoreanQuestion)),
+      uniqueStrings(questionSplit.commonItems.map(toNaturalKoreanQuestion)),
       qnaHistory
     );
+    const sectionMissingInfo = uniqueStrings(missingSplit.sectionItems);
+    const commonMissingInfo = uniqueStrings(missingSplit.commonItems);
+    const uiHints = buildSectionUiHints({
+      currentDraft: draftEntry?.draftText || '',
+      qnaHistory,
+      sectionQuestions,
+      sectionMissingInfo
+    });
 
     res.json({
       section: sectionId,
@@ -185,13 +265,14 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
         ...missingSplit.commonItems
       ]),
       recommendedQuestions: uniqueStrings([...sectionQuestions, ...commonQuestions]),
-      sectionMissingInfo: uniqueStrings(missingSplit.sectionItems),
-      commonMissingInfo: uniqueStrings(missingSplit.commonItems),
+      sectionMissingInfo,
+      commonMissingInfo,
       sectionQuestions: sectionQuestions,
       commonQuestions: commonQuestions,
       currentDraft: draftEntry?.draftText || '',
       evidenceCards: relevantEvidence,
-      qnaHistory
+      qnaHistory,
+      uiHints
     });
   } catch (error: any) {
     console.error('Error getting section:', error);
@@ -218,6 +299,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
     const sectionStates: any[] = anyCase.sectionStates || [];
     const sectionDrafts: any[] = anyCase.sectionDrafts || [];
     const evidenceCards: any[] = anyCase.evidenceCards || [];
+    const useAiPipelineFallback = sectionStates.length === 0 && sectionDrafts.length === 0;
 
     let state = sectionStates.find((s) => s.sectionId === section);
     let draftEntry = sectionDrafts.find((d) => d.sectionId === section);
@@ -226,7 +308,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
     );
 
     if (!state) {
-      const fallbackDraft = getFallbackDraftFromAiPipeline(anyCase, section);
+      const fallbackDraft = useAiPipelineFallback ? getFallbackDraftFromAiPipeline(anyCase, section) : '';
       state = {
         sectionId: section,
         status: fallbackDraft.trim() ? 'FULLY_POSSIBLE' : 'IMPOSSIBLE',
@@ -242,7 +324,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
     if (!draftEntry) {
       draftEntry = {
         sectionId: section,
-        draftText: getFallbackDraftFromAiPipeline(anyCase, section),
+        draftText: useAiPipelineFallback ? getFallbackDraftFromAiPipeline(anyCase, section) : '',
         evidenceCardIdsUsed: [],
         openIssues: state.missingInfoBullets || []
       };
@@ -260,17 +342,25 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
       const pendingSplit = splitSectionAndCommonItems(pendingItems, section);
       const sectionQuestions = filterAnsweredQuestions(
         uniqueStrings(pendingSplit.sectionItems.map((item) =>
-          toKoreanQuestion(buildQuestionFromMissing(item))
+          toNaturalKoreanQuestion(buildQuestionFromMissing(item))
         )),
         qnaHistory
       );
       const commonQuestions = filterAnsweredQuestions(
         uniqueStrings(pendingSplit.commonItems.map((item) =>
-          toKoreanQuestion(buildQuestionFromMissing(item))
+          toNaturalKoreanQuestion(buildQuestionFromMissing(item))
         )),
         qnaHistory
       );
       const nextQuestion = sectionQuestions[0] || commonQuestions[0] || null;
+      const sectionMissingInfo = uniqueStrings(pendingSplit.sectionItems);
+      const commonMissingInfo = uniqueStrings(pendingSplit.commonItems);
+      const uiHints = buildSectionUiHints({
+        currentDraft: draftEntry.draftText || '',
+        qnaHistory,
+        sectionQuestions,
+        sectionMissingInfo
+      });
       return res.json({
         nextQuestion,
         whyThisQuestion: nextQuestion ? '해당 섹션의 부족 항목을 보완하기 위한 질문입니다.' : '',
@@ -279,10 +369,11 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         remainingItems: pendingItems,
         sectionQuestions,
         commonQuestions,
-        sectionMissingInfo: uniqueStrings(pendingSplit.sectionItems),
-        commonMissingInfo: uniqueStrings(pendingSplit.commonItems),
-        insufficiencyReason: nextQuestion ? null : '현재 섹션은 ai_server Chain6 직접 업데이트 대상이 아닙니다.',
-        qnaHistory
+        sectionMissingInfo,
+        commonMissingInfo,
+        insufficiencyReason: nextQuestion ? null : '현재 섹션에는 즉시 반영 가능한 로컬 업데이트 질문만 제공됩니다.',
+        qnaHistory,
+        uiHints
       });
     }
 
@@ -292,19 +383,27 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
       const questionSplit = splitSectionAndCommonItems(state.recommendedQuestions || [], section);
       const sectionQuestions = filterAnsweredQuestions(
         uniqueStrings([
-          ...questionSplit.sectionItems.map(toKoreanQuestion),
-          ...pendingSplit.sectionItems.map((item) => toKoreanQuestion(buildQuestionFromMissing(item)))
+          ...questionSplit.sectionItems.map(toNaturalKoreanQuestion),
+          ...pendingSplit.sectionItems.map((item) => toNaturalKoreanQuestion(buildQuestionFromMissing(item)))
         ]),
         qnaHistory
       );
       const commonQuestions = filterAnsweredQuestions(
         uniqueStrings([
-          ...questionSplit.commonItems.map(toKoreanQuestion),
-          ...pendingSplit.commonItems.map((item) => toKoreanQuestion(buildQuestionFromMissing(item)))
+          ...questionSplit.commonItems.map(toNaturalKoreanQuestion),
+          ...pendingSplit.commonItems.map((item) => toNaturalKoreanQuestion(buildQuestionFromMissing(item)))
         ]),
         qnaHistory
       );
       const nextQuestion = sectionQuestions[0] || commonQuestions[0] || null;
+      const sectionMissingInfo = uniqueStrings(pendingSplit.sectionItems);
+      const commonMissingInfo = uniqueStrings(pendingSplit.commonItems);
+      const uiHints = buildSectionUiHints({
+        currentDraft: draftEntry.draftText || '',
+        qnaHistory,
+        sectionQuestions,
+        sectionMissingInfo
+      });
 
       return res.json({
         nextQuestion,
@@ -314,14 +413,15 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         remainingItems: pendingItems,
         sectionQuestions,
         commonQuestions,
-        sectionMissingInfo: uniqueStrings(pendingSplit.sectionItems),
-        commonMissingInfo: uniqueStrings(pendingSplit.commonItems),
+        sectionMissingInfo,
+        commonMissingInfo,
         insufficiencyReason: nextQuestion ? null : '추가 질문이 없습니다.',
-        qnaHistory
+        qnaHistory,
+        uiHints
       });
     }
 
-    // 답변 제출 단계: ai_server /pipeline/answer 기반으로 업데이트
+    // 답변 제출 단계: local TS updater only
     const latestAnswer = userAnswer;
     const latestQuestion = question || '시스템 질문';
 
@@ -331,89 +431,58 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
       timestamp: new Date().toISOString()
     });
 
-    const aiCurrentDraft = buildAiDraftFromSectionDrafts(sectionDrafts);
-    const aiResult = await callAiPipelineAnswer({
-      current_draft: aiCurrentDraft,
-      question: latestQuestion,
-      answer: latestAnswer,
-      refresh_missing: false
+    let updatedDraftText = draftEntry.draftText || '';
+    let sectionMissing = draftEntry.openIssues || state.missingInfoBullets || [];
+    let sectionQuestions: string[] = [];
+    let commonQuestions: string[] = [];
+    let lightweight = false;
+    const chainResult = await runLocalSectionAnswerUpdate({
+      sectionId: section,
+      currentDraft: draftEntry.draftText || '',
+      evidenceCards: relevantEvidence,
+      qnaHistory,
+      pendingItems,
+      latestAnswer
     });
 
-    const chain6 = aiResult.chain6 || {};
-    const lightweight = Boolean(aiResult.lightweight);
-    const chain4Missing: string[] = aiResult.chain4?.missing || [];
-    const chain5Questions: string[] = aiResult.chain5?.clarification_questions || [];
-
-    const sectionMissing = lightweight
-      ? draftEntry.openIssues || state.missingInfoBullets || []
-      : filterMissingForSection(chain4Missing, section);
-    const questionSplit = splitSectionAndCommonItems(chain5Questions, section);
-    const sectionQuestions = lightweight
-      ? []
-      : filterAnsweredQuestions(uniqueStrings(questionSplit.sectionItems.map(toKoreanQuestion)), qnaHistory);
-    const commonQuestions = lightweight
-      ? []
-      : filterAnsweredQuestions(uniqueStrings(questionSplit.commonItems.map(toKoreanQuestion)), qnaHistory);
-    const missingSplit = lightweight
-      ? {
-          sectionItems: state.missingInfoBullets || [],
-          commonItems: [] as string[]
-        }
-      : splitSectionAndCommonItems(chain4Missing, section);
-
-    // Update ALL sections from chain6 (document-aware), not just current section
-    for (const [aiKey, careSection] of Object.entries(AI_TO_CARE_SECTION)) {
-      const text = extractSectionDraftTextFromAiDraft(chain6, careSection);
-      const entry = sectionDrafts.find((d) => d.sectionId === careSection);
-      if (entry) {
-        entry.draftText = text;
-      } else {
-        sectionDrafts.push({
-          sectionId: careSection,
-          draftText: text,
-          evidenceCardIdsUsed: [],
-          openIssues: []
-        });
-      }
-    }
+    updatedDraftText = chainResult.updatedDraftText || draftEntry.draftText || '';
+    sectionMissing = chainResult.remainingItems || [];
+    const localNextQuestion = getOptionalNextQuestion(chainResult as { nextQuestion?: unknown });
+    sectionQuestions =
+      localNextQuestion && !REFRESH_QUESTIONS_ON_DEMAND
+        ? [toNaturalKoreanQuestion(localNextQuestion)]
+        : [];
+    draftEntry.draftText = updatedDraftText;
     draftEntry.openIssues = sectionMissing;
+    state.missingInfoBullets = sectionMissing;
+    state.recommendedQuestions = sectionQuestions;
+    state.status = chainResult.needMore ? 'POSSIBLE' : 'FULLY_POSSIBLE';
+    state.rationaleText = chainResult.needMore
+      ? '답변 반영 후에도 보완 항목이 남아 있음.'
+      : '답변 반영 후 해당 섹션 필수 보완 항목이 해소됨.';
 
-    if (lightweight) {
-      state.status = draftEntry.draftText?.trim() ? 'POSSIBLE' : state.status;
-      state.rationaleText = '답변 반영 후 초안이 업데이트되었습니다.';
-    } else {
-      state.missingInfoBullets = sectionMissing;
-      state.recommendedQuestions = uniqueStrings([...sectionQuestions, ...commonQuestions]);
-      state.status = sectionMissing.length === 0 ? 'FULLY_POSSIBLE' : 'POSSIBLE';
-      state.rationaleText =
-        sectionMissing.length === 0
-          ? '답변 반영 후 해당 섹션 필수 보완 항목이 해소됨.'
-          : '답변 반영 후에도 보완 항목이 남아 있음.';
-    }
-
-    const updatedDraftsBySection: Record<string, string> = {};
-    for (const d of sectionDrafts) {
-      if (d && typeof d.sectionId === 'string') {
-        updatedDraftsBySection[d.sectionId] = d.draftText || '';
-      }
-    }
-
-    anyCase.sectionDrafts = sectionDrafts;
-    anyCase.sectionStates = sectionStates;
-    anyCase.draftsBySection = updatedDraftsBySection;
+    const updatedDraftsBySection = deriveDraftMapFromSectionDrafts(sectionDrafts);
 
     await caseModel.updateCase(id, {
       ...anyCase,
       sectionDrafts,
-      sectionStates,
-      draftsBySection: updatedDraftsBySection
+      sectionStates
     });
     await caseModel.saveSectionInteraction(id, {
       sectionId: section,
       qnaHistory
     });
 
-    const nextQuestion = lightweight ? null : sectionQuestions[0] || commonQuestions[0] || null;
+    const nextQuestion =
+      lightweight || REFRESH_QUESTIONS_ON_DEMAND ? null : sectionQuestions[0] || commonQuestions[0] || null;
+    const sectionMissingInfo = uniqueStrings(sectionMissing);
+    const commonMissingInfo = uniqueStrings(commonQuestions.length > 0 ? [] : []);
+    const uiHints = buildSectionUiHints({
+      currentDraft: updatedDraftsBySection[section] || '',
+      qnaHistory,
+      sectionQuestions,
+      sectionMissingInfo
+    });
 
     return res.json({
       nextQuestion,
@@ -424,18 +493,19 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
           : '',
       updatedDraftText: updatedDraftsBySection[section] || '',
       updatedDraftsBySection,
-      needMore: lightweight ? true : sectionMissing.length > 0,
+      needMore: sectionMissing.length > 0,
       remainingItems: sectionMissing,
       sectionQuestions,
       commonQuestions,
-      sectionMissingInfo: uniqueStrings(missingSplit.sectionItems),
-      commonMissingInfo: uniqueStrings(missingSplit.commonItems),
+      sectionMissingInfo,
+      commonMissingInfo,
       insufficiencyReason: sectionMissing.length > 0 ? null : null,
       qnaHistory,
-      lightweight
+      lightweight,
+      uiHints
     });
 
-    // Legacy backend Chain4 path removed (ai_server Chain6 path is now the source)
+    // Legacy backend Chain4 path removed. Local TS update is now the source.
     /*
     let latestAnswer: string | undefined;
     if (userAnswer && userAnswer !== 'SKIP') {

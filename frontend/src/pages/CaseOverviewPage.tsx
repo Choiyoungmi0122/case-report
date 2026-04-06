@@ -34,30 +34,10 @@ const SECTION_NAMES: Record<string, string> = {
   INFORMED_CONSENT: '동의'
 };
 
-const CARE_SECTION_ORDER = [
-  'TITLE',
-  'ABSTRACT',
-  'INTRODUCTION',
-  'PATIENT_INFORMATION',
-  'CLINICAL_FINDINGS',
-  'TIMELINE',
-  'DIAGNOSTIC_ASSESSMENT',
-  'THERAPEUTIC_INTERVENTIONS',
-  'FOLLOW_UP_OUTCOMES',
-  'DISCUSSION_CONCLUSION',
-  'PATIENT_PERSPECTIVE',
-  'INFORMED_CONSENT'
-];
-
-const AI_GUIDELINE_NAMES: Record<string, string> = {
-  patient_information: '환자 정보',
-  clinical_findings: '임상 소견',
-  timeline: '타임라인',
-  diagnostic_assessment: '진단 평가',
-  therapeutic_intervention: '치료 중재',
-  follow_up_outcomes: '추적 관찰 결과',
-  patient_perspective: '환자 관점'
-};
+function hasCanonicalSectionOutputs(caseData: Case | null): boolean {
+  if (!caseData) return false;
+  return Boolean(caseData.sectionStates?.length || caseData.sectionDrafts?.length || caseData.finalDraft);
+}
 
 function CaseOverviewPage() {
   const { caseId } = useParams<{ caseId: string }>();
@@ -114,33 +94,7 @@ function CaseOverviewPage() {
     setIsEditingTitle(false);
   };
 
-  const aiFinalSections = caseData?.aiPipeline?.chain7?.final_sections || {};
-  const aiSectionEntries = Object.entries(aiFinalSections).filter(
-    ([, value]) => typeof value === 'string' && value.trim().length > 0
-  );
-
-  const aiToCareSection: Record<string, string> = {
-    patient_information: 'PATIENT_INFORMATION',
-    clinical_findings: 'CLINICAL_FINDINGS',
-    timeline: 'TIMELINE',
-    diagnostic_assessment: 'DIAGNOSTIC_ASSESSMENT',
-    therapeutic_intervention: 'THERAPEUTIC_INTERVENTIONS',
-    follow_up_outcomes: 'FOLLOW_UP_OUTCOMES',
-    patient_perspective: 'PATIENT_PERSPECTIVE'
-  };
-
-  const fallbackSections: SectionOverview[] = CARE_SECTION_ORDER.map((sectionId) => {
-    const aiKey = Object.keys(aiToCareSection).find((k) => aiToCareSection[k] === sectionId);
-    const text = aiKey ? (aiFinalSections as any)[aiKey] || '' : '';
-    return {
-      section: sectionId,
-      status: text ? 'FULLY_POSSIBLE' : 'IMPOSSIBLE',
-      rationaleText: text ? 'AI 파이프라인 결과로 작성됨.' : '입력 데이터가 부족하여 비어 있음.',
-      draftSnippet: typeof text === 'string' ? text.slice(0, 200) : ''
-    };
-  });
-
-  const displaySections = sections.length > 0 ? sections : fallbackSections;
+  const displaySections = sections.length > 0 ? sections : [];
 
   if (loading) {
     return (
@@ -221,22 +175,15 @@ function CaseOverviewPage() {
           </div>
         </div>
 
-        {aiSectionEntries.length > 0 && (
-          <div className="ai-sections-fallback">
-            <h3>AI 생성 섹션 미리보기</h3>
-            <div className="ai-sections-grid">
-              {aiSectionEntries.map(([key, value]) => (
-                <div key={key} className="ai-section-card">
-                  <h4>{AI_GUIDELINE_NAMES[key] || SECTION_NAMES[key] || key}</h4>
-                  <p>{value}</p>
-                </div>
-              ))}
-            </div>
+        {displaySections.length === 0 ? (
+          <div className="empty-sections-state">
+            {hasCanonicalSectionOutputs(caseData)
+              ? '현재 표시할 섹션 요약이 없습니다.'
+              : '아직 섹션 초안이 생성되지 않았습니다. 초기 처리 후 다시 확인해 주세요.'}
           </div>
-        )}
-
-        <div className="sections-grid">
-          {displaySections.map((section) => (
+        ) : (
+          <div className="sections-grid">
+            {displaySections.map((section) => (
             <div
               key={section.section}
               className="section-card"
@@ -268,8 +215,9 @@ function CaseOverviewPage() {
                 <span className="click-hint">클릭하여 상세 보기 →</span>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

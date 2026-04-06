@@ -46,7 +46,23 @@ export interface Case {
   visits: Visit[];
   sectionEvidenceMap?: Record<CareSection, string[]>;
   sectionStatusMap?: Record<CareSection, SectionStatusInfo>;
+  // Legacy derived/cache field. Runtime draft truth is sectionDrafts.
   draftsBySection?: Record<CareSection, string>;
+  sectionStates?: Array<{
+    sectionId: CareSection;
+    status: SectionStatus | string;
+    rationaleText: string;
+    missingInfoBullets: string[];
+    recommendedQuestions: string[];
+  }>;
+  sectionDrafts?: Array<{
+    sectionId: CareSection;
+    evidenceCardIdsUsed: string[];
+    draftText: string;
+    openIssues: string[];
+  }>;
+  finalDraft?: any;
+  // Snapshot/debug only. Do not treat as canonical runtime source.
   aiPipeline?: any;
 }
 
