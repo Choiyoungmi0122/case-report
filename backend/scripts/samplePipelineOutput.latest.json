@@ -1,0 +1,662 @@
+{
+  "sampleVisits": [
+    {
+      "index": 1,
+      "date": "2026-04-08T09:00:00+09:00",
+      "text": "S: 52세 여성 환자가 3개월 전부터 지속된 불면과 두근거림, 불안을 주소로 내원하였다. 잠들기 어렵고 자주 깨며 최근 2주간 증상이 악화되었다고 하였다. 과거력상 고혈압으로 약물 복용 중이며, 가족력상 모친의 불안장애 병력이 있었다. 직업은 중학교 교사이며 최근 업무 스트레스가 심했다고 진술하였다.\nO: 혈압은 138/86 mmHg, 맥박수는 96회/분이었다. 안색은 창백하지 않았고 흉부 청진상 특이 소견은 없었다. 설질은 담홍, 설태는 박백, 맥은 세삭하였다. 갑상선기능검사와 일반혈액검사는 정상 범위였다.\nA: 기질적 이상 가능성은 낮다고 판단하였으며, 불안과 불면이 주 증상인 상태로 보았다. 한의학적으로는 간기울결로 변증하였다.\nP: 가미소요산을 1일 3회 2주간 처방하고, 주 2회 침 치료를 시행하기로 하였다. 수면 위생 교육을 함께 시행하였다. 2주 후 추적 관찰하기로 하였다."
+    },
+    {
+      "index": 2,
+      "date": "2026-04-22T09:00:00+09:00",
+      "text": "S: 환자는 불면의 강도가 다소 감소했고, 두근거림은 절반 정도 줄었다고 말했다. 여전히 새벽 각성이 남아 있으나 불안감은 처음보다 호전되었다고 하였다.\nO: 맥박수는 84회/분이었다. 설질은 담홍, 맥은 여전히 세삭하였다. 약 복용 순응도는 양호하다고 답하였다.\nA: 초진 대비 증상 호전이 관찰되었다고 판단하였다.\nP: 기존 한약 처방을 2주 더 유지하고 침 치료를 지속하였다. 특별한 이상반응은 없다고 확인하였다."
+    }
+  ],
+  "evidenceCards": [
+    {
+      "id": "f5d21769-ac22-4e9f-8dbf-5fb48e165546",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "52세 여성 환자",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 8
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "0c364479-f294-4c30-a756-0ba2fa792946",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "3개월 전부터 지속된 불면",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 13
+      },
+      "confidence": 0.95
+    },
+    {
+      "id": "cad3aef9-265d-4e97-b90e-468a6955495b",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "잠들기 어렵고 자주 깨며 최근 2주간 증상이 악화되었다고 하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 0.95
+    },
+    {
+      "id": "4cb586aa-b19f-4c92-9420-8d214cab945d",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "과거력상 고혈압으로 약물 복용 중",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 20
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "68d2e917-832d-4c9f-a7b6-34f80e01a541",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "가족력상 모친의 불안장애 병력이 있었다.",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 23
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "95671d78-0edc-46c5-a7ec-ed28d6193117",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "직업은 중학교 교사",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 11
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "747abd39-e232-4327-b3f2-ba8873f040f5",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "최근 업무 스트레스가 심했다고 진술하였다.",
+      "tags": [
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 22
+      },
+      "confidence": 0.95
+    },
+    {
+      "id": "d08deeb0-fffb-4af4-86ac-e5b25bac9f50",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "혈압은 138/86 mmHg",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 14
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "519a0489-0635-43cc-a20b-b3f1cc2236f5",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "맥박수는 96회/분이었다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 13
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "98cc78e8-7d4d-4c4f-abe9-5401ea9a2f84",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "안색은 창백하지 않았고",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 11
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "8a04acc1-3ce4-471e-ae31-8589ddbade54",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "흉부 청진상 특이 소견은 없었다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 16
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "b5164054-7ba5-4ff1-83a8-005610892de7",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "설질은 담홍",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 6
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "f02ffe8e-e3a3-4d99-bbae-6cef4a791b80",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "설태는 박백",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 6
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "4f319500-95f6-4564-83d9-9ce4d14c112e",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "맥은 세삭하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 9
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "bfa861c5-7dce-499b-86e1-8ab825810512",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "갑상선기능검사와 일반혈액검사는 정상 범위였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 23
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "2111f650-a6bf-4abd-ae71-1b94471c4d7e",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "기질적 이상 가능성은 낮다고 판단하였으며",
+      "tags": [
+        "DIAGNOSTIC_ASSESSMENT"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 18
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "6a46afc3-2570-4003-800c-f9137ca63783",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "불안과 불면이 주 증상인 상태로 보았다.",
+      "tags": [
+        "DIAGNOSTIC_ASSESSMENT"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 19
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "be8c1726-c24c-4753-95cc-2617d3a35947",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "한의학적으로는 간기울결로 변증하였다.",
+      "tags": [
+        "DIAGNOSTIC_ASSESSMENT"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 20
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "b50bfa7a-e28c-4cff-8c7b-8047b5651032",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "가미소요산을 1일 3회 2주간 처방하고",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 18
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "79cf7ad3-828f-4f8c-84e9-eac8aadfe9a5",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "주 2회 침 치료를 시행하기로 하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 17
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "730031d9-b620-4a9d-bd3e-18cea213d3c6",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "수면 위생 교육을 함께 시행하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 15
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "790b33c2-3488-488b-a982-51a065ed7eb9",
+      "visitIndex": 1,
+      "visitDateTime": "2026-04-08T09:00:00+09:00",
+      "normalizedText": "2주 후 추적 관찰하기로 하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS",
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 15
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "fe5135ef-a2ce-46ad-91c1-dd7369155740",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "불면의 강도가 다소 감소했고",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 13
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "60c75b93-c881-4ba8-b366-b7e4544923be",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "두근거림은 절반 정도 줄었다고 말했다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 18
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "b11fe3bb-73de-4f42-a55a-3cc50231dbc1",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "여전히 새벽 각성이 남아 있으나",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 13
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "433d8a09-780e-4286-9e99-9f035c578723",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "불안감은 처음보다 호전되었다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 19
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "5f888b50-a20a-4209-843a-d780bc7ef15f",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "맥박수는 84회/분이었다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 13
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "a700e16e-854f-486d-aca7-2b29762d1d5c",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "설질은 담홍",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 6
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "05033f2c-bfe5-4dd5-8b2d-54e338d34dbd",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "맥은 여전히 세삭하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 12
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "68f4113b-9518-47a1-83ed-4d499c4ea7d9",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "약 복용 순응도는 양호하다고 답하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 19
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "f94b93eb-ab23-4320-a9bb-ef19bee856e4",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "초진 대비 증상 호전이 관찰되었다고 판단하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 23
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "91ae51ca-9b94-4476-9a04-04ceed469b5d",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "기존 한약 처방을 2주 더 유지하고 침 치료를 지속하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 28
+      },
+      "confidence": 0.98
+    },
+    {
+      "id": "a6ae6d12-a75c-473c-9844-1de68100c8ca",
+      "visitIndex": 2,
+      "visitDateTime": "2026-04-22T09:00:00+09:00",
+      "normalizedText": "특별한 이상반응은 없다고 확인하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 16
+      },
+      "confidence": 0.98
+    }
+  ],
+  "sectionStates": [
+    {
+      "sectionId": "PATIENT_INFORMATION",
+      "status": "READY",
+      "rationaleText": "나이, 성별, 직업, 과거력, 가족력 등 필수 정보가 모두 포함되어 있어 초안 작성이 충분합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "CLINICAL_FINDINGS",
+      "status": "READY",
+      "rationaleText": "주요 증상, 신체검사, 검사 결과 등 임상소견에 필요한 정보가 충분히 제시되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "TIMELINE",
+      "status": "READY",
+      "rationaleText": "증상 발생 시점과 경과, 최근 악화 시기 등 타임라인 작성에 필요한 정보가 명확히 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "DIAGNOSTIC_ASSESSMENT",
+      "status": "READY",
+      "rationaleText": "진단적 평가와 한의학적 변증, 감별 내용이 모두 포함되어 있어 초안 작성이 가능합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "THERAPEUTIC_INTERVENTIONS",
+      "status": "READY",
+      "rationaleText": "치료 내용(약물, 침, 교육, 추적계획 등)이 구체적으로 제시되어 있어 초안 작성이 충분합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "FOLLOW_UP_OUTCOMES",
+      "status": "READY",
+      "rationaleText": "치료 후 변화, 순응도, 이상반응 등 경과 관찰에 필요한 정보가 모두 포함되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "PATIENT_PERSPECTIVE",
+      "status": "INCOMPLETE",
+      "rationaleText": "환자 진술이 일부 있으나, 치료 경험이나 만족도 등 추가 정보가 더 필요합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    }
+  ],
+  "sectionDrafts": [
+    {
+      "sectionId": "PATIENT_INFORMATION",
+      "evidenceCardIdsUsed": [
+        "f5d21769-ac22-4e9f-8dbf-5fb48e165546",
+        "95671d78-0edc-46c5-a7ec-ed28d6193117",
+        "4cb586aa-b19f-4c92-9420-8d214cab945d",
+        "68d2e917-832d-4c9f-a7b6-34f80e01a541"
+      ],
+      "draftText": "52세 여성 환자로, 직업은 중학교 교사이다. 과거력상 고혈압으로 약물 복용 중이며, 가족력으로는 모친의 불안장애 병력이 있었다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "CLINICAL_FINDINGS",
+      "evidenceCardIdsUsed": [
+        "0c364479-f294-4c30-a756-0ba2fa792946",
+        "cad3aef9-265d-4e97-b90e-468a6955495b",
+        "d08deeb0-fffb-4af4-86ac-e5b25bac9f50",
+        "519a0489-0635-43cc-a20b-b3f1cc2236f5",
+        "98cc78e8-7d4d-4c4f-abe9-5401ea9a2f84",
+        "8a04acc1-3ce4-471e-ae31-8589ddbade54",
+        "b5164054-7ba5-4ff1-83a8-005610892de7",
+        "f02ffe8e-e3a3-4d99-bbae-6cef4a791b80",
+        "4f319500-95f6-4564-83d9-9ce4d14c112e",
+        "bfa861c5-7dce-499b-86e1-8ab825810512",
+        "5f888b50-a20a-4209-843a-d780bc7ef15f",
+        "a700e16e-854f-486d-aca7-2b29762d1d5c",
+        "05033f2c-bfe5-4dd5-8b2d-54e338d34dbd"
+      ],
+      "draftText": "환자는 3개월 전부터 잠들기 어렵고 자주 깨는 불면 증상을 호소하였으며, 최근 2주간 증상이 악화되었다고 하였다. 내원 당시 혈압은 138/86 mmHg, 맥박수는 96회/분이었고, 안색은 창백하지 않았으며 흉부 청진상 특이 소견은 없었다. 설질은 담홍, 설태는 박백이었고, 맥은 세삭하였다. 갑상선기능검사와 일반혈액검사는 정상 범위였다. 이후 맥박수는 84회/분으로 측정되었으며, 설질과 맥상은 변함이 없었다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "TIMELINE",
+      "evidenceCardIdsUsed": [
+        "0c364479-f294-4c30-a756-0ba2fa792946",
+        "cad3aef9-265d-4e97-b90e-468a6955495b"
+      ],
+      "draftText": "환자는 3개월 전부터 불면 증상이 시작되었으며, 최근 2주간 잠들기 어렵고 자주 깨는 증상이 악화되었다고 진술하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "DIAGNOSTIC_ASSESSMENT",
+      "evidenceCardIdsUsed": [
+        "2111f650-a6bf-4abd-ae71-1b94471c4d7e",
+        "6a46afc3-2570-4003-800c-f9137ca63783",
+        "be8c1726-c24c-4753-95cc-2617d3a35947"
+      ],
+      "draftText": "임상 평가 결과 기질적 이상 가능성은 낮다고 판단하였으며, 불안과 불면이 주 증상인 상태로 진단하였다. 한의학적으로는 간기울결로 변증하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "THERAPEUTIC_INTERVENTIONS",
+      "evidenceCardIdsUsed": [
+        "b50bfa7a-e28c-4cff-8c7b-8047b5651032",
+        "79cf7ad3-828f-4f8c-84e9-eac8aadfe9a5",
+        "730031d9-b620-4a9d-bd3e-18cea213d3c6",
+        "790b33c2-3488-488b-a982-51a065ed7eb9",
+        "91ae51ca-9b94-4476-9a04-04ceed469b5d"
+      ],
+      "draftText": "가미소요산을 1일 3회 2주간 처방하고, 주 2회 침 치료를 병행하였다. 수면 위생 교육도 함께 시행하였으며, 2주 후 추적 관찰을 계획하였다. 이후 기존 한약 처방을 2주 더 유지하고 침 치료를 지속하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "FOLLOW_UP_OUTCOMES",
+      "evidenceCardIdsUsed": [
+        "790b33c2-3488-488b-a982-51a065ed7eb9",
+        "fe5135ef-a2ce-46ad-91c1-dd7369155740",
+        "60c75b93-c881-4ba8-b366-b7e4544923be",
+        "b11fe3bb-73de-4f42-a55a-3cc50231dbc1",
+        "433d8a09-780e-4286-9e99-9f035c578723",
+        "68f4113b-9518-47a1-83ed-4d499c4ea7d9",
+        "f94b93eb-ab23-4320-a9bb-ef19bee856e4",
+        "a6ae6d12-a75c-473c-9844-1de68100c8ca"
+      ],
+      "draftText": "2주 후 추적 관찰에서 불면의 강도가 다소 감소하였고, 두근거림은 절반 정도 줄었다고 보고하였다. 여전히 새벽 각성이 남아 있었으나, 불안감은 처음보다 호전되었다고 하였다. 약 복용 순응도는 양호하였으며, 초진 대비 증상 호전이 관찰되었다. 특별한 이상반응은 없었다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "PATIENT_PERSPECTIVE",
+      "evidenceCardIdsUsed": [
+        "747abd39-e232-4327-b3f2-ba8873f040f5"
+      ],
+      "draftText": "환자는 최근 업무 스트레스가 심했다고 진술하였다.",
+      "openIssues": []
+    }
+  ],
+  "missing": {
+    "sectionMissing": [],
+    "commonMissing": []
+  },
+  "questions": {
+    "commonQuestions": [],
+    "sectionQuestions": [
+      {
+        "sectionId": "PATIENT_INFORMATION",
+        "questions": []
+      },
+      {
+        "sectionId": "CLINICAL_FINDINGS",
+        "questions": []
+      },
+      {
+        "sectionId": "TIMELINE",
+        "questions": []
+      },
+      {
+        "sectionId": "DIAGNOSTIC_ASSESSMENT",
+        "questions": [
+          "진단 과정에서 시행한 검사 방법(예: 신체검사, 설문, 영상 등)과 감별 진단 과정을 구체적으로 설명해 주세요."
+        ]
+      },
+      {
+        "sectionId": "THERAPEUTIC_INTERVENTIONS",
+        "questions": [
+          "가미소요산의 용량, 투여 경로, 침 치료의 구체적 시술 방법 등 치료의 세부 시행 방식을 자세히 알려주세요."
+        ]
+      },
+      {
+        "sectionId": "FOLLOW_UP_OUTCOMES",
+        "questions": []
+      },
+      {
+        "sectionId": "PATIENT_PERSPECTIVE",
+        "questions": [
+          "환자가 치료 전후 느낀 변화나 소감을 직접 인용하거나 구체적으로 기술해 주세요."
+        ]
+      }
+    ]
+  }
+}

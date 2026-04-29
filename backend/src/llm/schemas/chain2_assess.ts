@@ -3,23 +3,18 @@ import { CareSectionEnum } from './common';
 
 export const SectionStatusEnum = z.enum([
   'IMPOSSIBLE',
-  'PARTIAL_IMPOSSIBLE',
-  'PARTIAL_POSSIBLE',
-  'POSSIBLE',
-  'FULLY_POSSIBLE'
+  'INCOMPLETE',
+  'READY'
 ]);
 
-export const SectionStateSchema = z.object({
+export const SectionAssessmentSchema = z.object({
   sectionId: CareSectionEnum,
   status: SectionStatusEnum,
-  rationaleText: z.string(),
-  missingInfoBullets: z.array(z.string()),
-  recommendedQuestions: z.array(z.string())
+  rationaleText: z.string()
 });
 
 export const Chain2OutputSchema = z.object({
-  sectionStates: z.array(SectionStateSchema)
+  sectionAssessments: z.array(SectionAssessmentSchema)
 });
 
-export type SectionState = z.infer<typeof SectionStateSchema>;
-
+export type SectionAssessment = z.infer<typeof SectionAssessmentSchema>;

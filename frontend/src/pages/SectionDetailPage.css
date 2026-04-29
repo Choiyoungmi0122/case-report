@@ -1,4 +1,4 @@
-.section-detail-page {
+﻿.section-detail-page {
   height: 100vh;
   background-color: #f5f5f5;
   display: flex;
@@ -38,12 +38,77 @@
   font-size: 1.5rem;
 }
 
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-review-section {
+  padding: 0.55rem 1rem;
+  background-color: #0d6efd;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-review-section:hover:not(:disabled) {
+  background-color: #0b5ed7;
+}
+
+.btn-review-section:disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.btn-undo-answer {
+  padding: 0.55rem 1rem;
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-undo-answer:hover:not(:disabled) {
+  background-color: #f8fafc;
+}
+
+.btn-undo-answer:disabled {
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
+}
+
 .three-panel-layout {
   display: flex;
   flex: 1;
   overflow: hidden;
   min-height: 0;
   position: relative;
+}
+
+.three-panel-layout.is-inline-loading::after {
+  content: '섹션 내용을 불러오는 중...';
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.96);
+  color: #334155;
+  padding: 0.65rem 1rem;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 30;
 }
 
 /* Left: Document Preview */
@@ -109,6 +174,17 @@
   line-height: 1.8;
   white-space: pre-wrap;
   font-size: 1rem;
+}
+
+.preview-open-link {
+  color: #0d6efd;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.preview-open-link:hover {
+  text-decoration: underline;
 }
 
 .chat-panel {
@@ -184,6 +260,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  flex-shrink: 0;
 }
 
 .question-chip-list {
@@ -269,6 +346,14 @@
   padding: 0.8rem 0.9rem;
 }
 
+.question-selection-box {
+  margin-top: 0.1rem;
+}
+
+.common-chat-panel .chat-input-area .question-hint-box {
+  display: none;
+}
+
 .question-hint-box strong {
   display: block;
   margin-bottom: 0.45rem;
@@ -312,7 +397,7 @@
 }
 
 .chat-messages:empty::before {
-  content: '질문을 시작하여 대화를 시작하세요.';
+  content: '질문에 답변하면 대화 이력이 여기에 표시됩니다.';
   display: block;
   text-align: center;
   color: #6c757d;
@@ -409,12 +494,34 @@
   background-color: #f8f9fa;
   flex-shrink: 0;
   z-index: 10;
+  margin-top: auto;
+}
+
+.common-chat-panel.no-history .question-priority-panel {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.section-chat-panel.no-history .section-insights {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+.section-chat-panel.no-history .question-priority-panel {
+  max-height: none;
 }
 
 .input-box {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+.input-action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .answer-input {
@@ -475,6 +582,17 @@
   max-height: 38%;
 }
 
+.section-chat-panel .section-insights {
+  max-height: 24%;
+  min-height: 0;
+}
+
+.section-chat-panel .question-priority-panel {
+  max-height: 22%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .section-rationale-box,
 .section-missing-info,
 .section-recommended-questions,
@@ -484,6 +602,91 @@
   border-radius: 10px;
   padding: 0.85rem 0.95rem;
   margin-bottom: 0.7rem;
+}
+
+.section-chat-panel .section-rationale-box,
+.section-chat-panel .section-missing-info {
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.55rem;
+}
+
+.section-chat-panel .section-rationale-box p,
+.section-chat-panel .section-missing-info li,
+.section-chat-panel .section-missing-info .section-content-text,
+.section-chat-panel .question-hint-box,
+.section-chat-panel .question-empty-state {
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.frontmatter-preview {
+  background: #f8fafc;
+  border: 1px solid #dbeafe;
+}
+
+.frontmatter-block {
+  margin-top: 0.8rem;
+}
+
+.frontmatter-block strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #334155;
+  font-size: 0.88rem;
+}
+
+.frontmatter-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.frontmatter-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.frontmatter-edit-trigger:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.frontmatter-input {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+.frontmatter-input:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+}
+
+.frontmatter-helper {
+  color: #64748b;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.frontmatter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .section-rationale-box h3,
@@ -530,6 +733,20 @@
 .btn-submit-answer:disabled {
   background-color: #6c757d;
   cursor: not-allowed;
+}
+
+.btn-toggle-history {
+  padding: 0.55rem 1rem;
+  background-color: #ffffff;
+  color: #495057;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.btn-toggle-history:hover {
+  background-color: #f8f9fa;
 }
 
 .error-message {
@@ -595,3 +812,4 @@
     min-height: 480px;
   }
 }
+

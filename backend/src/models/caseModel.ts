@@ -1,23 +1,60 @@
 import { Case, SectionInteraction, CareSection } from '../types';
 import { CaseModel as CaseMongoModel, SectionInteractionModel } from '../db/schema';
 
+function normalizeSectionStatusValue(status: any): string {
+  switch (String(status || '').trim()) {
+    case 'FULLY_POSSIBLE':
+      return 'READY';
+    case 'POSSIBLE':
+    case 'PARTIAL_POSSIBLE':
+    case 'PARTIAL_IMPOSSIBLE':
+      return 'INCOMPLETE';
+    case 'READY':
+    case 'INCOMPLETE':
+    case 'IMPOSSIBLE':
+      return String(status);
+    default:
+      return 'IMPOSSIBLE';
+  }
+}
+
+function normalizeSectionStatusMap(rawStatusMap: Record<string, any>) {
+  return Object.entries(rawStatusMap || {}).reduce((acc: Record<string, any>, [sectionId, info]) => {
+    acc[sectionId] = {
+      ...(info || {}),
+      status: normalizeSectionStatusValue(info?.status)
+    };
+    return acc;
+  }, {});
+}
+
+function normalizeSectionStates(rawSectionStates: any[]) {
+  return (rawSectionStates || []).map((state: any) => ({
+    ...state,
+    status: normalizeSectionStatusValue(state?.status),
+    missingInfoBullets: state?.missingInfoBullets || [],
+    recommendedQuestions: state?.recommendedQuestions || []
+  }));
+}
+
 function deriveDraftsBySection(rawSectionDrafts: any[], rawDraftsBySection: Record<string, string>) {
+  const merged = { ...(rawDraftsBySection || {}) };
+
   if (Array.isArray(rawSectionDrafts) && rawSectionDrafts.length > 0) {
-    return rawSectionDrafts.reduce((acc: Record<string, string>, d: any) => {
-      if (d && typeof d.sectionId === 'string') {
-        acc[d.sectionId] = d.draftText || '';
+    return rawSectionDrafts.reduce((acc: Record<string, string>, draft: any) => {
+      if (draft && typeof draft.sectionId === 'string') {
+        acc[draft.sectionId] = draft.draftText || '';
       }
       return acc;
-    }, {} as Record<string, string>);
+    }, merged as Record<string, string>);
   }
 
-  return { ...(rawDraftsBySection || {}) };
+  return merged;
 }
 
 export class CaseModel {
   async getInteractionByKey(caseId: string, sectionKey: string): Promise<{ sectionId: string; qnaHistory: any[] } | null> {
     const doc = await SectionInteractionModel.findOne({ caseId, sectionId: sectionKey }).exec();
-
     if (!doc) return null;
 
     return {
@@ -42,44 +79,42 @@ export class CaseModel {
   }
 
   async createCase(caseData: Omit<Case, 'id' | 'createdAt'>): Promise<string> {
-    const id = `case_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `case_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const createdAt = new Date();
 
-    try {
-      const newCase = new CaseMongoModel({
-        id,
-        createdAt,
-        title: caseData.title || null,
-        visits: caseData.visits,
-        sectionEvidenceMap: caseData.sectionEvidenceMap || {},
-        sectionStatusMap: caseData.sectionStatusMap || {}
-      });
+    const newCase = new CaseMongoModel({
+      id,
+      createdAt,
+      title: caseData.title || null,
+      visits: caseData.visits,
+      sectionEvidenceMap: caseData.sectionEvidenceMap || {},
+      sectionStatusMap: caseData.sectionStatusMap || {}
+    });
 
-      await newCase.save();
-      return id;
-    } catch (error: any) {
-      console.error('Error in createCase:', error);
-      throw error;
-    }
+    await newCase.save();
+    return id;
   }
 
   async getAllCases(): Promise<Case[]> {
     const docs = await CaseMongoModel.find({}).sort({ createdAt: -1 }).exec();
-    
-    return docs.map(doc => ({
+
+    return docs.map((doc) => ({
       id: doc.id,
       createdAt: doc.createdAt.toISOString(),
       title: doc.title || undefined,
       visits: doc.visits,
+      processingCache: (doc as any).processingCache || undefined,
+      finalComposeStatus: (doc as any).finalComposeStatus || undefined,
       sectionEvidenceMap: doc.sectionEvidenceMap || {},
-      sectionStatusMap: doc.sectionStatusMap || {},
+      sectionStatusMap: normalizeSectionStatusMap(doc.sectionStatusMap || {}),
       draftsBySection: deriveDraftsBySection((doc as any).sectionDrafts || [], doc.draftsBySection || {}),
-      sectionStates: (doc as any).sectionStates || [],
+      sectionStates: normalizeSectionStates((doc as any).sectionStates || []),
+      commonMissingItems: (doc as any).commonMissingItems || [],
+      commonQuestionSets: (doc as any).commonQuestionSets || [],
+      answerUndoStack: (doc as any).answerUndoStack || [],
       sectionDrafts: (doc as any).sectionDrafts || [],
-      finalDraft: (doc as any).finalDraft || null,
-      aiPipeline: (doc as any).aiPipeline || null,
-      // 새 체인 필드는 Case 타입에 아직 없을 수 있으므로 any로 유지
-      // (필요 시 types/index.ts 확장)
+      sectionAdequacyReviews: (doc as any).sectionAdequacyReviews || {},
+      finalDraft: (doc as any).finalDraft || null
     }));
   }
 
@@ -96,15 +131,19 @@ export class CaseModel {
       createdAt: doc.createdAt.toISOString(),
       title: doc.title || undefined,
       visits: doc.visits,
+      processingCache: (doc as any).processingCache || undefined,
+      finalComposeStatus: (doc as any).finalComposeStatus || undefined,
       sectionEvidenceMap: doc.sectionEvidenceMap || {},
-      sectionStatusMap: doc.sectionStatusMap || {},
+      sectionStatusMap: normalizeSectionStatusMap(doc.sectionStatusMap || {}),
       draftsBySection,
-      // 새 체인(Chain2/3) 결과 — GET /cases/:id/sections 및 Q&A에서 사용
-      sectionStates: (doc as any).sectionStates || [],
+      sectionStates: normalizeSectionStates((doc as any).sectionStates || []),
+      commonMissingItems: (doc as any).commonMissingItems || [],
+      commonQuestionSets: (doc as any).commonQuestionSets || [],
+      answerUndoStack: (doc as any).answerUndoStack || [],
       sectionDrafts: rawSectionDrafts,
-      aiPipeline: (doc as any).aiPipeline || null,
+      sectionAdequacyReviews: (doc as any).sectionAdequacyReviews || {},
       finalDraft: (doc as any).finalDraft || null
-    } as Case & { sectionStates?: any[]; sectionDrafts?: any[]; aiPipeline?: any; finalDraft?: any };
+    } as Case & { sectionStates?: any[]; sectionDrafts?: any[]; finalDraft?: any };
   }
 
   async updateCase(id: string, updates: Partial<Case>): Promise<void> {
@@ -114,16 +153,19 @@ export class CaseModel {
     const updateData: any = {};
     if (updates.title !== undefined) updateData.title = updates.title;
     if (updates.visits !== undefined) updateData.visits = updates.visits;
+    if ((updates as any).processingCache !== undefined) updateData.processingCache = (updates as any).processingCache;
+    if ((updates as any).finalComposeStatus !== undefined) updateData.finalComposeStatus = (updates as any).finalComposeStatus;
     if (updates.sectionEvidenceMap !== undefined) updateData.sectionEvidenceMap = updates.sectionEvidenceMap;
     if (updates.sectionStatusMap !== undefined) updateData.sectionStatusMap = updates.sectionStatusMap;
-    // draftsBySection is now treated as a derived response/cache field.
-    // Do not persist route-level writes; derive it from sectionDrafts on reads.
-    // 새 체인용 필드 (Case 타입에 없을 수 있으므로 any로 처리)
+    if ((updates as any).draftsBySection !== undefined) updateData.draftsBySection = (updates as any).draftsBySection;
     if ((updates as any).evidenceCards !== undefined) updateData.evidenceCards = (updates as any).evidenceCards;
     if ((updates as any).sectionStates !== undefined) updateData.sectionStates = (updates as any).sectionStates;
+    if ((updates as any).commonMissingItems !== undefined) updateData.commonMissingItems = (updates as any).commonMissingItems;
+    if ((updates as any).commonQuestionSets !== undefined) updateData.commonQuestionSets = (updates as any).commonQuestionSets;
+    if ((updates as any).answerUndoStack !== undefined) updateData.answerUndoStack = (updates as any).answerUndoStack;
     if ((updates as any).sectionDrafts !== undefined) updateData.sectionDrafts = (updates as any).sectionDrafts;
+    if ((updates as any).sectionAdequacyReviews !== undefined) updateData.sectionAdequacyReviews = (updates as any).sectionAdequacyReviews;
     if ((updates as any).finalDraft !== undefined) updateData.finalDraft = (updates as any).finalDraft;
-    if ((updates as any).aiPipeline !== undefined) updateData.aiPipeline = (updates as any).aiPipeline;
 
     await CaseMongoModel.updateOne({ id }, { $set: updateData }).exec();
   }
@@ -143,9 +185,7 @@ export class CaseModel {
   }
 
   async deleteCase(id: string): Promise<void> {
-    // 먼저 관련된 section_interactions 삭제
     await SectionInteractionModel.deleteMany({ caseId: id }).exec();
-    // 그 다음 case 삭제
     await CaseMongoModel.deleteOne({ id }).exec();
   }
 }

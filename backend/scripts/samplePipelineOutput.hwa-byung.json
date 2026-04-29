@@ -1,0 +1,672 @@
+{
+  "sampleVisits": [
+    {
+      "index": 1,
+      "date": "2023-03-14",
+      "text": "S: 49세 여성. 약 6개월 전부터 시작된 가슴 답답함과 상열감을 주소로 내원하였다. 최근 가족 간 갈등 이후 증상이 점차 심해졌다고 진술하였다. 특히 스트레스를 받을 때 가슴이 막힌 듯한 느낌과 함께 얼굴로 열이 오르는 느낌이 반복적으로 나타난다고 하였다. 수면은 최근 2~3개월 동안 얕아졌으며 자주 깨는 증상이 있다고 하였다. 식욕은 약간 감소한 상태였다. 정신과적 과거력은 없었으며 특별한 약물 복용력도 없다고 하였다.\nO: 진찰 시 환자는 전반적으로 불안하고 억울함을 호소하는 정서 상태를 보였다. 설진상 설질은 약간 홍하며 설태는 박하였다. 맥진은 약간 현맥 경향을 보였다.\nA: 임상적으로 화병 가능성을 고려하였다.\nP: 침치료를 주 2회 시행하기로 하였으며, 주요 혈위는 내관(PC6), 합곡(LI4), 태충(LR3)을 사용하였다."
+    },
+    {
+      "index": 2,
+      "date": "2023-03-28",
+      "text": "S: 환자는 2주 후 재내원하였다. 초기 치료 이후 가슴 답답함은 약간 감소하였으나 상열감은 여전히 간헐적으로 나타난다고 하였다. 수면은 약간 호전되어 이전보다 잠들기 쉬워졌다고 하였다. 정서적으로는 여전히 가족 문제로 인한 스트레스가 지속되고 있다고 하였다.\nO: 진찰 시 환자의 정서 상태는 이전보다 약간 안정된 모습이었으며 설진과 맥진 소견은 이전과 유사하였다.\nP: 침치료는 동일한 혈위 중심으로 지속하기로 하였다."
+    },
+    {
+      "index": 3,
+      "date": "2023-04-18",
+      "text": "S: 환자는 약 3주 후 다시 내원하였다. 환자는 전반적인 증상이 이전보다 호전되었다고 보고하였다. 가슴 답답함의 빈도가 감소하였으며 상열감도 이전보다 덜 빈번하게 나타난다고 하였다. 수면의 질도 점차 개선되고 있다고 하였다. 환자는 침치료 이후 심리적으로 안정되는 느낌이 있다고 표현하였다.\nP: 침치료는 동일한 방식으로 지속하였다."
+    },
+    {
+      "index": 4,
+      "date": "2023-05-09",
+      "text": "S: 환자는 마지막 추적 관찰을 위해 내원하였다. 환자는 초기 내원 시와 비교하여 가슴 답답함과 상열감이 현저히 감소하였다고 보고하였다. 수면 상태도 대부분 정상 수준으로 회복되었다고 하였다. 환자는 일상생활 수행에 큰 어려움이 없다고 하였다.\nA: 임상적으로 증상이 안정된 것으로 판단되어 치료 간격을 늘리기로 하였다."
+    }
+  ],
+  "evidenceCards": [
+    {
+      "id": "60ca7c09-7057-4264-96e0-6bb2c13b1cd2",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "49세 여성.",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 7
+      },
+      "confidence": 1
+    },
+    {
+      "id": "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "약 6개월 전부터 시작된 가슴 답답함과 상열감을 주소로 내원하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 1
+    },
+    {
+      "id": "54cd3c7b-c56f-402f-85a7-fd856a5e81c4",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "최근 가족 간 갈등 이후 증상이 점차 심해졌다고 진술하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 32
+      },
+      "confidence": 1
+    },
+    {
+      "id": "bf24d37c-2c1b-44aa-a6a2-63b97dccce1c",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "특히 스트레스를 받을 때 가슴이 막힌 듯한 느낌과 함께 얼굴로 열이 오르는 느낌이 반복적으로 나타난다고 하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 56
+      },
+      "confidence": 1
+    },
+    {
+      "id": "7140b126-f9b5-477e-ac09-111bd1d82104",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "수면은 최근 2~3개월 동안 얕아졌으며 자주 깨는 증상이 있다고 하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 1
+    },
+    {
+      "id": "0ea76ccf-39c6-4796-b6a7-26e2decd4c2b",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "식욕은 약간 감소한 상태였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 15
+      },
+      "confidence": 1
+    },
+    {
+      "id": "3ed5e539-b22e-4e15-af5f-c204d44b879c",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "정신과적 과거력은 없었으며 특별한 약물 복용력도 없다고 하였다.",
+      "tags": [
+        "PATIENT_INFORMATION"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 34
+      },
+      "confidence": 1
+    },
+    {
+      "id": "7125da3d-bc97-41e3-a70b-d76dec7775cf",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "진찰 시 환자는 전반적으로 불안하고 억울함을 호소하는 정서 상태를 보였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 1
+    },
+    {
+      "id": "81815b97-41f1-43c5-99a5-b5e42c6a104e",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "설진상 설질은 약간 홍하며 설태는 박하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 25
+      },
+      "confidence": 1
+    },
+    {
+      "id": "8503ed0b-4edc-49fa-944b-556006e47ad7",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "맥진은 약간 현맥 경향을 보였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 17
+      },
+      "confidence": 1
+    },
+    {
+      "id": "3b4a467e-b4cf-43c5-96a5-60be6e6a5dd5",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "임상적으로 화병 가능성을 고려하였다.",
+      "tags": [
+        "DIAGNOSTIC_ASSESSMENT"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 20
+      },
+      "confidence": 1
+    },
+    {
+      "id": "5affa1dc-ff58-4d9f-a570-c0b9034c28d2",
+      "visitIndex": 1,
+      "visitDateTime": "2023-03-14",
+      "normalizedText": "침치료를 주 2회 시행하기로 하였으며, 주요 혈위는 내관(PC6), 합곡(LI4), 태충(LR3)을 사용하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 56
+      },
+      "confidence": 1
+    },
+    {
+      "id": "dbfa5b19-1b0b-41c7-a7b0-4ecb7244d885",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "환자는 2주 후 재내원하였다.",
+      "tags": [
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 14
+      },
+      "confidence": 1
+    },
+    {
+      "id": "3f4c03d8-009a-43fe-8c1e-1905ceca78ce",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "초기 치료 이후 가슴 답답함은 약간 감소하였으나 상열감은 여전히 간헐적으로 나타난다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 49
+      },
+      "confidence": 1
+    },
+    {
+      "id": "90b42141-dec8-4f06-b934-78d811373937",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "수면은 약간 호전되어 이전보다 잠들기 쉬워졌다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 32
+      },
+      "confidence": 1
+    },
+    {
+      "id": "ddd1cc48-b5ba-45e6-8802-b5b53c065b1e",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "정서적으로는 여전히 가족 문제로 인한 스트레스가 지속되고 있다고 하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 1
+    },
+    {
+      "id": "3a63d192-8edf-4116-9d05-1c0c9b3df223",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "진찰 시 환자의 정서 상태는 이전보다 약간 안정된 모습이었으며 설진과 맥진 소견은 이전과 유사하였다.",
+      "tags": [
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 54
+      },
+      "confidence": 1
+    },
+    {
+      "id": "26fe932f-8e6b-4063-bdef-2083d9e61363",
+      "visitIndex": 2,
+      "visitDateTime": "2023-03-28",
+      "normalizedText": "침치료는 동일한 혈위 중심으로 지속하기로 하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 28
+      },
+      "confidence": 1
+    },
+    {
+      "id": "e0f15ac5-01ac-4b9c-bc1f-1a314b323da6",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "환자는 약 3주 후 다시 내원하였다.",
+      "tags": [
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 17
+      },
+      "confidence": 1
+    },
+    {
+      "id": "bdf62c8e-5692-46ab-b891-49cee29dc837",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "환자는 전반적인 증상이 이전보다 호전되었다고 보고하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 32
+      },
+      "confidence": 1
+    },
+    {
+      "id": "637a271e-7794-4351-9d7a-642352d7fca6",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "가슴 답답함의 빈도가 감소하였으며 상열감도 이전보다 덜 빈번하게 나타난다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "CLINICAL_FINDINGS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 46
+      },
+      "confidence": 1
+    },
+    {
+      "id": "da6b4d48-a84f-421f-af96-4277e7c74525",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "수면의 질도 점차 개선되고 있다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 22
+      },
+      "confidence": 1
+    },
+    {
+      "id": "4d417158-7027-48ce-89b8-e6c40e220ce8",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "환자는 침치료 이후 심리적으로 안정되는 느낌이 있다고 표현하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 36
+      },
+      "confidence": 1
+    },
+    {
+      "id": "a9a0d149-a99f-42e6-ac3e-5ebf37827bde",
+      "visitIndex": 3,
+      "visitDateTime": "2023-04-18",
+      "normalizedText": "침치료는 동일한 방식으로 지속하였다.",
+      "tags": [
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 20
+      },
+      "confidence": 1
+    },
+    {
+      "id": "0a6e3d09-11fa-41ed-bfd6-40752da1d61f",
+      "visitIndex": 4,
+      "visitDateTime": "2023-05-09",
+      "normalizedText": "환자는 마지막 추적 관찰을 위해 내원하였다.",
+      "tags": [
+        "TIMELINE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 20
+      },
+      "confidence": 1
+    },
+    {
+      "id": "0fb989e8-21e0-458e-b970-31fdd66d6e45",
+      "visitIndex": 4,
+      "visitDateTime": "2023-05-09",
+      "normalizedText": "환자는 초기 내원 시와 비교하여 가슴 답답함과 상열감이 현저히 감소하였다고 보고하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 48
+      },
+      "confidence": 1
+    },
+    {
+      "id": "fdf9c011-e6c5-439e-be9b-8c8233d20328",
+      "visitIndex": 4,
+      "visitDateTime": "2023-05-09",
+      "normalizedText": "수면 상태도 대부분 정상 수준으로 회복되었다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 28
+      },
+      "confidence": 1
+    },
+    {
+      "id": "fcb47d04-ee4d-4ab9-a22a-cddcbf115451",
+      "visitIndex": 4,
+      "visitDateTime": "2023-05-09",
+      "normalizedText": "환자는 일상생활 수행에 큰 어려움이 없다고 하였다.",
+      "tags": [
+        "FOLLOW_UP_OUTCOMES",
+        "PATIENT_PERSPECTIVE"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 28
+      },
+      "confidence": 1
+    },
+    {
+      "id": "ef672592-d453-4712-9b9b-1179a3773955",
+      "visitIndex": 4,
+      "visitDateTime": "2023-05-09",
+      "normalizedText": "임상적으로 증상이 안정된 것으로 판단되어 치료 간격을 늘리기로 하였다.",
+      "tags": [
+        "DIAGNOSTIC_ASSESSMENT",
+        "THERAPEUTIC_INTERVENTIONS"
+      ],
+      "sourceRef": {
+        "charStart": 0,
+        "charEnd": 38
+      },
+      "confidence": 1
+    }
+  ],
+  "sectionStates": [
+    {
+      "sectionId": "PATIENT_INFORMATION",
+      "status": "INCOMPLETE",
+      "rationaleText": "나이, 성별, 정신과적 과거력, 약물 복용력 등 기본 정보는 있으나 추가적인 배경 정보가 부족합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "CLINICAL_FINDINGS",
+      "status": "READY",
+      "rationaleText": "증상, 경과, 진찰 소견 등 임상적 정보가 충분히 기술되어 있어 초안 작성이 가능합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "TIMELINE",
+      "status": "READY",
+      "rationaleText": "증상 발생 시점, 경과, 내원 시기 등 시간적 흐름이 명확하게 제시되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "DIAGNOSTIC_ASSESSMENT",
+      "status": "INCOMPLETE",
+      "rationaleText": "임상적 진단과 치료 결정에 대한 언급은 있으나, 진단 근거 및 추가 평가 내용이 부족합니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "THERAPEUTIC_INTERVENTIONS",
+      "status": "READY",
+      "rationaleText": "치료 방법, 빈도, 혈위 등 구체적 치료 내용이 충분히 제시되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "FOLLOW_UP_OUTCOMES",
+      "status": "READY",
+      "rationaleText": "치료 후 증상 변화, 수면, 일상생활 등 경과가 구체적으로 기술되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    },
+    {
+      "sectionId": "PATIENT_PERSPECTIVE",
+      "status": "READY",
+      "rationaleText": "환자의 증상 인식, 치료 후 변화, 심리적 상태 등 환자 관점의 진술이 충분히 포함되어 있습니다.",
+      "missingInfoBullets": [],
+      "recommendedQuestions": []
+    }
+  ],
+  "sectionDrafts": [
+    {
+      "sectionId": "TITLE",
+      "evidenceCardIdsUsed": [
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "3b4a467e-b4cf-43c5-96a5-60be6e6a5dd5",
+        "5affa1dc-ff58-4d9f-a570-c0b9034c28d2"
+      ],
+      "draftText": "가슴 답답함과 상열감을 주소로 내원한 49세 여성의 화병 증례보고",
+      "openIssues": []
+    },
+    {
+      "sectionId": "ABSTRACT",
+      "evidenceCardIdsUsed": [
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "54cd3c7b-c56f-402f-85a7-fd856a5e81c4",
+        "3b4a467e-b4cf-43c5-96a5-60be6e6a5dd5",
+        "5affa1dc-ff58-4d9f-a570-c0b9034c28d2",
+        "3f4c03d8-009a-43fe-8c1e-1905ceca78ce",
+        "637a271e-7794-4351-9d7a-642352d7fca6",
+        "fdf9c011-e6c5-439e-be9b-8c8233d20328"
+      ],
+      "draftText": "본 증례는 약 6개월 전부터 가슴 답답함과 상열감을 호소한 49세 여성 환자에 대한 보고이다. 환자는 최근 가족 간 갈등 이후 증상이 악화되었으며, 임상적으로 화병 가능성이 고려되었다. 침치료를 주 2회, 내관, 합곡, 태충 혈위를 중심으로 시행하였다. 치료 후 가슴 답답함과 상열감의 빈도가 감소하였고, 수면의 질도 점차 개선되었다. 본 증례는 가족 갈등 등 심리사회적 요인이 동반된 화병 환자에서 침치료가 증상 완화에 도움이 될 수 있음을 시사한다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "INTRODUCTION",
+      "evidenceCardIdsUsed": [],
+      "draftText": "화병은 심리사회적 스트레스와 관련된 신체 및 정서 증상이 복합적으로 나타나는 질환으로, 임상에서 다양한 증상으로 내원하는 경우가 많다. 본 증례는 가족 갈등 이후 발생한 가슴 답답함과 상열감을 주소로 내원한 환자에서 침치료를 통해 증상 호전을 보인 사례로, 유사 환자 관리에 참고가 될 수 있다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "PATIENT_INFORMATION",
+      "evidenceCardIdsUsed": [
+        "60ca7c09-7057-4264-96e0-6bb2c13b1cd2",
+        "3ed5e539-b22e-4e15-af5f-c204d44b879c",
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "54cd3c7b-c56f-402f-85a7-fd856a5e81c4"
+      ],
+      "draftText": "환자는 49세 여성으로, 약 6개월 전부터 가슴 답답함과 상열감을 주소로 내원하였다. 최근 가족 간 갈등 이후 증상이 점차 심해졌다고 진술하였다. 정신과적 과거력이나 특별한 약물 복용력은 없었다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "CLINICAL_FINDINGS",
+      "evidenceCardIdsUsed": [
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "54cd3c7b-c56f-402f-85a7-fd856a5e81c4",
+        "bf24d37c-2c1b-44aa-a6a2-63b97dccce1c",
+        "7140b126-f9b5-477e-ac09-111bd1d82104",
+        "0ea76ccf-39c6-4796-b6a7-26e2decd4c2b",
+        "7125da3d-bc97-41e3-a70b-d76dec7775cf",
+        "81815b97-41f1-43c5-99a5-b5e42c6a104e",
+        "8503ed0b-4edc-49fa-944b-556006e47ad7",
+        "3f4c03d8-009a-43fe-8c1e-1905ceca78ce",
+        "ddd1cc48-b5ba-45e6-8802-b5b53c065b1e",
+        "3a63d192-8edf-4116-9d05-1c0c9b3df223",
+        "637a271e-7794-4351-9d7a-642352d7fca6"
+      ],
+      "draftText": "환자는 약 6개월 전부터 가슴 답답함과 상열감을 호소하였으며, 최근 가족 간 갈등 이후 증상이 악화되었다. 스트레스를 받을 때 가슴이 막힌 듯한 느낌과 얼굴로 열이 오르는 증상이 반복적으로 나타났고, 최근 2~3개월간 수면이 얕아지고 자주 깨는 증상이 동반되었다. 식욕은 약간 감소하였으며, 진찰 시 불안하고 억울함을 호소하는 정서 상태를 보였다. 설진상 설질은 약간 홍하고 설태는 박하였으며, 맥진은 약간 현맥 경향을 보였다. 치료 후 가슴 답답함과 상열감의 빈도가 감소하였고, 정서 상태는 이전보다 약간 안정된 모습을 보였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "TIMELINE",
+      "evidenceCardIdsUsed": [
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "7140b126-f9b5-477e-ac09-111bd1d82104",
+        "dbfa5b19-1b0b-41c7-a7b0-4ecb7244d885",
+        "e0f15ac5-01ac-4b9c-bc1f-1a314b323da6",
+        "0a6e3d09-11fa-41ed-bfd6-40752da1d61f"
+      ],
+      "draftText": "환자는 약 6개월 전부터 가슴 답답함과 상열감을 경험하기 시작하였다. 최근 2~3개월간 수면 장애가 동반되었으며, 초진 후 2주, 3주, 마지막 추적 관찰 시점에 내원하여 경과를 관찰하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "DIAGNOSTIC_ASSESSMENT",
+      "evidenceCardIdsUsed": [
+        "3b4a467e-b4cf-43c5-96a5-60be6e6a5dd5",
+        "ef672592-d453-4712-9b9b-1179a3773955",
+        "e5a242c6-fd1b-4971-9ac1-8947810465e5",
+        "54cd3c7b-c56f-402f-85a7-fd856a5e81c4",
+        "bf24d37c-2c1b-44aa-a6a2-63b97dccce1c"
+      ],
+      "draftText": "환자는 약 6개월 전부터 가슴 답답함과 상열감, 스트레스 상황에서 증상 악화, 가족 간 갈등 등 심리사회적 요인이 동반되어 임상적으로 화병 가능성이 고려되었다. 증상 경과가 안정됨에 따라 치료 간격을 조정하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "THERAPEUTIC_INTERVENTIONS",
+      "evidenceCardIdsUsed": [
+        "5affa1dc-ff58-4d9f-a570-c0b9034c28d2",
+        "26fe932f-8e6b-4063-bdef-2083d9e61363",
+        "a9a0d149-a99f-42e6-ac3e-5ebf37827bde",
+        "ef672592-d453-4712-9b9b-1179a3773955"
+      ],
+      "draftText": "침치료를 주 2회, 내관(PC6), 합곡(LI4), 태충(LR3) 혈위를 중심으로 시행하였다. 이후 동일한 혈위와 방식으로 치료를 지속하였으며, 증상 안정에 따라 치료 간격을 늘렸다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "FOLLOW_UP_OUTCOMES",
+      "evidenceCardIdsUsed": [
+        "3f4c03d8-009a-43fe-8c1e-1905ceca78ce",
+        "90b42141-dec8-4f06-b934-78d811373937",
+        "bdf62c8e-5692-46ab-b891-49cee29dc837",
+        "637a271e-7794-4351-9d7a-642352d7fca6",
+        "da6b4d48-a84f-421f-af96-4277e7c74525",
+        "4d417158-7027-48ce-89b8-e6c40e220ce8",
+        "0fb989e8-21e0-458e-b970-31fdd66d6e45",
+        "fdf9c011-e6c5-439e-be9b-8c8233d20328",
+        "fcb47d04-ee4d-4ab9-a22a-cddcbf115451"
+      ],
+      "draftText": "치료 초기에는 가슴 답답함이 약간 감소하였으나 상열감은 간헐적으로 지속되었다. 이후 가슴 답답함과 상열감의 빈도가 점차 감소하였고, 수면의 질도 개선되었다. 환자는 침치료 이후 심리적으로 안정되는 느낌을 보고하였으며, 최종적으로 증상이 현저히 감소하고 일상생활에 큰 어려움이 없다고 하였다. 부작용이나 이상반응은 보고되지 않았다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "DISCUSSION_CONCLUSION",
+      "evidenceCardIdsUsed": [],
+      "draftText": "본 증례는 가족 갈등 등 심리사회적 스트레스와 관련된 화병 환자에서 침치료가 가슴 답답함, 상열감, 수면 장애 등 주요 증상 완화에 도움이 될 수 있음을 시사한다. 임상 경과 관찰을 통해 침치료의 잠재적 유용성을 확인하였으나, 단일 사례라는 한계가 있다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "PATIENT_PERSPECTIVE",
+      "evidenceCardIdsUsed": [
+        "54cd3c7b-c56f-402f-85a7-fd856a5e81c4",
+        "bf24d37c-2c1b-44aa-a6a2-63b97dccce1c",
+        "ddd1cc48-b5ba-45e6-8802-b5b53c065b1e",
+        "bdf62c8e-5692-46ab-b891-49cee29dc837",
+        "4d417158-7027-48ce-89b8-e6c40e220ce8",
+        "0fb989e8-21e0-458e-b970-31fdd66d6e45",
+        "fcb47d04-ee4d-4ab9-a22a-cddcbf115451"
+      ],
+      "draftText": "환자는 가족 간 갈등 이후 증상이 악화되었으며, 스트레스를 받을 때 가슴이 막히고 얼굴로 열이 오르는 느낌을 반복적으로 경험했다고 진술하였다. 치료 후 전반적인 증상이 호전되었고, 침치료 이후 심리적으로 안정되는 느낌을 받았다고 하였다. 초기 내원 시와 비교하여 가슴 답답함과 상열감이 현저히 감소하였으며, 일상생활 수행에도 큰 어려움이 없다고 보고하였다.",
+      "openIssues": []
+    },
+    {
+      "sectionId": "INFORMED_CONSENT",
+      "evidenceCardIdsUsed": [],
+      "draftText": "본 증례보고를 위해 환자로부터 서면 동의를 받았다.",
+      "openIssues": []
+    }
+  ],
+  "missing": {
+    "sectionMissing": [
+      {
+        "sectionId": "PATIENT_INFORMATION",
+        "missingItems": [
+          "직업 등 사회적 배경",
+          "가족력"
+        ]
+      },
+      {
+        "sectionId": "DIAGNOSTIC_ASSESSMENT",
+        "missingItems": [
+          "진단 방법(신체검사, 설문, 검사 등) 구체적 기술",
+          "감별진단 고려 과정 및 최종 진단 도출 근거"
+        ]
+      }
+    ],
+    "commonMissing": []
+  },
+  "questions": {
+    "commonQuestions": [],
+    "sectionQuestions": [
+      {
+        "sectionId": "PATIENT_INFORMATION",
+        "questions": [
+          "환자의 직업이나 사회적 배경에 대해 논문에 반영할 수 있도록 구체적으로 알려주세요.",
+          "가족력(특히 정신과적 또는 유사 증상 관련)이 있다면 논문에 반영할 수 있도록 구체적으로 알려주세요."
+        ]
+      },
+      {
+        "sectionId": "DIAGNOSTIC_ASSESSMENT",
+        "questions": [
+          "화병 진단에 사용한 신체검사, 설문, 검사 등 구체적인 평가 방법을 논문에 반영할 수 있도록 알려주세요.",
+          "감별진단 과정과 최종적으로 화병으로 진단하게 된 근거를 논문에 반영할 수 있도록 구체적으로 설명해 주세요."
+        ]
+      }
+    ]
+  }
+}

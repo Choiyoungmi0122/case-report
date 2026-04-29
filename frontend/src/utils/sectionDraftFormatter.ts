@@ -438,13 +438,16 @@ export function formatSectionDraftForDisplay(sectionId: string, rawDraft: string
   const raw = toNonEmptyString(rawDraft);
   if (!raw) return EMPTY_TEXT;
 
-  if (sectionId === 'TIMELINE') {
-    return formatTimeline(parseMaybeJson(raw));
-  }
-
   const parsed = parseMaybeJson(raw);
   if (typeof parsed === 'string') {
-    return parsed.trim() || EMPTY_TEXT;
+    return parsed
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim() || EMPTY_TEXT;
+  }
+
+  if (sectionId === 'TIMELINE') {
+    return formatTimeline(parsed);
   }
 
   if (!isObject(parsed)) {

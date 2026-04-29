@@ -6,26 +6,35 @@ const openai = new OpenAI({
 });
 
 const MAX_RETRIES = 2;
-const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4-turbo-preview';
+const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4.1';
 
 export async function callLLMWithSchema<T>(
   schema: z.ZodSchema<T>,
   systemPrompt: string,
   userPrompt: string,
-  retries = MAX_RETRIES
+  options?: {
+    retries?: number;
+    model?: string;
+    label?: string;
+  }
 ): Promise<T> {
+  const retries = options?.retries ?? MAX_RETRIES;
+  const model = options?.model || LLM_MODEL;
+  const label = options?.label || 'LLM';
   let lastError: any;
 
   for (let i = 0; i <= retries; i++) {
+    const attemptStartedAt = Date.now();
     try {
+      console.log(`[${label}] attempt ${i + 1}/${retries + 1} started with model=${model}`);
       const response = await openai.chat.completions.create({
-        model: LLM_MODEL,
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.2
+        temperature: 0
       });
 
       const content = response.choices[0]?.message?.content;
@@ -34,10 +43,14 @@ export async function callLLMWithSchema<T>(
       }
 
       const parsed = JSON.parse(content);
-      return schema.parse(parsed);
+      const validated = schema.parse(parsed);
+      const elapsedMs = Date.now() - attemptStartedAt;
+      console.log(`[${label}] attempt ${i + 1} succeeded in ${elapsedMs}ms`);
+      return validated;
     } catch (error) {
       lastError = error;
-      console.error('[LLM] Call or schema validation failed (attempt', i + 1, '):', error);
+      const elapsedMs = Date.now() - attemptStartedAt;
+      console.error(`[${label}] attempt ${i + 1} failed after ${elapsedMs}ms:`, error);
       if (i === retries) break;
     }
   }

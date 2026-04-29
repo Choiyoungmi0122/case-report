@@ -104,6 +104,15 @@
   gap: 0.45rem;
 }
 
+.manuscript-toc-group-label {
+  margin-top: 0.75rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .manuscript-toc-link {
   color: #334155;
   text-decoration: none;
@@ -146,6 +155,12 @@
 
 .manuscript-inline-link:hover {
   text-decoration: underline;
+}
+
+.manuscript-static-label {
+  color: #334155;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 .manuscript-warning-rationale {
@@ -197,6 +212,31 @@
   margin-bottom: 2.25rem;
 }
 
+.manuscript-stage-block {
+  margin-bottom: 2.5rem;
+}
+
+.manuscript-stage-header {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.manuscript-stage-header h2 {
+  margin: 0 0 0.35rem 0;
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.manuscript-stage-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
 .manuscript-section-heading {
   display: flex;
   justify-content: space-between;
@@ -230,6 +270,28 @@
   font-size: 0.75rem;
 }
 
+.manuscript-auto-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.manuscript-draft-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+}
+
 .btn-edit-section {
   background: #e2e8f0;
   color: #334155;
@@ -245,6 +307,19 @@
   line-height: 1.9;
   color: #1f2937;
   font-size: 1rem;
+}
+
+.manuscript-placeholder-section {
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: #f8fafc;
+}
+
+.manuscript-placeholder-text {
+  color: #64748b;
+  line-height: 1.7;
+  font-size: 0.95rem;
 }
 
 .manuscript-section-abstract {
@@ -268,6 +343,69 @@
   font-size: 1rem;
 }
 
+.manuscript-title-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.manuscript-title-panel-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.manuscript-title-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.manuscript-title-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid #dbe3ec;
+  border-radius: 12px;
+  padding: 0.95rem 1rem;
+  background: #ffffff;
+}
+
+.manuscript-title-card-selected {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.manuscript-title-card-text {
+  color: #1e293b;
+  line-height: 1.7;
+  flex: 1;
+}
+
+.btn-select-title {
+  border: none;
+  border-radius: 10px;
+  background: #0d6efd;
+  color: #ffffff;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.btn-select-title:hover:not(:disabled) {
+  background: #0b5ed7;
+}
+
+.btn-select-title:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
 .manuscript-support-panel ul {
   margin: 0;
   padding-left: 1.1rem;
@@ -285,6 +423,166 @@
   padding: 1rem;
 }
 
+.manuscript-success {
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.manuscript-job-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.manuscript-job-banner-running {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.manuscript-job-banner-queued {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.manuscript-progress-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+}
+
+.manuscript-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.manuscript-progress-header h3 {
+  margin: 0 0 0.2rem 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.manuscript-progress-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.manuscript-progress-summary {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.manuscript-progress-summary span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  padding: 0.25rem 0.6rem;
+  color: #334155;
+  font-size: 0.8rem;
+}
+
+.manuscript-progress-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.manuscript-progress-step {
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  border: 1px solid #e2e8f0;
+}
+
+.manuscript-progress-step-top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.45rem;
+}
+
+.manuscript-progress-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.manuscript-progress-step p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.manuscript-progress-step-done {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.manuscript-progress-step-done .manuscript-progress-step-index {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.manuscript-progress-step-done strong,
+.manuscript-progress-step-done p {
+  color: #166534;
+}
+
+.manuscript-progress-step-current {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.manuscript-progress-step-current .manuscript-progress-step-index {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.manuscript-progress-step-current strong,
+.manuscript-progress-step-current p {
+  color: #1d4ed8;
+}
+
+.manuscript-progress-step-upcoming {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.manuscript-progress-step-upcoming .manuscript-progress-step-index {
+  background: #cbd5e1;
+  color: #475569;
+}
+
+.manuscript-progress-step-upcoming strong,
+.manuscript-progress-step-upcoming p {
+  color: #64748b;
+}
+
 .manuscript-error-actions {
   display: flex;
   gap: 0.75rem;
@@ -294,6 +592,10 @@
 
 @media (max-width: 960px) {
   .manuscript-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .manuscript-progress-steps {
     grid-template-columns: 1fr;
   }
 
@@ -309,5 +611,14 @@
 
   .manuscript-header h1 {
     font-size: 1.55rem;
+  }
+
+  .manuscript-title-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-select-title {
+    width: 100%;
   }
 }

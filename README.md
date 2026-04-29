@@ -1,373 +1,479 @@
-# EMR 기반 증례보고(CARE) 작성 지원 도구
+# CARE 증례보고 초안 작성 시스템
 
-EMR(전자의무기록) 데이터를 기반으로 CARE(Case Report) 증례보고서 초안을 생성하고, 대화형 Q&A를 통해 보완하는 도구입니다.
+이 프로젝트는 SOAP 형식의 EMR을 입력받아 CARE guideline 기반 증례보고 초안을 생성하고,  
+부족한 정보를 AI 질문과 사용자 답변으로 보완한 뒤, 최종 논문 형태의 초안까지 만드는 시스템입니다.
 
-## 주요 기능
+## 프로젝트 목표
 
-1. **EMR 입력**: 텍스트 또는 파일 업로드로 EMR 데이터 입력
-2. **방문 회차 관리**: 초진/재진을 포함한 다회 방문 기록 관리
-3. **자동 비식별화**: 개인정보 자동 마스킹 및 치환
-4. **섹션별 매핑**: EMR 정보를 CARE 섹션별로 자동 분류
-5. **상태 판정**: 각 섹션의 초안 작성 가능성 자동 평가
-6. **초안 생성**: EMR 기반 초안 자동 생성
-7. **대화형 보완**: 부족한 정보를 질문-답변으로 수집하여 초안 보완
+핵심 흐름은 다음과 같습니다.
+
+```text
+EMR 입력
+-> CARE 섹션 초안 생성
+-> 부족한 정보 탐지
+-> AI 질문 생성
+-> 답변 반영
+-> 최종 논문 초안 생성
+```
+
+즉, 이 시스템은 단순 요약기가 아니라 다음을 지원합니다.
+
+- 임상 기록 기반 초안 작성
+- CARE guideline 관점의 누락 정보 점검
+- 공통 질문 / 섹션 질문 분리
+- 반복적 보완
+- 최종 manuscript draft 생성
+
+## 현재 아키텍처
+
+```text
+Frontend (React + Vite)
+  ->
+Backend (Node.js + Express + TypeScript + MongoDB)
+  ->
+OpenAI structured-output calls
+```
+
+참고:
+
+- 과거의 `ai_server` Python 경로는 현재 메인 실행 경로가 아닙니다.
+- 현재 파이프라인은 `backend/src/llm` 안에서 동작합니다.
+- 이 시스템은 외부 문헌 검색형 RAG보다는, 단계별 상태를 넘겨가며 처리하는 staged LLM pipeline에 가깝습니다.
+
+## 시스템이 하는 일
+
+- 여러 방문의 EMR 입력 받기
+- SOAP 텍스트에서 atomic evidence 추출
+- CARE 섹션별 narrative draft 생성
+- 누락 정보 탐지
+- AI 질문 생성
+- 답변을 반영해 draft 갱신
+- 최종 원고 생성
+- 제목 후보, 초록, CARE checklist 평가 제공
+
+## 전체 워크플로우
+
+### 1. 입력
+
+사용자는 보통 SOAP 형식의 EMR을 방문 단위로 입력합니다.
+
+예시:
+
+```text
+S: 주호소, 증상, 병력, 환자 진술
+O: 진찰 소견, 활력징후, 검사 결과
+A: 평가, 진단, 변증
+P: 치료, 교육, 추적 계획
+```
+
+### 2. 초기 처리
+
+케이스를 처리하면 백엔드에서 다음 체인이 실행됩니다.
+
+1. `Chain1` Extraction
+2. `Chain2` Section Assessment
+3. `Chain3` Initial Draft
+4. `Chain4` Missing Detection
+5. `Chain5` Question Generation
+
+### 3. 반복 보완
+
+사용자가 질문에 답하면 다음 흐름으로 동작합니다.
+
+1. `Chain6` Draft Update
+2. `Chain4` Missing 재계산
+3. `Chain5` Question 재계산
+
+### 4. 최종 원고 생성
+
+본문 섹션이 충분히 보완되면 다음 체인이 실행됩니다.
+
+1. `Chain7` Final Composition
+
+이 단계에서 다음 결과를 만듭니다.
+
+- 최종 섹션별 원고
+- 제목 후보
+- 초록 제안
+- CARE checklist 평가
+
+## 체인 구조
+
+### Chain1: Extraction
+
+역할:
+
+- SOAP 기반 EMR을 atomic evidence card로 분해
+- 각 evidence를 CARE 섹션 태그에 연결
+
+원칙:
+
+- hallucination 금지
+- 근거 없는 추론 금지
+- source text grounding 유지
+
+### Chain2: Section Assessment
+
+역할:
+
+- 현재 evidence만으로 각 코어 섹션이 어느 정도 작성 가능한지 판단
+
+상태:
+
+- `IMPOSSIBLE`
+- `INCOMPLETE`
+- `READY`
+
+### Chain3: Initial Draft
+
+역할:
+
+- evidence를 바탕으로 CARE 섹션별 초안 문단 생성
+
+특징:
+
+- JSON 느낌이 아니라 서술형 문단 생성
+- 섹션 목적에 맞는 문체 유지
+- 없는 정보 추가 금지
+
+### Chain4: Missing Detection
+
+역할:
+
+- 현재 초안 기준으로 CARE 작성에 필요한 missing item 탐지
+
+출력:
+
+- `sectionMissing`
+- `commonMissing`
+
+의미:
+
+- `sectionMissing`: 특정 섹션만 보완하는 정보
+- `commonMissing`: 한 답변이 여러 섹션에 같이 반영될 정보
+
+### Chain5: Question Generation
+
+역할:
+
+- missing item을 의사가 답할 수 있는 자연스러운 질문으로 변환
+
+출력:
+
+- `commonQuestions`
+- `sectionQuestions`
+
+UI 연결:
+
+- 왼쪽: 공통 질문
+- 오른쪽: 섹션 질문
+
+### Chain6: Draft Update
+
+역할:
+
+- 질문, 답변, 현재 draft, evidence, Q&A history를 기반으로 섹션 draft 갱신
+
+### Chain7: Final Composition
+
+역할:
+
+- 현재까지의 section draft를 바탕으로 최종 원고 조합
+
+출력:
+
+- `fullTextBySection`
+- `titleSuggestions`
+- `abstractSuggestion`
+- `careChecklistEvaluation`
+
+## CARE 섹션 전략
+
+### 질문 단계 섹션
+
+이 섹션들은 질문/답변으로 직접 보완됩니다.
+
+- `PATIENT_INFORMATION`
+- `CLINICAL_FINDINGS`
+- `TIMELINE`
+- `DIAGNOSTIC_ASSESSMENT`
+- `THERAPEUTIC_INTERVENTIONS`
+- `FOLLOW_UP_OUTCOMES`
+- `PATIENT_PERSPECTIVE`
+
+### 최종 자동 생성 섹션
+
+이 섹션들은 UI에서 후반 자동 생성 섹션으로 다룹니다.
+
+- `TITLE`
+- `ABSTRACT`
+- `INTRODUCTION`
+- `DISCUSSION_CONCLUSION`
+- `INFORMED_CONSENT`
+
+참고:
+
+- UI에서는 `KEYWORDS`도 최종 단계 섹션처럼 다루고 있지만,
+  현재 백엔드 CARE enum/schema에는 아직 완전히 포함되어 있지 않습니다.
+
+## 질문 시스템 원칙
+
+역할 분리는 다음과 같습니다.
+
+- Chain:
+  - 생성
+  - 추론
+  - missing 탐지
+  - 질문 생성
+- Backend:
+  - 저장
+  - 상태 관리
+  - 공통/섹션 질문 routing
+- Frontend:
+  - 표시
+  - 답변 제출
+  - 원고 검토 UI
+
+중요:
+
+- 질문 문구는 코드 템플릿이 아니라 AI 출력이 중심이어야 합니다.
+- 공통 질문과 섹션 질문 분리는 파이프라인 설계의 일부입니다.
+
+## 초안 source of truth
+
+현재 메인 초안 원본은 다음입니다.
+
+- `sectionDrafts`
+
+UI 편의를 위한 파생 구조가 있을 수는 있지만,  
+실제 draft 흐름은 백엔드의 `sectionDrafts`를 중심으로 돌아갑니다.
 
 ## 기술 스택
 
-- **Backend**: Node.js + Express + TypeScript
-- **Frontend**: React + Vite + TypeScript
-- **Database**: MongoDB
-- **LLM**: OpenAI GPT-4 (structured output)
-
-## 설치 및 실행
-
-### 사전 요구사항
-
-- Node.js 18+ 
-- npm 또는 yarn
-- MongoDB (로컬 또는 원격)
-- OpenAI API Key
-
-### 1. 환경 변수 설정
-
-#### 1-1. backend/.env
-
-백엔드 디렉토리에 `.env` 파일을 생성하세요.
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-PORT=5000
-MONGODB_URI=mongodb+srv://choiyoungmi2252_db_user:YOUR_PASSWORD@v1.cedix7t.mongodb.net/care?retryWrites=true&w=majority
-STORE_ORIGINAL_TEXT=false
-USE_MOCK=false
-FAST_UPDATE_ONLY=true
-REFRESH_QUESTIONS_ON_DEMAND=true
-```
-
-`FAST_UPDATE_ONLY=true`이면 질문 답변 직후 초안만 먼저 빠르게 갱신하고,
-`REFRESH_QUESTIONS_ON_DEMAND=true`이면 다음 질문은 사용자가 다시 요청할 때 계산합니다.
-
-**MongoDB 연결:**
-- 로컬 MongoDB: `mongodb://localhost:27017/care`
-- MongoDB Atlas: `mongodb+srv://username:password@cluster.mongodb.net/database_name?retryWrites=true&w=majority`
-  - `YOUR_PASSWORD`를 실제 MongoDB Atlas 비밀번호로 교체하세요
-  - 데이터베이스 이름은 `care`로 설정됩니다
-- `.env` 파일은 `.gitignore`에 포함되어 있어 Git에 커밋되지 않습니다
-
-**Mock 모드 (LLM API 없이 테스트):**
-- `USE_MOCK=true`로 설정하거나 `OPENAI_API_KEY`를 비워두면 Mock 데이터를 사용합니다.
-- Mock 모드에서는 샘플 데이터로 전체 워크플로우를 테스트할 수 있습니다.
-- 화면 구성과 UI 흐름을 확인하는 데 유용합니다.
-
-### 2. MongoDB 설정
-
-**로컬 MongoDB 설치 (Windows):**
-```bash
-# MongoDB Community Server 다운로드 및 설치
-# https://www.mongodb.com/try/download/community
-
-# 또는 Chocolatey 사용
-choco install mongodb
-```
-
-**MongoDB 실행:**
-```bash
-# Windows 서비스로 실행되거나, 수동 실행:
-mongod --dbpath C:\data\db
-```
-
-**또는 Docker 사용:**
-```bash
-docker run -d -p 27017:27017 --name mongodb mongo:latest
-```
-
-### 3. 백엔드 설정
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-백엔드는 `http://localhost:5000`에서 실행됩니다.
-
-### 4. 프론트엔드 설정
-
-새 터미널에서:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-프론트엔드는 `http://localhost:3000`에서 실행됩니다.
+- Backend: Node.js, Express, TypeScript
+- Frontend: React, Vite, TypeScript
+- Database: MongoDB
+- LLM: OpenAI Chat Completions structured JSON output
+- Validation: Zod
 
 ## 프로젝트 구조
 
-```
+```text
 casereport/
-├── backend/
-│   ├── src/
-│   │   ├── llm/             # LLM 체인/프롬프트/스키마
-│   │   ├── db/              # 데이터베이스 스키마
-│   │   ├── models/          # 데이터 모델
-│   │   ├── routes/          # API 라우트 및 route 유틸
-│   │   ├── types/           # TypeScript 타입
-│   │   └── index.ts         # Express 서버 진입점
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── pages/           # 페이지 컴포넌트
-│   │   ├── services/        # API 서비스
-│   │   └── App.tsx
-│   └── package.json
-├── ai_server/               # 과거 Python 체인 구현 (현재 런타임 경로 아님)
-└── README.md
+  backend/
+    src/
+      config/        # CARE rubric 설정
+      db/            # DB schema
+      llm/           # prompts, schemas, client, chains
+      models/        # Mongo model layer
+      routes/        # API routes
+      types/         # backend types
+      index.ts       # server entry
+    scripts/         # 로컬 시뮬레이션 스크립트
+  frontend/
+    src/
+      pages/         # 페이지 컴포넌트
+      services/      # API layer
+      utils/         # draft formatting helper
 ```
 
-## API 엔드포인트
+## 환경 설정
+
+### 요구 사항
+
+- Node.js 18+
+- npm
+- MongoDB 연결 문자열
+- OpenAI API key
+
+### backend `.env`
+
+`backend/.env` 파일을 생성합니다.
+
+예시:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+LLM_MODEL=gpt-4.1
+FAST_LLM_MODEL=gpt-4.1-mini
+QUALITY_LLM_MODEL=gpt-4.1
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/care
+```
+
+필수:
+
+- `OPENAI_API_KEY`
+- `MONGODB_URI`
+
+권장:
+
+- `LLM_MODEL=gpt-4.1`
+- `FAST_LLM_MODEL=gpt-4.1-mini`
+- `QUALITY_LLM_MODEL=gpt-4.1`
+
+설명:
+
+- `FAST_LLM_MODEL`
+  - `Chain1`, `Chain2`, `Chain4`, `Chain5` 기본 모델
+- `QUALITY_LLM_MODEL`
+  - `Chain3`, `Chain6`, `Chain7` 기본 모델
+- 필요하면 `CHAIN1_MODEL`, `CHAIN3_MODEL`처럼 체인별 override도 가능합니다.
+
+## 로컬 실행
+
+### Backend
+
+```powershell
+cd ..\backend
+npm install
+npm run dev
+```
+
+기본 주소:
+
+```text
+http://localhost:5000
+```
+
+### Frontend
+
+```powershell
+cd ..\\casereport\frontend
+npm install
+npm run dev
+```
+
+
+## 빌드 및 타입 체크
+
+### Backend
+
+```powershell
+cd backend
+npm run type-check
+npm run build
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npx tsc --noEmit
+```
+
+참고:
+
+- Codex desktop 환경에서는 frontend 전체 Vite build가 `spawn EPERM`으로 실패할 수 있습니다.
+- 이 경우 TypeScript가 통과했다면 코드 문제라기보다 실행 환경 제한일 가능성이 큽니다.
+
+## API 개요
 
 ### Cases
 
-- `POST /api/cases` - 새 케이스 생성
-- `GET /api/cases/:id` - 케이스 조회
-- `POST /api/cases/:id/process` - 초기 처리 (evidence split -> section assessment -> initial drafts)
-- `GET /api/cases/:id/sections` - 모든 섹션 조회
-- `GET /api/cases/:id/common-questions` - 공통 질문 조회
-- `POST /api/cases/:id/common-questions/answer` - 공통 질문 답변 반영
-- `POST /api/cases/:id/final-compose` - 최종 manuscript 생성/갱신
+- `POST /api/cases`
+  - 케이스 생성
+- `GET /api/cases`
+  - 케이스 목록 조회
+- `GET /api/cases/:id`
+  - 케이스 단건 조회
+- `POST /api/cases/:id/process`
+  - 초기 파이프라인 실행
+- `PATCH /api/cases/:id/title`
+  - 케이스 제목 업데이트
+- `DELETE /api/cases/:id`
+  - 케이스 삭제
+- `GET /api/cases/:id/common-questions`
+  - 공통 질문 조회
+- `POST /api/cases/:id/common-questions/answer`
+  - 공통 질문 답변 반영
+- `POST /api/cases/:id/final-compose`
+  - 최종 manuscript 생성/갱신
+- `GET /api/cases/:id/export`
+  - 텍스트 파일 export
 
 ### Sections
 
-- `GET /api/cases/:id/sections/:sectionId` - 섹션 상세 조회
-- `POST /api/cases/:id/sections/:sectionId/next` - 질문 생성/답변 반영(Q&A 1 step)
-
-## CARE 섹션
-
-다음 12개 섹션을 지원합니다:
-
-- TITLE (제목)
-- ABSTRACT (요약)
-- INTRODUCTION (서론)
-- PATIENT_INFORMATION (환자 정보)
-- CLINICAL_FINDINGS (임상 소견)
-- TIMELINE (타임라인)
-- DIAGNOSTIC_ASSESSMENT (진단 평가)
-- THERAPEUTIC_INTERVENTIONS (치료 개입)
-- FOLLOW_UP_OUTCOMES (추적 결과)
-- DISCUSSION_CONCLUSION (토론 및 결론)
-- PATIENT_PERSPECTIVE (환자 관점)
-- INFORMED_CONSENT (동의)
-
-## 섹션 상태
-
-각 섹션은 다음 5가지 상태 중 하나로 판정됩니다:
-
-- **IMPOSSIBLE**: EMR만으로 섹션 구조 자체 불가
-- **PARTIAL_IMPOSSIBLE**: EMR로 일부 가능하지만 추가정보 50% 이상 필요
-- **PARTIAL_POSSIBLE**: EMR로 50% 이상 가능, 소수 질문으로 보완
-- **POSSIBLE**: EMR로 구조는 가능하나 상세/정확성 보강 필요
-- **FULLY_POSSIBLE**: EMR만으로 CARE 필수항목 수준 초안 생성 가능
-
-## LLM API 없이 가능한 단계
-
-**LLM API 없이 가능한 단계:**
-- ✅ **1단계: EMR 입력 및 케이스 생성** - 비식별화는 코드로 처리되므로 완전히 가능
-- ❌ **초기 처리/질문 답변/최종 원고 생성**: 모두 OpenAI 호출이 필요
-- ✅ **Python ai_server / uvicorn 실행**: 더 이상 필요하지 않음
-
-**Mock 모드 사용:**
-- `USE_MOCK=true` 설정 시 모든 LLM 체인이 Mock 데이터를 반환합니다.
-- 전체 워크플로우와 화면 구성을 확인할 수 있습니다.
-- 실제 LLM API 없이도 프론트엔드와 백엔드 통합 테스트가 가능합니다.
-
-## 워크플로우
-
-전체 프로세스는 다음과 같은 단계로 진행됩니다:
-
-### 1단계: EMR 입력 및 케이스 생성
-
-**사용자 액션:**
-- 방문 기록 추가 (초진/재진)
-- 각 방문의 날짜/시간 입력
-- SOAP 텍스트 입력
-- "제출 및 처리" 버튼 클릭
-
-**백엔드 처리:**
-- `POST /api/cases` - 케이스 생성
-  - 입력된 EMR 텍스트 비식별화 처리 (이름, 주민번호, 전화번호, 주소, 병원명, 의료진 정보 마스킹)
-  - MongoDB에 케이스 저장
-  - `caseId` 반환
-
-**데이터 흐름:**
-```
-사용자 입력 (원본 EMR)
-  ↓
-비식별화 처리 (sanitizeEmrText)
-  ↓
-MongoDB 저장 (sanitizedText만 저장)
-  ↓
-caseId 반환
-```
-
-### 2단계: 자동 처리 (backend TS chains)
-
-**사용자 액션:**
-- 자동으로 실행됨 (케이스 생성 직후)
-
-**백엔드 처리 (`POST /api/cases/:id/process`):**
-- `runEvidenceSplit()` - 방문 기록을 evidence card로 분해
-- `runSectionAssessment()` - 각 섹션의 상태/누락 정보/권장 질문 계산
-- `runInitialSectionDrafts()` - 섹션별 초기 초안 생성
-- 결과 저장:
-  - `sectionDrafts` = 초안 원본
-  - `sectionStates` = 상태/질문 원본
-  - `evidenceCards` = evidence 원본
-
-**데이터 흐름:**
-```
-비식별화된 EMR
-  ↓
-Evidence split
-  ↓
-Section assessment
-  ↓
-Initial section drafts
-  ↓
-MongoDB 업데이트
-  ↓
-섹션 목록 화면 표시
-```
-
-### 3단계: 섹션 목록 확인
-
-**사용자 액션:**
-- 섹션 목록 페이지에서 각 섹션의 상태 확인
-- 초안 미리보기 확인
-- 섹션 클릭하여 상세 페이지로 이동
-
-**백엔드 처리:**
-- `GET /api/cases/:id/sections` - 모든 섹션 정보 조회
-
-**표시 정보:**
-- 섹션명
-- 상태 배지 (색상으로 구분)
-- 판정 근거
-- 초안 미리보기 (200자)
-
-### 4단계: 섹션 상세 보완 (Q&A 반복)
-
-**사용자 액션:**
-- 섹션 상세 페이지에서 현재 초안 확인
-- "질문 시작" 버튼 클릭
-- 질문에 답변 입력
-- 답변 제출
-
-**백엔드 처리:**
-
-#### 질문 조회
+- `GET /api/cases/:id/sections`
+  - 섹션 overview 조회
+- `GET /api/cases/:id/sections/:sectionId`
+  - 섹션 detail 조회
 - `POST /api/cases/:id/sections/:sectionId/next`
-- 현재 `sectionStates.recommendedQuestions`, `missingInfoBullets`, `qnaHistory`를 바탕으로 다음 질문을 계산/표시
+  - 다음 섹션 질문 상태 조회 또는 답변 제출
 
-#### 답변 제출 및 초안 업데이트
-- `POST /api/cases/:id/sections/:sectionId/next`
-- **입력**: 사용자 답변, 현재 초안, 현재 섹션 evidence, 최근 Q&A, 남은 부족 항목
-- **처리**:
-  1. Q&A 히스토리에 답변 추가
-  2. fast local section update로 현재 섹션 초안 우선 갱신
-  3. 필요 시 사용자가 다시 "다음 질문 보기"를 눌렀을 때 질문을 재조회
-- **출력**: 업데이트된 초안, 남은 부족 항목, 필요 시 다음 질문
-- **특징**: 전체 문서 재계산보다 partial update를 우선하여 즉시 반영 속도를 개선
+## 프론트 UX 요약
 
-#### 공통 질문 답변
-- `POST /api/cases/:id/common-questions/answer`
-- 질문과 관련된 섹션만 골라 multi-section fan-out update 수행
+### Case Input
 
-**반복 프로세스:**
-```
-질문 조회
-  ↓
-사용자 답변 입력
-  ↓
-초안 빠른 업데이트
-  ↓
-완료 여부 확인
-  ↓
-[미완료] → 필요 시 다음 질문 다시 조회
-[완료] → 종료
-```
+- 방문 기록 입력
+- EMR 제출
+- 케이스 처리
 
-**중요 규칙:**
-- 사용자가 제공하지 않은 정보는 절대 추가하지 않음
-- 외부 의학지식으로 메우지 않음
-- 문장 연결/형식 정리만 허용
-- 현재는 backend local LLM chain이 draft update를 수행
+### Case Overview
 
-### 5단계: 최종 검토 및 완성
+- 질문 단계 섹션은 클릭 가능한 카드로 표시
+- 최종 자동 생성 섹션은 별도 블록으로 표시
 
-**사용자 액션:**
-- 모든 섹션의 초안 확인
-- 필요시 추가 질문-답변 반복
-- 최종 초안 완성
+### Section Detail
 
-**데이터 저장:**
-- 초안 원본: `sectionDrafts`
-- 상태/질문 원본: `sectionStates`
-- Q&A 히스토리: `section_interactions` 컬렉션
-- 최종 manuscript: `finalDraft`
-- `draftsBySection`은 응답용 derived/cache 필드
+- 가운데: 현재 narrative draft
+- 왼쪽: 공통 질문
+- 오른쪽: 섹션 질문
+- 제목/초록/서론/토론 계열 섹션은 질문 단계 섹션으로 다루지 않음
 
-## 전체 워크플로우 다이어그램
+### Final Manuscript
 
-```
-[사용자] EMR 입력
-    ↓
-[백엔드] 비식별화 → 케이스 생성
-    ↓
-[백엔드] Evidence split
-    ↓
-[백엔드] Section assessment + initial drafts
-    ↓
-[사용자] 섹션 목록 확인
-    ↓
-[사용자] 섹션 선택
-    ↓
-[반복]
-    ├─ [백엔드] 질문 조회
-    ├─ [사용자] 답변 입력
-    ├─ [백엔드] fast local draft update
-    └─ [완료 여부 확인]
-         ├─ 미완료 → 다음 질문
-         └─ 완료 → 종료
+- 자동 생성 섹션과 본문 기반 섹션을 분리해서 표시
+- 제목 후보 제공
+- 추천 제목 선택 후 현재 케이스 제목으로 저장 가능
+
+## 로컬 시뮬레이션 스크립트
+
+유용한 파일:
+
+- `backend/scripts/runSamplePipeline.js`
+- `backend/scripts/sampleInput.hwa-byung.json`
+- `backend/scripts/samplePipelineOutput.hwa-byung.json`
+
+샘플 실행 예시:
+
+```powershell
+cd ..\casereport\backend
+npm run build
+node -r dotenv/config scripts/runSamplePipeline.js scripts/sampleInput.hwa-byung.json dotenv_config_path=.env
 ```
 
-## 사용 방법
+이 스크립트로 다음을 점검할 수 있습니다.
 
-1. **EMR 입력**: 메인 페이지에서 방문 기록을 추가하고 SOAP 텍스트를 입력합니다.
-2. **처리**: "제출 및 처리" 버튼을 클릭하여 자동 처리합니다.
-3. **섹션 확인**: 섹션 목록에서 각 섹션의 상태와 초안 미리보기를 확인합니다.
-4. **상세 보완**: 섹션을 클릭하여 상세 페이지로 이동하고, 질문에 답변하여 초안을 보완합니다.
-5. **최종 원고 검토**: "최종 원고 보기" 화면에서 전체 manuscript를 검토하고 필요한 섹션으로 다시 이동합니다.
+- evidence extraction 품질
+- section draft 품질
+- missing detection
+- common vs section question 동작
 
-## 비식별화 규칙
+## 현재 구현 메모
 
-다음 정보가 자동으로 마스킹됩니다:
+- 프롬프트 언어는 한국어 중심으로 조정했습니다.
+  - 입력 EMR이 한국어
+  - 사용자 질문이 한국어
+  - draft prose가 한국어
+- JSON key와 enum은 구현 안정성을 위해 영어를 유지합니다.
+- CARE rubric은 backend config에서 관리하고, 후반 체인들에 주입됩니다.
+- 제목 후보는 최종 단계에서 생성됩니다.
+- 키워드는 UI 흐름에는 반영했지만, backend schema 지원은 아직 완전히 추가되지 않았습니다.
 
-- 이름 (한글 2~4자) → `[NAME]`
-- 주민번호/식별번호 → `[ID]`
-- 전화번호 → `[PHONE]`
-- 주소 → `[ADDRESS]`
-- 병원/기관명 → `[HOSPITAL]`
-- 의료진 이름/서명 → `[CLINICIAN]`
+## 알려진 제약
 
-## 주의사항
+- 전체 품질은 Chain1 grounding 품질에 크게 영향을 받습니다.
+- extraction이 약하면 이후 draft와 question 품질도 함께 흔들립니다.
+- PowerShell에서는 한글이 깨져 보일 수 있지만, 실제 파일 내용은 정상일 수 있습니다.
+- 제목, 고찰 같은 섹션은 본문 보완 후 생성되므로 일반 질문 단계 섹션처럼 다루면 안 됩니다.
 
-- **Hallucination 방지**: LLM이 사용자가 제공하지 않은 정보를 추가하지 않도록 prompt/structured output 기반 제약을 둡니다.
-- **데이터 보안**: 기본적으로 원본 텍스트는 저장하지 않습니다 (`STORE_ORIGINAL_TEXT=false`).
-- **API 비용**: OpenAI API 사용량에 따라 비용이 발생할 수 있습니다.
-- **Python ai_server**: 현재 메인 런타임 경로에서는 사용하지 않습니다. `uvicorn` 실행은 필요 없습니다.
+## 보안 주의
 
-## 라이선스
+- `.env`는 commit 하지 마세요.
+- 로그나 스크린샷에 비밀값이 노출되면 즉시 교체하세요.
+- 실제 임상 데이터는 반드시 비식별화해서 사용하세요.
+
+## License
 
 ISC

@@ -3,7 +3,7 @@ import { CareSectionEnum } from './common';
 
 export const SectionDraftSchema = z.object({
   sectionId: CareSectionEnum,
-  evidenceCardIdsUsed: z.array(z.string().uuid()),
+  evidenceCardIdsUsed: z.array(z.string()),
   draftText: z.string(),
   openIssues: z.array(z.string())
 });
