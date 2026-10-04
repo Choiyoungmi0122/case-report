@@ -499,12 +499,12 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <span>왼쪽 원기록을 보고 그 항목을 두세 문장으로 직접 씁니다. 잘 쓰려고 하지 않아도 됩니다. 이때는 AI 초안이 보이지 않습니다.</span>
         </li>
         <li>
-          <strong>AI 초안을 원기록과 비교하며 읽습니다.</strong>
-          <span>기록과 다르거나 확인이 필요한 문장만 눌러 표시하고 이유를 적습니다. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 둡니다.</span>
+          <strong>AI 초안을 내 초안과 비교하며 읽습니다.</strong>
+          <span>내 초안에 없던 내용이 무엇인지 살펴봅니다. 기록과 달라 보이거나 다시 확인하고 싶은 문장은 눌러서 표시할 수 있습니다. 다시 누르면 표시가 풀립니다.</span>
         </li>
         <li>
-          <strong>내 초안과 AI 초안을 비교합니다.</strong>
-          <span>AI 초안에 빠진 내용이 있으면 적고, 두 초안이 무엇이 달랐는지 한 줄로 남깁니다.</span>
+          <strong>비교하면서 알게 된 것을 적습니다.</strong>
+          <span>내 초안에 더하고 싶은 내용, AI 초안에서 그대로 쓰면 안 되겠다고 생각한 내용을 한두 줄로 남깁니다.</span>
         </li>
       </ol>
 
@@ -525,10 +525,10 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             </p>
           </div>
           <div className="scaffold-v2__howto-box is-mine">
-            <em>이렇게 표시하고 적습니다</em>
-            <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름</p>
-            <p><b>이유</b>: 1차 기록에는 NRS 7로 적혀 있음.</p>
-            <p><b>초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 초안에 없음.</p>
+            <em>비교하고 나서 이렇게 적습니다</em>
+            <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름 (1차 기록에는 NRS 7)</p>
+            <p><b>AI 초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 없음.</p>
+            <p><b>비교하면서 알게 된 것</b>: 내 초안에는 내원 당시 통증 점수를 쓰지 않았다는 것을 알았다.</p>
           </div>
         </div>
         <div className="scaffold-v2__howto-writing">

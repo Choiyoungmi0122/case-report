@@ -2218,8 +2218,9 @@ export default function ScaffoldSectionPage() {
                 <div className="scaffold-ai-draft">
                   <div className="scaffold-ai-draft__badge">AI가 쓴 초안</div>
                   <p className="scaffold-ai-draft__hint">
-                    위의 내 초안, 왼쪽 원기록과 비교하며 읽어 보세요. 기록과 다르거나 확인이 필요한 문장이 있으면
-                    그 문장을 눌러 표시하세요. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 두면 됩니다.
+                    위의 내 초안과 무엇이 다른지 비교하며 읽어 보세요. 내 초안에 없던 내용은 무엇인지, 기록과
+                    달라 보이는 문장은 없는지 살펴보세요. 다시 확인하고 싶은 문장은 눌러서 표시할 수 있고, 다시
+                    누르면 표시가 풀립니다.
                   </p>
                   <div className="scaffold-ai-draft__text">
                     {draftSentences.length === 0
@@ -2248,8 +2249,8 @@ export default function ScaffoldSectionPage() {
                     <h4>내가 표시한 문장 {flaggedSentences.length}개</h4>
                     {flaggedSentences.length === 0 ? (
                       <p className="scaffold-flag-list__empty">
-                        아직 표시한 문장이 없습니다. 위 초안에서 다시 봐야 할 문장을 눌러 보세요. 표시할 문장이 없다면
-                        그대로 아래로 진행하면 됩니다.
+                        표시한 문장이 없습니다. 기록과 달라 보이거나 다시 확인하고 싶은 문장이 있으면 위 초안에서
+                        눌러 보세요. 없다면 그대로 아래로 진행하면 됩니다.
                       </p>
                     ) : (
                       flaggedSentences.map((item) => {
@@ -2329,7 +2330,7 @@ export default function ScaffoldSectionPage() {
                     <div>
                       <div className="scaffold-post-ai-reflection__eyebrow">정리</div>
                       <h3 id="post-ai-reflection-title">AI 초안을 읽고 난 뒤</h3>
-                      <p>내가 쓴 초안과 AI 초안을 비교해 짧게 적어 주세요.</p>
+                      <p>내가 쓴 초안과 AI 초안을 비교하면서 알게 된 것을 짧게 적어 주세요.</p>
                     </div>
 
                     <label>
@@ -2337,7 +2338,7 @@ export default function ScaffoldSectionPage() {
                       <textarea
                         value={missingInDraftReflection}
                         onChange={(event) => setMissingInDraftReflection(event.target.value)}
-                        placeholder="기록에는 있는데 초안에 없는 내용, 이 항목에 꼭 들어가야 한다고 생각하는 내용을 적어 주세요."
+                        placeholder="기록에는 있는데 AI 초안에 없는 내용, 이 항목에 꼭 들어가야 한다고 생각하는 내용을 적어 주세요."
                         rows={3}
                       />
                     </label>
@@ -2347,7 +2348,7 @@ export default function ScaffoldSectionPage() {
                       <textarea
                         value={changedJudgmentReflection}
                         onChange={(event) => setChangedJudgmentReflection(event.target.value)}
-                        placeholder="예: AI 초안에는 내가 쓰지 않은 ○○가 있었다 / 내 초안에 있던 ○○가 AI 초안에는 없었다 / 큰 차이가 없었다"
+                        placeholder="내 초안에 더하고 싶은 내용, AI 초안에서 그대로 쓰면 안 되겠다고 생각한 내용을 적어 주세요. 예: 용량과 기간을 내 초안에 쓰지 않았다는 것을 알았다 / 큰 차이가 없었다"
                         rows={3}
                       />
                     </label>

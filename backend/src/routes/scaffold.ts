@@ -9,6 +9,7 @@ import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
 import { getModelForChain, runInitialSectionDrafts } from '../llm/chains';
 import { chain3SystemPrompt } from '../llm/prompts/chain3_draft';
+import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
 import {
   appendPerformanceLog,
   buildChainCacheEntry,
@@ -796,6 +797,34 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
   const existingDraft = (caseData.sectionDrafts || []).find(
     (item: any) => item.sectionId === sectionId
   );
+
+  // The fixed study case ships with frozen, reviewed drafts so that every
+  // participant judges the same text. Those drafts carry the batch CHAIN3
+  // version label, so without this guard the reveal step treated them as stale
+  // and replaced them with a freshly generated (different) draft.
+  const frozenDraft = (
+    (getFrozenStudyCaseResult(
+      (caseData.visits || []).map((visit: any) => visit.soapText ?? visit.sanitizedText ?? '')
+    )?.sectionDrafts as any[]) || []
+  ).find((item: any) => item.sectionId === sectionId);
+  if (String(frozenDraft?.draftText || '').trim()) {
+    if (existingDraft?.draftText === frozenDraft.draftText) return existingDraft;
+
+    const restoredDrafts = [
+      ...(caseData.sectionDrafts || []).filter((item: any) => item.sectionId !== sectionId),
+      frozenDraft
+    ];
+    const restoreCase =
+      dependencies?.updateCase ||
+      ((caseId: string, updates: any) => caseModel.updateCase(caseId, updates));
+    await restoreCase(caseData.id, {
+      sectionDrafts: restoredDrafts,
+      draftsBySection: Object.fromEntries(
+        restoredDrafts.map((item: any) => [item.sectionId, item.draftText || ''])
+      )
+    });
+    return frozenDraft;
+  }
   if (existingDraft?.generationMetadata?.promptVersion === promptVersion) {
     return existingDraft;
   }
