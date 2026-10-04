@@ -1,3 +1,5 @@
+import { renderClinicalAnonymizedText } from './publicationRenderer';
+
 type JsonObject = Record<string, unknown>;
 
 const EMPTY_TEXT = '정보가 제공되지 않았습니다.';
@@ -332,6 +334,66 @@ function formatTimeline(data: unknown): string {
   return paragraphs.length > 0 ? paragraphs.join('\n\n') : EMPTY_TEXT;
 }
 
+function isImportedTimelineLabel(line: string): boolean {
+  const value = line.trim();
+  return (
+    value === 'Imported structured timeline narrative' ||
+    value === 'Imported timeline table' ||
+    value === '가져온 타임라인'
+  );
+}
+
+function normalizeTimelineStringForDisplay(raw: string): string {
+  const normalized = String(raw || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (!normalized) return EMPTY_TEXT;
+
+  const lines = normalized.split('\n');
+  const baseLines: string[] = [];
+  const importedBlocks: string[] = [];
+  let currentImportedBlock: string[] | null = null;
+
+  const flushImportedBlock = () => {
+    if (!currentImportedBlock) return;
+    const block = currentImportedBlock.join('\n').trim();
+    if (block) importedBlocks.push(block);
+    currentImportedBlock = null;
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (isImportedTimelineLabel(trimmed)) {
+      flushImportedBlock();
+      currentImportedBlock = [];
+      continue;
+    }
+
+    if (currentImportedBlock) {
+      currentImportedBlock.push(line);
+      continue;
+    }
+
+    baseLines.push(line);
+  }
+
+  flushImportedBlock();
+
+  const uniqueImportedBlocks = importedBlocks.filter((block, index) => {
+    const key = block.replace(/\s+/g, ' ').trim();
+    return importedBlocks.findIndex((item) => item.replace(/\s+/g, ' ').trim() === key) === index;
+  });
+
+  const latestImportedBlock =
+    uniqueImportedBlocks.length > 0 ? uniqueImportedBlocks[uniqueImportedBlocks.length - 1] : '';
+
+  const parts = [
+    baseLines.join('\n').trim(),
+    latestImportedBlock ? `가져온 타임라인\n\n${latestImportedBlock}` : ''
+  ].filter(Boolean);
+
+  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim() || EMPTY_TEXT;
+}
+
 function formatDiagnosticAssessment(data: JsonObject): string {
   const diagnosis = pickList(data, ['diagnosis', 'diagnoses']);
   const methods = pickList(data, ['diagnostic_methods', 'methods']);
@@ -435,11 +497,17 @@ export function ensureKoreanQuestion(text: string): string {
 }
 
 export function formatSectionDraftForDisplay(sectionId: string, rawDraft: string): string {
-  const raw = toNonEmptyString(rawDraft);
+  // Drafts are stored in the canonical de-identified form. Internal privacy
+  // tokens are pipeline machinery, so they are rendered into publication
+  // phrasing before anything is shown to the author.
+  const raw = toNonEmptyString(renderClinicalAnonymizedText(rawDraft));
   if (!raw) return EMPTY_TEXT;
 
   const parsed = parseMaybeJson(raw);
   if (typeof parsed === 'string') {
+    if (sectionId === 'TIMELINE') {
+      return normalizeTimelineStringForDisplay(parsed);
+    }
     return parsed
       .replace(/\r\n/g, '\n')
       .replace(/\n{3,}/g, '\n\n')

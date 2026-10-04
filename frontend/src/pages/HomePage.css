@@ -1,6 +1,6 @@
 .home-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8,24 +8,24 @@
 }
 
 .home-page .container {
-  background: white;
-  border-radius: 16px;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
   padding: 3rem;
   max-width: 900px;
   width: 100%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow);
 }
 
 .home-page h1 {
   font-size: 2.5rem;
-  color: #333;
+  color: var(--text);
   margin-bottom: 0.5rem;
   text-align: center;
 }
 
 .home-page .subtitle {
   font-size: 1.1rem;
-  color: #666;
+  color: var(--text-muted);
   text-align: center;
   margin-bottom: 3rem;
 }
@@ -37,35 +37,29 @@
 }
 
 .option-card {
-  background: #f8f9fa;
-  border: 2px solid #e9ecef;
-  border-radius: 12px;
+  background: var(--surface-muted);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 2.5rem;
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .option-card:hover {
-  border-color: #667eea;
-  background: #fff;
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
-}
-
-.option-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .option-card h2 {
   font-size: 1.5rem;
-  color: #333;
+  color: var(--text);
   margin-bottom: 0.75rem;
 }
 
 .option-card p {
-  color: #666;
+  color: var(--text-muted);
   font-size: 1rem;
   line-height: 1.6;
 }

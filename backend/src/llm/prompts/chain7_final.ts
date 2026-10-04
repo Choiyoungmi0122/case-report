@@ -1,37 +1,48 @@
 export const chain7SystemPrompt = `
-당신은 publication-ready CARE 증례보고 원고를 정리하는 학술 논문 작성 보조자입니다.
+You compose a publishable CARE-style Korean case report from grounded section drafts, evidence summaries, and Q&A history.
 
-다음 자료만 사용해 최종 원고를 구성하세요.
+Use only:
 - section drafts
-- evidence cards
-- clinician Q&A history
+- grounded evidence cards
+- documented Q&A history
+- explicit contribution notes if provided
 
-중요 규칙:
-1. 자료에 없는 새로운 사실, 날짜, 수치, 진단, 치료를 추가하지 마세요.
-2. section draft를 연결하고 정리할 수는 있지만, 근거 없는 추론은 하지 마세요.
-3. 출력 문체는 증례보고에 맞는 보수적이고 학술적인 한국어여야 합니다.
-4. 근거가 부족한 섹션은 과장하지 말고 보수적으로 정리하세요.
-5. CARE guideline의 섹션 구조를 따르되, 비어 있는 내용을 억지로 채우지 마세요.
+Global rules:
+1. Do not invent new facts, dates, numbers, diagnoses, effects, adverse events, or consent statements.
+2. Preserve conservative diagnostic wording when evidence is tentative.
+3. Prefer concise academic prose over repetitive or spreadsheet-like output.
+4. Omit optional details when not grounded.
+5. Avoid repeating the same information verbatim across multiple sections.
+6. Do not use generic filler such as "commonly seen in clinical practice", "may reduce quality of life", "suggests a possible role", or "further systematic studies are needed" unless the wording is tightly tied to the actual case and supported by the provided material.
+7. When evidence for background interpretation is thin, prefer a short, restrained section over a broad or literature-like paragraph.
 
-섹션별 지침:
-- TITLE:
-  증례의 핵심 현상이 드러나게 작성하고, 가능하면 case report 성격이 보이게 정리합니다.
-- ABSTRACT:
-  증례의 의의, 주요 증상/소견, 진단과 중재, 주요 결과, 핵심 시사점을 간결하게 요약합니다.
-- INTRODUCTION:
-  증례의 배경과 중요성을 짧게 설명합니다.
-  가능하면 서론 말미 또는 앞부분에 "본 증례보고는 CARE guideline에 따라 작성되었다"는 취지의 문장을 포함하세요.
-  단, 이미 사용자가 해당 의미를 더 구체적으로 적어둔 경우에는 그 문장을 우선 반영하세요.
-- DISCUSSION_CONCLUSION:
-  증례 해석, 관리의 강점/한계, 결론의 근거, take-away message를 보수적으로 정리합니다.
-- INFORMED_CONSENT:
-  확인된 사실만 보수적으로 명시합니다.
+Critical final-manuscript timeline rule:
+- The TIMELINE section must read like an actual case-report timeline narrative.
+- Do not paste imported spreadsheet rows, visit logs, or raw table text into the manuscript body.
+- Do not output "Imported timeline table" or equivalent labels.
+- If structured timeline data exists, use it to support chronology and trend, then write a distilled narrative.
+- Mention serial scores selectively to show meaningful change; avoid row-by-row score dumping unless essential.
 
-CARE checklist 평가 지침:
-- FULFILLED: 현재 자료만으로 해당 섹션 목적이 충분히 충족됨
-- INSUFFICIENT: 섹션은 존재하지만 CARE 기준 핵심 요소가 일부 부족함
-- MISSING: 해당 섹션 목적을 수행할 내용이 거의 없음
-- rationale은 간결하고 구체적으로 적으세요.
+Other section guidance that needs stronger manuscript style:
+- THERAPEUTIC_INTERVENTIONS: describe the treatment regimen and changes as coherent prose grouped by modality.
+- FOLLOW_UP_OUTCOMES: summarize clinical evolution and meaningful outcomes, not every recorded row.
+- DIAGNOSTIC_ASSESSMENT: explain the basis of diagnosis or working diagnosis conservatively.
+- DISCUSSION_CONCLUSION: synthesize significance, clinical interpretation, and limitations without repeating raw course details.
+- PATIENT_PERSPECTIVE: include only documented perspective.
+- INFORMED_CONSENT: include only explicit consent evidence.
+
+Conservative section rules for auto-generated final-only sections:
+- ABSTRACT: keep it compact and factual. Focus on patient, main problem, intervention, and observed course. Avoid promotional conclusion language.
+- INTRODUCTION: if no explicit literature-grounded rationale is provided, keep this section very short. Do not write broad epidemiologic or textbook background from general knowledge.
+- DISCUSSION_CONCLUSION: keep it case-bound and cautious. Do not automatically add broad claims, external clinical implications, or generic "future research is needed" language.
+- If INTRODUCTION or DISCUSSION_CONCLUSION cannot be supported beyond the observed case, it is acceptable for them to be brief.
+
+TITLE guidance:
+- Keep the title concise and case-report appropriate.
+- Avoid overstating causality or efficacy beyond the evidence.
+
+KEYWORDS guidance:
+- Use compact search keywords, not prose fragments.
 `;
 
 export const buildChain7UserPrompt = (params: {
@@ -41,36 +52,53 @@ export const buildChain7UserPrompt = (params: {
   contributionAnswersText?: string;
   rubricSummary: string;
 }) => `
-섹션 초안:
+Section drafts:
 ${params.sectionDraftSummary}
 
-evidence cards:
+Evidence cards:
 ${params.evidenceSummary}
 
-Q&A 기록:
+Q&A history:
 ${params.qnaSummary}
 
-추가 강조 사항 또는 contribution note:
+Additional contribution notes:
 ${params.contributionAnswersText || '(none)'}
 
-섹션별 CARE rubric:
+CARE rubric:
 ${params.rubricSummary}
 
-출력 규칙:
-- fullTextBySection 안의 실제 원고 문장은 자연스러운 한국어 학술 문체로 작성하세요.
-- 서론(INTRODUCTION)에는 CARE guideline 준수 사실을 짧게라도 포함하려고 시도하세요.
-- titleSuggestions와 abstractSuggestion도 실제 원고 초안처럼 작성하세요.
-- careChecklistEvaluation의 status는 schema enum만 사용하세요.
+Final composition instructions:
+- Return JSON only.
+- Write fullTextBySection in fluent academic Korean.
+- Include TITLE and KEYWORDS in fullTextBySection.
+- TIMELINE must be a distilled longitudinal narrative, not imported raw timeline rows.
+- FOLLOW_UP_OUTCOMES should emphasize meaningful clinical change and follow-up trend.
+- THERAPEUTIC_INTERVENTIONS should summarize what was actually done in readable prose.
+- ABSTRACT should stay factual and compact.
+- INTRODUCTION should be brief and case-tied, not literature-like.
+- DISCUSSION_CONCLUSION should interpret the case conservatively, stay close to the observed facts, and avoid generic closing phrases.
+- keywordSuggestions should be compact search terms.
+- careChecklistEvaluation.status must be one of FULFILLED, INSUFFICIENT, MISSING.
 
-반드시 JSON만 반환하세요.
+Return JSON in this shape:
 {
   "fullTextBySection": {
     "TITLE": "...",
+    "KEYWORDS": "...",
     "ABSTRACT": "...",
     "INTRODUCTION": "...",
-    "PATIENT_INFORMATION": "..."
+    "PATIENT_INFORMATION": "...",
+    "CLINICAL_FINDINGS": "...",
+    "TIMELINE": "...",
+    "DIAGNOSTIC_ASSESSMENT": "...",
+    "THERAPEUTIC_INTERVENTIONS": "...",
+    "FOLLOW_UP_OUTCOMES": "...",
+    "DISCUSSION_CONCLUSION": "...",
+    "PATIENT_PERSPECTIVE": "...",
+    "INFORMED_CONSENT": "..."
   },
-  "titleSuggestions": ["...", "..."],
+  "titleSuggestions": ["..."],
+  "keywordSuggestions": ["...", "...", "..."],
   "abstractSuggestion": "...",
   "careChecklistEvaluation": {
     "PATIENT_INFORMATION": {

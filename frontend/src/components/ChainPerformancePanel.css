@@ -1,0 +1,68 @@
+.chain-performance-panel {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.chain-performance-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: none;
+  background: var(--surface-muted);
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.chain-performance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.chain-performance-item {
+  padding: 0.9rem 1rem;
+  border-top: 1px solid var(--surface-muted);
+}
+
+.chain-performance-item-warm {
+  background: var(--warning-soft);
+}
+
+.chain-performance-item-slow {
+  background: var(--warning-soft);
+}
+
+.chain-performance-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.chain-performance-meta {
+  margin-top: 0.35rem;
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.chain-performance-speed {
+  color: var(--warning-text);
+  font-weight: 600;
+}
+
+.chain-performance-error {
+  color: var(--danger-text);
+}

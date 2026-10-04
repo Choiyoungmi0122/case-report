@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CareSectionEnum } from './common';
+import { CommonQuestionCategoryEnum } from './chain4_missing';
 
 export const SectionQuestionSetSchema = z.object({
   sectionId: CareSectionEnum,
@@ -8,7 +9,8 @@ export const SectionQuestionSetSchema = z.object({
 
 export const CommonQuestionSetSchema = z.object({
   question: z.string(),
-  targetSectionIds: z.array(CareSectionEnum)
+  targetSectionIds: z.array(CareSectionEnum),
+  category: CommonQuestionCategoryEnum.optional()
 });
 
 export const Chain5QuestionOutputSchema = z.object({

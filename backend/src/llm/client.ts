@@ -1,12 +1,42 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+import { assertOutboundTextIsSafe } from '../deid/outbound';
+import { shouldRetryLLMError, summarizeError } from '../utils/errorSummary';
 
 const MAX_RETRIES = 2;
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4.1';
+let openaiClient: OpenAI | null = null;
+
+export interface LLMUsageMetrics {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
+export function getDefaultLLMModel(): string {
+  return LLM_MODEL;
+}
+
+export function hasOpenAIApiKey(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+export function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      const error: any = new Error(
+        'OPENAI_API_KEY is not set. Add it to backend/.env before running any chain.'
+      );
+      error.code = 'missing_api_key';
+      throw error;
+    }
+
+    openaiClient = new OpenAI({ apiKey });
+  }
+
+  return openaiClient;
+}
 
 export async function callLLMWithSchema<T>(
   schema: z.ZodSchema<T>,
@@ -16,6 +46,7 @@ export async function callLLMWithSchema<T>(
     retries?: number;
     model?: string;
     label?: string;
+    onUsage?: (usage: LLMUsageMetrics | null) => void;
   }
 ): Promise<T> {
   const retries = options?.retries ?? MAX_RETRIES;
@@ -23,11 +54,16 @@ export async function callLLMWithSchema<T>(
   const label = options?.label || 'LLM';
   let lastError: any;
 
+  // Privacy boundary. Runs before the first attempt so a blocked payload costs
+  // zero outbound requests. Throwing here is intentional: a chain that forgets
+  // to de-identify its input must fail rather than send the identifier.
+  assertOutboundTextIsSafe(userPrompt, label);
+
   for (let i = 0; i <= retries; i++) {
     const attemptStartedAt = Date.now();
     try {
       console.log(`[${label}] attempt ${i + 1}/${retries + 1} started with model=${model}`);
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAIClient().chat.completions.create({
         model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -45,16 +81,25 @@ export async function callLLMWithSchema<T>(
       const parsed = JSON.parse(content);
       const validated = schema.parse(parsed);
       const elapsedMs = Date.now() - attemptStartedAt;
+      const usage = response.usage
+        ? {
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens
+          }
+        : null;
+      options?.onUsage?.(usage);
       console.log(`[${label}] attempt ${i + 1} succeeded in ${elapsedMs}ms`);
       return validated;
     } catch (error) {
       lastError = error;
       const elapsedMs = Date.now() - attemptStartedAt;
-      console.error(`[${label}] attempt ${i + 1} failed after ${elapsedMs}ms:`, error);
-      if (i === retries) break;
+      console.error(
+        `[${label}] attempt ${i + 1}/${retries + 1} failed after ${elapsedMs}ms - ${summarizeError(error)}`
+      );
+      if (i === retries || !shouldRetryLLMError(error)) break;
     }
   }
 
   throw lastError;
 }
-

@@ -1,0 +1,68 @@
+.chain-progress-banner {
+  margin-bottom: 1rem;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  padding: 1rem 1.1rem;
+  color: var(--accent-hover);
+}
+
+.chain-progress-banner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.chain-progress-banner-header h3 {
+  margin: 0 0 0.2rem 0;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.chain-progress-banner-header p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--accent);
+}
+
+.chain-progress-current {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--accent-border);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chain-progress-summary {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.chain-progress-remaining {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.chain-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--accent-border);
+  padding: 0.24rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--accent);
+}

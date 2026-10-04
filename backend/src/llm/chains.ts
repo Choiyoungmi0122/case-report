@@ -1,17 +1,18 @@
-import { callLLMWithSchema } from './client';
 import { randomUUID } from 'crypto';
-import { buildCareRubricSummary, careSectionRubricMap, SupportedCareSectionId } from '../config/careSectionRubric';
+import { callLLMWithSchema, LLMUsageMetrics } from './client';
 import { Chain1OutputSchema, EvidenceCard } from './schemas/chain1_splitTag';
 import { Chain2OutputSchema, SectionAssessment } from './schemas/chain2_assess';
 import { Chain3OutputSchema, SectionDraft } from './schemas/chain3_draft';
-import { Chain4MissingOutputSchema, SectionMissing, CommonMissingItem } from './schemas/chain4_missing';
-import { Chain5QuestionOutputSchema, SectionQuestionSet, CommonQuestionSet } from './schemas/chain5_questions';
+import { Chain4MissingOutputSchema, CommonMissingItem, SectionMissing } from './schemas/chain4_missing';
+import { Chain5QuestionOutputSchema, CommonQuestionSet, SectionQuestionSet } from './schemas/chain5_questions';
 import { Chain6SectionUpdateOutputSchema, Chain6SectionUpdateOutput } from './schemas/chain6_update';
 import { FinalDraftSchema, FinalDraft } from './schemas/chain5_final';
+import { CareSection, CareSectionEnum } from './schemas/common';
 import {
-  SectionAdequacyReviewOutputSchema,
-  SectionAdequacyReviewOutput
+  SectionAdequacyReviewOutput,
+  SectionAdequacyReviewOutputSchema
 } from './schemas/section_adequacy_review';
+import { buildCareRubricSummary, careSectionRubricMap, SupportedCareSectionId } from '../config/careSectionRubric';
 import { chain1SystemPrompt, buildChain1UserPrompt } from './prompts/chain1_splitTag';
 import { chain2SystemPrompt, buildChain2UserPrompt } from './prompts/chain2_assess';
 import { chain3SystemPrompt, buildChain3UserPrompt } from './prompts/chain3_draft';
@@ -20,11 +21,35 @@ import { chain5QuestionSystemPrompt, buildChain5QuestionUserPrompt } from './pro
 import { chain6UpdateSystemPrompt, buildChain6UpdateUserPrompt } from './prompts/chain6_update';
 import { chain7SystemPrompt, buildChain7UserPrompt } from './prompts/chain7_final';
 import {
-  sectionAdequacyReviewSystemPrompt,
-  buildSectionAdequacyReviewUserPrompt
+  buildSectionAdequacyReviewUserPrompt,
+  sectionAdequacyReviewSystemPrompt
 } from './prompts/section_adequacy_review';
+import {
+  buildSectionHintsFromTerms,
+  normalizeLookupKey,
+  normalizeTextWithTerms
+} from '../rag/termNormalizer';
+import { TermNormalizationResult } from '../rag/types';
+import { RetrievedTermResolver } from '../rag/resolver';
+import {
+  COMMON_QUESTION_FALLBACK_TEMPLATES,
+  inferQuestionCategoryFromText,
+  normalizeQuestionComparisonKey,
+  normalizeQuestionText
+} from '../questions/questionTemplates';
+import { DeidentifiedEMR, deidentifyEMR } from '../deid';
+import { deidentifyCaseEMRs } from '../deid';
+import {
+  DeidentifiedVisitRecord,
+  PendingTermConfirmation,
+  ReviewRequiredState
+} from '../types';
+import { repairSplitClinicalEvidenceCards } from '../utils/evidenceCardRepair';
 
-const CORE_AI_SECTIONS = [
+const FAST_LLM_MODEL = process.env.FAST_LLM_MODEL || 'gpt-4.1-mini';
+const QUALITY_LLM_MODEL = process.env.QUALITY_LLM_MODEL || 'gpt-4.1';
+
+const CORE_AI_SECTIONS: CareSection[] = [
   'PATIENT_INFORMATION',
   'CLINICAL_FINDINGS',
   'TIMELINE',
@@ -32,386 +57,1433 @@ const CORE_AI_SECTIONS = [
   'THERAPEUTIC_INTERVENTIONS',
   'FOLLOW_UP_OUTCOMES',
   'PATIENT_PERSPECTIVE'
-] as const;
-
-const FAST_LLM_MODEL = process.env.FAST_LLM_MODEL || 'gpt-4.1-mini';
-const QUALITY_LLM_MODEL = process.env.QUALITY_LLM_MODEL || process.env.LLM_MODEL || 'gpt-4.1';
-
-function getModelForChain(
-  chainKey:
-    | 'CHAIN1'
-    | 'CHAIN2'
-    | 'CHAIN3'
-    | 'CHAIN4'
-    | 'CHAIN5'
-    | 'CHAIN6'
-    | 'CHAIN7'
-): string {
-  const explicitOverride = process.env[`${chainKey}_MODEL`];
-  if (explicitOverride) {
-    return explicitOverride;
-  }
-
-  switch (chainKey) {
-    case 'CHAIN1':
-    case 'CHAIN2':
-    case 'CHAIN4':
-    case 'CHAIN5':
-      return FAST_LLM_MODEL;
-    case 'CHAIN3':
-    case 'CHAIN6':
-    case 'CHAIN7':
-    default:
-      return QUALITY_LLM_MODEL;
-  }
-}
+];
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type SectionState = {
-  sectionId: SectionAssessment['sectionId'];
-  status: SectionAssessment['status'];
-  rationaleText: string;
-  missingInfoBullets: string[];
-  recommendedQuestions: string[];
+type VisitInput = {
+  index: number;
+  date: string;
+  text: string;
 };
 
-function buildTaggedEvidenceSummary(evidenceCards: EvidenceCard[]): string {
-  return Object.entries(
-    evidenceCards.reduce<Record<string, string[]>>((acc, card) => {
-      card.tags.forEach((tag) => {
-        acc[tag] = acc[tag] || [];
-        acc[tag].push(`[#${card.id}] ${card.normalizedText}`);
-      });
-      return acc;
-    }, {})
-  )
-    .map(([section, texts]) => `[${section}]\n${texts.join('\n')}`)
-    .join('\n\n---\n\n');
-}
+type DeidentifiedVisitInput = {
+  index: number;
+  date: string;
+  text: string;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+};
 
-function buildDraftSummary(sectionDrafts: SectionDraft[]): string {
-  return sectionDrafts
-    .map((draft) => `[${draft.sectionId}]\n${draft.draftText || '(empty)'}`)
-    .join('\n\n---\n\n');
-}
+type PreprocessedChain1Input = {
+  deidentifiedEMRs: DeidentifiedVisitRecord[];
+  deidentifiedVisits: DeidentifiedVisitInput[];
+  preparedVisits: PreparedVisit[];
+  pendingTermConfirmations: PendingTermConfirmation[];
+  reviewRequired: ReviewRequiredState | null;
+};
 
-function buildSectionMissingSummary(sectionMissing: SectionMissing[]): string {
-  return sectionMissing
-    .map((entry) => `[${entry.sectionId}]\n${entry.missingItems.map((item) => `- ${item}`).join('\n') || '- (none)'}`)
-    .join('\n\n---\n\n');
-}
+type TermDecisionMap = Map<string, PendingTermConfirmation>;
 
-function buildCommonMissingSummary(commonMissing: CommonMissingItem[]): string {
-  return commonMissing
-    .map(
-      (entry) =>
-        `[${entry.relatedSectionIds.join(', ')}]\n- ${entry.item}`
-    )
-    .join('\n\n---\n\n');
-}
+type PreparedClause = {
+  sourceText: string;
+  normalizedText: string;
+  terms: TermNormalizationResult[];
+  sectionHints: CareSection[];
+  start: number;
+  end: number;
+  score: number;
+};
 
-function buildSectionAssessmentSummary(evidenceCards: EvidenceCard[]): string {
-  const grouped = evidenceCards.reduce<Record<string, string[]>>((acc, card) => {
-    card.tags.forEach((tag) => {
-      acc[tag] = acc[tag] || [];
-      acc[tag].push(`[#${card.id}] ${card.normalizedText}`);
-    });
-    return acc;
-  }, {});
+type PreparedVisit = {
+  index: number;
+  date: string;
+  text: string;
+  normalizedText: string;
+  clauses: PreparedClause[];
+};
 
-  return CORE_AI_SECTIONS.map((sectionId) => {
-    const texts = grouped[sectionId] || [];
-    return `[${sectionId}]\ncount=${texts.length}\n${texts.join('\n') || '(no evidence)'}`;
-  }).join('\n\n---\n\n');
-}
+type NormalizerSemanticMatcher = NonNullable<Parameters<typeof normalizeTextWithTerms>[1]>['semanticMatcher'];
+type NormalizerLlmResolver = RetrievedTermResolver;
 
-function buildRubricSummaryForDrafts(sectionDrafts: SectionDraft[]): string {
-  return buildCareRubricSummary(sectionDrafts.map((draft) => draft.sectionId));
-}
+type ChainRuntimeMeta = {
+  onUsage?: (usage: LLMUsageMetrics | null) => void;
+};
 
-function buildCompactRubricSummary(sectionIds: string[]): string {
-  const uniqueSectionIds = Array.from(new Set(sectionIds)).filter(
-    (sectionId): sectionId is SupportedCareSectionId => sectionId in careSectionRubricMap
-  );
-
-  return uniqueSectionIds
-    .map((sectionId) => {
-      const rubric = careSectionRubricMap[sectionId];
-      return `[${sectionId}] required: ${rubric.requiredItems.join(' / ')}`;
-    })
-    .join('\n');
-}
-
-function extractSoapBlocks(text: string): Record<'S' | 'O' | 'A' | 'P', string> {
-  const normalized = String(text || '').replace(/\r\n/g, '\n');
-  const lines = normalized.split('\n');
-  const blocks: Record<'S' | 'O' | 'A' | 'P', string[]> = { S: [], O: [], A: [], P: [] };
-  let current: 'S' | 'O' | 'A' | 'P' | null = null;
-
-  const markerPattern = /^\s*([SOAP])\s*[:：]\s*(.*)$/i;
-
-  for (const line of lines) {
-    const match = line.match(markerPattern);
-    if (match) {
-      current = match[1].toUpperCase() as 'S' | 'O' | 'A' | 'P';
-      if (match[2]?.trim()) {
-        blocks[current].push(match[2].trim());
-      }
-      continue;
-    }
-
-    if (current) {
-      blocks[current].push(line.trim());
-    }
+export function getModelForChain(chainName: string): string {
+  switch (chainName) {
+    case 'chain1':
+    case 'chain2':
+    case 'chain4':
+    case 'chain5':
+      return process.env[`${chainName.toUpperCase()}_MODEL`] || FAST_LLM_MODEL;
+    case 'chain3':
+    case 'chain6':
+    case 'chain7':
+    case 'review':
+      return process.env[`${chainName.toUpperCase()}_MODEL`] || QUALITY_LLM_MODEL;
+    default:
+      return process.env.LLM_MODEL || QUALITY_LLM_MODEL;
   }
-
-  return {
-    S: blocks.S.join(' ').trim(),
-    O: blocks.O.join(' ').trim(),
-    A: blocks.A.join(' ').trim(),
-    P: blocks.P.join(' ').trim()
-  };
-}
-
-function splitIntoClauses(text: string): string[] {
-  return String(text || '')
-    .split(/(?<=[.!?])\s+|(?<=다\.)\s+|[;\n]/)
-    .map((part) => part.trim())
-    .filter((part) => part.length >= 2);
-}
-
-function buildStructuredVisitsText(visits: Array<{ index: number; date: string; text: string }>): string {
-  return visits
-    .map((visit) => {
-      const soap = extractSoapBlocks(visit.text);
-      const hasSoapMarkers = Boolean(soap.S || soap.O || soap.A || soap.P);
-      const clauses = [
-        ...splitIntoClauses(soap.S).map((item) => `[S] ${item}`),
-        ...splitIntoClauses(soap.O).map((item) => `[O] ${item}`),
-        ...splitIntoClauses(soap.A).map((item) => `[A] ${item}`),
-        ...splitIntoClauses(soap.P).map((item) => `[P] ${item}`)
-      ];
-
-      if (!hasSoapMarkers) {
-        return [
-          `Visit ${visit.index}`,
-          `DateTime: ${visit.date || '(unknown)'}`,
-          '[Source Text]',
-          visit.text
-        ].join('\n');
-      }
-
-      return [
-        `Visit ${visit.index}`,
-        `DateTime: ${visit.date || '(unknown)'}`,
-        '[Structured SOAP]',
-        soap.S ? `S: ${soap.S}` : '',
-        soap.O ? `O: ${soap.O}` : '',
-        soap.A ? `A: ${soap.A}` : '',
-        soap.P ? `P: ${soap.P}` : '',
-        clauses.length ? '[Atomic hints]' : '',
-        clauses.length ? clauses.map((item, idx) => `${idx + 1}. ${item}`).join('\n') : ''
-      ]
-        .filter(Boolean)
-        .join('\n');
-    })
-    .join('\n\n---\n\n');
-}
-
-function truncateClause(text: string, maxLength = 140): string {
-  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, maxLength - 1).trim()}…`;
-}
-
-function scoreNarrativeClause(clause: string): number {
-  const text = String(clause || '').toLowerCase();
-  let score = 0;
-
-  if (/\d/.test(text)) score += 1;
-  if (/(환자|주소|호소|증상|통증|답답|상열|불면|식욕|불안|스트레스)/.test(text)) score += 3;
-  if (/(진찰|검사|혈압|맥박|설진|맥진|영상|혈액|소견)/.test(text)) score += 3;
-  if (/(평가|고려|진단|변증|감별|가능성)/.test(text)) score += 3;
-  if (/(치료|처방|침치료|한약|혈위|교육|복용|시행|유지)/.test(text)) score += 3;
-  if (/(호전|감소|증가|악화|개선|추적|재내원|이상반응|부작용|순응도)/.test(text)) score += 3;
-  if (/(개월|주|일|후|최근|초기|마지막)/.test(text)) score += 2;
-
-  return score;
-}
-
-function buildNarrativeVisitPromptText(visits: Array<{ index: number; date: string; text: string }>): string {
-  return visits
-    .map((visit) => {
-      const clauses = splitIntoClauses(visit.text)
-        .map((clause, index) => ({
-          index,
-          text: clause,
-          normalized: normalizeForGrounding(clause),
-          score: scoreNarrativeClause(clause)
-        }))
-        .filter((item) => item.normalized.length >= 4);
-
-      const uniqueClauses = clauses.filter(
-        (item, index, array) => array.findIndex((candidate) => candidate.normalized === item.normalized) === index
-      );
-
-      const topScoredClauses = uniqueClauses
-        .sort((a, b) => b.score - a.score || a.index - b.index)
-        .slice(0, 14);
-
-      const leadingClauses = uniqueClauses.slice(0, 4);
-      const trailingClauses = uniqueClauses.slice(Math.max(uniqueClauses.length - 3, 0));
-
-      const selectedClauses = Array.from(
-        new Map(
-          [...leadingClauses, ...topScoredClauses, ...trailingClauses]
-            .sort((a, b) => a.index - b.index)
-            .map((item) => [item.normalized, truncateClause(item.text)])
-        ).values()
-      ).slice(0, 18);
-
-      const fallback =
-        selectedClauses.length > 0
-          ? selectedClauses
-          : [truncateClause(String(visit.text || '').replace(/\s+/g, ' ').trim(), 300)].filter(Boolean);
-
-      return [
-        `Visit ${visit.index}`,
-        `DateTime: ${visit.date || '(unknown)'}`,
-        '[Narrative Visit Summary]',
-        fallback.map((item, idx) => `${idx + 1}. ${item}`).join('\n')
-      ]
-        .filter(Boolean)
-        .join('\n');
-    })
-    .join('\n\n---\n\n');
 }
 
 function normalizeForGrounding(text: string): string {
   return String(text || '')
+    .normalize('NFKC')
     .toLowerCase()
-    .replace(/[\s\.,:;'"!?()[\]{}\-_/\\]/g, '');
+    .replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+function uniqueStrings(items: string[]): string[] {
+  return Array.from(new Set((items || []).map((item) => String(item || '').trim()).filter(Boolean)));
+}
+
+function uniqueSections(items: string[]): CareSection[] {
+  const validSet = new Set(CareSectionEnum.options);
+  return Array.from(
+    new Set(
+      (items || [])
+        .map((item) => String(item || '').trim())
+        .filter((item): item is CareSection => validSet.has(item as CareSection))
+    )
+  );
+}
+
+function clampConfidence(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 0.85;
+  return Math.max(0, Math.min(1, Number(value.toFixed(3))));
+}
+
+function inferEvidenceType(sectionHints: CareSection[]): string {
+  if (sectionHints.includes('THERAPEUTIC_INTERVENTIONS')) return 'treatment';
+  if (sectionHints.includes('FOLLOW_UP_OUTCOMES')) return 'follow_up_outcome';
+  if (sectionHints.includes('DIAGNOSTIC_ASSESSMENT')) return 'diagnostic_assessment';
+  if (sectionHints.includes('TIMELINE')) return 'timeline';
+  if (sectionHints.includes('CLINICAL_FINDINGS')) return 'clinical_finding';
+  if (sectionHints.includes('PATIENT_INFORMATION')) return 'patient_information';
+  if (sectionHints.includes('PATIENT_PERSPECTIVE')) return 'patient_perspective';
+  return 'other';
+}
+
+function isSingleLetterClinicalAbbreviation(text: string, periodIndex: number): boolean {
+  const letter = text[periodIndex - 1] || '';
+  const beforeLetter = text[periodIndex - 2] || '';
+  const followingText = text.slice(periodIndex + 1);
+  return (
+    /[A-Za-z]/.test(letter) &&
+    !/[A-Za-z]/.test(beforeLetter) &&
+    /^\s*[a-z][A-Za-z-]*/.test(followingText)
+  );
+}
+
+export function splitIntoClauses(text: string): Array<{ text: string; start: number; end: number }> {
+  const clauses: Array<{ text: string; start: number; end: number }> = [];
+  let clauseStart = 0;
+
+  const pushClause = (rawStart: number, rawEnd: number) => {
+    const raw = text.slice(rawStart, rawEnd);
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const start = rawStart + raw.indexOf(trimmed);
+    clauses.push({
+      text: trimmed,
+      start,
+      end: start + trimmed.length
+    });
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '\n') {
+      pushClause(clauseStart, index);
+      clauseStart = index + 1;
+      continue;
+    }
+    if (!'.!?'.includes(character)) continue;
+    if (character === '.' && isSingleLetterClinicalAbbreviation(text, index)) continue;
+
+    let end = index + 1;
+    while (end < text.length && '.!?'.includes(text[end])) end += 1;
+    pushClause(clauseStart, end);
+    clauseStart = end;
+    index = end - 1;
+  }
+
+  pushClause(clauseStart, text.length);
+
+  if (clauses.length === 0 && text.trim()) {
+    clauses.push({
+      text: text.trim(),
+      start: 0,
+      end: text.trim().length
+    });
+  }
+
+  return clauses;
+}
+
+function scoreClause(clauseText: string, terms: TermNormalizationResult[]): number {
+  const normalized = normalizeForGrounding(clauseText);
+  let score = Math.min(6, normalized.length / 24);
+  if (/\d/.test(clauseText)) score += 0.7;
+  if (/[A-Za-z]{2,}/.test(clauseText)) score += 0.2;
+  if (terms.length > 0) score += 1.2 + terms.length * 0.4;
+  if (clauseText.includes('진단') || clauseText.includes('평가')) score += 0.5;
+  if (clauseText.includes('치료') || clauseText.includes('처방') || clauseText.includes('복용')) score += 0.5;
+  if (clauseText.includes('호전') || clauseText.includes('악화') || clauseText.includes('추적')) score += 0.4;
+  return Number(score.toFixed(3));
+}
+
+function splitDraftSentences(text: string): string[] {
+  return String(text || '')
+    .split(/(?<=[.!?。！？])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+}
+
+function buildDraftTraceability(params: {
+  draftText: string;
+  evidenceCards: EvidenceCard[];
+  preferredEvidenceIds?: string[];
+}) {
+  const sentences = splitDraftSentences(params.draftText);
+  const preferredIds = new Set(params.preferredEvidenceIds || []);
+  const scopedEvidence =
+    preferredIds.size > 0
+      ? params.evidenceCards.filter((card) => preferredIds.has(card.id))
+      : params.evidenceCards;
+
+  const evidenceLinks = sentences.map((sentence) => {
+    const ranked = scopedEvidence
+      .map((card) => ({
+        id: card.id,
+        score: Math.max(
+          textSimilarity(sentence, card.normalizedText || ''),
+          textSimilarity(sentence, card.sourceText || '')
+        )
+      }))
+      .filter((item) => item.score >= 0.24)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((item) => item.id);
+
+    return {
+      sentence,
+      evidenceCardIds: uniqueStrings(ranked)
+    };
+  });
+
+  const unsupportedClaims = evidenceLinks
+    .filter((link) => link.sentence.length >= 12 && link.evidenceCardIds.length === 0)
+    .map((link) => ({
+      sentence: link.sentence,
+      reason: '이 문장을 뒷받침할 만큼 유사한 기록 근거를 찾지 못했습니다.'
+    }));
+
+  return { evidenceLinks, unsupportedClaims };
+}
+
+export function buildSectionDraftTraceability(params: {
+  draftText: string;
+  evidenceCards: EvidenceCard[];
+  preferredEvidenceIds?: string[];
+}) {
+  return buildDraftTraceability(params);
+}
+
+function toStoredDeidentifiedVisitRecord(
+  deidentifiedEMR: DeidentifiedEMR,
+  visit: VisitInput
+): DeidentifiedVisitRecord {
+  return {
+    visitIndex: visit.index,
+    visitDate: visit.date || '',
+    emrId: deidentifiedEMR.emrId,
+    deidentifiedText: deidentifiedEMR.deidentifiedText,
+    phiSpans: deidentifiedEMR.phiSpans,
+    replacementMap: deidentifiedEMR.replacementMap,
+    riskLevel: deidentifiedEMR.riskLevel
+  };
+}
+
+function buildReviewRequiredState(visits: DeidentifiedVisitRecord[]): ReviewRequiredState | null {
+  const highestRisk = visits.some((visit) => visit.riskLevel === 'HIGH')
+    ? 'HIGH'
+    : visits.some((visit) => visit.riskLevel === 'MEDIUM')
+      ? 'MEDIUM'
+      : null;
+
+  if (!highestRisk) return null;
+
+  return {
+    riskLevel: highestRisk,
+    reasons: visits
+      .filter((visit) => visit.riskLevel === highestRisk)
+      .map((visit) => `Visit ${visit.visitIndex} de-identification risk is ${visit.riskLevel}.`),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function buildPendingTermConfirmations(preparedVisits: PreparedVisit[]): PendingTermConfirmation[] {
+  const seen = new Set<string>();
+  const pending: PendingTermConfirmation[] = [];
+
+  for (const visit of preparedVisits) {
+    for (const clause of visit.clauses) {
+      for (const term of clause.terms) {
+        if (!term.needsUserConfirmation) continue;
+        const key = `${visit.index}:${clause.sourceText}:${term.surface}:${term.termId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        pending.push({
+          pendingId: randomUUID(),
+          visitIndex: visit.index,
+          visitDate: visit.date || '',
+          sourceText: clause.sourceText,
+          normalizedText: clause.normalizedText,
+          surface: term.surface,
+          normalizedTerm: term.normalizedTerm || '',
+          termId: term.termId,
+          category: term.category,
+          matchType: term.matchType,
+          confidence: term.confidence,
+          needsUserConfirmation: true,
+          candidates: term.candidates || [],
+          status: 'PENDING',
+          decisionReuseKey: buildTermDecisionReuseKey(term.surface, term.candidates || [], term.category),
+          reuseEligible: isReuseEligible(term)
+        });
+      }
+    }
+  }
+
+  return pending;
+}
+
+function buildPendingOccurrenceKey(params: {
+  visitIndex: number;
+  sourceText: string;
+  surface: string;
+  termId: string;
+}) {
+  return `${params.visitIndex}:${params.sourceText}:${params.surface}:${params.termId}`;
+}
+
+function buildTermDecisionReuseKey(
+  surface: string,
+  candidates: Array<{ termId: string }>,
+  category: string
+): string {
+  const normalizedSurface = normalizeLookupKey(surface);
+  const candidateKey = (candidates || [])
+    .map((item) => item.termId)
+    .filter(Boolean)
+    .sort()
+    .join('|');
+  return `${category}:${normalizedSurface}:${candidateKey}`;
+}
+
+function isReuseEligible(term: Pick<
+  TermNormalizationResult,
+  'category' | 'preserveSurfaceForm' | 'semanticTags' | 'normalizationPolicy' | 'candidates'
+>): boolean {
+  if (term.preserveSurfaceForm) return false;
+  if (term.normalizationPolicy === 'PRESERVE_ORIGINAL') return false;
+  if (!term.candidates || term.candidates.length === 0) return false;
+  if (['diagnosis', 'timeline_marker', 'other'].includes(term.category)) return false;
+
+  const normalizedTags = new Set((term.semanticTags || []).map((item) => normalizeLookupKey(item)));
+  if (normalizedTags.has('diagnosticuncertainty') || normalizedTags.has('timelinemarker')) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildTermDecisionMap(pendingTermConfirmations: PendingTermConfirmation[]): TermDecisionMap {
+  const decisionMap = new Map<string, PendingTermConfirmation>();
+
+  for (const item of pendingTermConfirmations || []) {
+    if (item.status !== 'CONFIRMED' && item.status !== 'REJECTED') continue;
+
+    decisionMap.set(
+      buildPendingOccurrenceKey({
+        visitIndex: item.visitIndex,
+        sourceText: item.sourceText,
+        surface: item.surface,
+        termId: item.termId
+      }),
+      item
+    );
+
+    if (item.reuseEligible && item.decisionReuseKey) {
+      decisionMap.set(`reuse:${item.decisionReuseKey}`, item);
+    }
+  }
+
+  return decisionMap;
+}
+
+function applyTermDecisionToText(
+  text: string,
+  terms: TermNormalizationResult[],
+  decisions: TermDecisionMap,
+  params: {
+    visitIndex: number;
+    sourceText: string;
+  }
+): string {
+  let nextText = text;
+  for (const term of terms) {
+    const decision =
+      decisions.get(
+        buildPendingOccurrenceKey({
+          visitIndex: params.visitIndex,
+          sourceText: params.sourceText,
+          surface: term.surface,
+          termId: term.termId
+        })
+      ) ||
+      decisions.get(
+        `reuse:${buildTermDecisionReuseKey(term.surface, term.candidates || [], term.category)}`
+      );
+    if (!decision) continue;
+    const replacement =
+      decision.status === 'CONFIRMED'
+        ? decision.confirmedTerm || term.normalizedTerm
+        : decision.customReplacement || '';
+    if (!replacement) continue;
+    nextText = nextText.split(term.surface).join(replacement);
+  }
+  return nextText;
+}
+
+function applyTermConfirmationDecisions(
+  preparedVisits: PreparedVisit[],
+  storedConfirmations: PendingTermConfirmation[] = []
+): PreparedVisit[] {
+  const decisions = buildTermDecisionMap(storedConfirmations);
+  if (decisions.size === 0) return preparedVisits;
+
+  return preparedVisits.map((visit) => {
+    const nextClauses = visit.clauses.map((clause) => {
+      const nextTerms = clause.terms.map((term) => {
+        const decision =
+          decisions.get(
+            buildPendingOccurrenceKey({
+              visitIndex: visit.index,
+              sourceText: clause.sourceText,
+              surface: term.surface,
+              termId: term.termId
+            })
+          ) ||
+          decisions.get(
+            `reuse:${buildTermDecisionReuseKey(term.surface, term.candidates || [], term.category)}`
+          );
+        if (!decision) return term;
+
+        if (decision.status === 'CONFIRMED') {
+          return {
+            ...term,
+            normalizedTerm: decision.confirmedTerm || term.normalizedTerm,
+            needsUserConfirmation: false
+          };
+        }
+
+        if (decision.customReplacement) {
+          return {
+            ...term,
+            normalizedTerm: decision.customReplacement,
+            needsUserConfirmation: false
+          };
+        }
+
+        return {
+          ...term,
+          normalizedTerm: '',
+          needsUserConfirmation: false
+        };
+      });
+
+      const normalizedText = applyTermDecisionToText(
+        clause.normalizedText || clause.sourceText,
+        nextTerms,
+        decisions,
+        {
+          visitIndex: visit.index,
+          sourceText: clause.sourceText
+        }
+      );
+
+      return {
+        ...clause,
+        terms: nextTerms,
+        normalizedText,
+        sectionHints: uniqueSections([
+          ...clause.sectionHints,
+          ...buildSectionHintsFromTerms(nextTerms.filter((term) => !term.needsUserConfirmation))
+        ])
+      };
+    });
+
+    return {
+      ...visit,
+      clauses: nextClauses,
+      normalizedText: nextClauses.map((clause) => clause.normalizedText).join(' ')
+    };
+  });
+}
+
+function mergePendingTermConfirmations(
+  existing: PendingTermConfirmation[],
+  nextPending: PendingTermConfirmation[]
+): PendingTermConfirmation[] {
+  const pendingByKey = new Map(
+    (nextPending || []).map((item) => [
+      buildPendingOccurrenceKey({
+        visitIndex: item.visitIndex,
+        sourceText: item.sourceText,
+        surface: item.surface,
+        termId: item.termId
+      }),
+      item
+    ] as const)
+  );
+  const resolved = (existing || []).filter((item) => item.status !== 'PENDING');
+
+  return [
+    ...resolved,
+    ...Array.from(pendingByKey.values()).map((item) => {
+      const existingMatch = (existing || []).find(
+        (candidate) =>
+          buildPendingOccurrenceKey({
+            visitIndex: candidate.visitIndex,
+            sourceText: candidate.sourceText,
+            surface: candidate.surface,
+            termId: candidate.termId
+          }) ===
+          buildPendingOccurrenceKey({
+            visitIndex: item.visitIndex,
+            sourceText: item.sourceText,
+            surface: item.surface,
+            termId: item.termId
+          })
+      );
+
+      if (!existingMatch || existingMatch.status === 'PENDING') {
+        return {
+          ...item,
+          pendingId: existingMatch?.pendingId || item.pendingId
+        };
+      }
+
+      return {
+        ...existingMatch,
+        pendingId: existingMatch.pendingId || item.pendingId
+      };
+    })
+  ];
+}
+
+export async function preprocessVisitsForChain1(
+  visits: VisitInput[],
+  options: {
+    storedConfirmations?: PendingTermConfirmation[];
+    semanticMatcher?: NormalizerSemanticMatcher;
+    llmResolver?: NormalizerLlmResolver;
+  } = {}
+): Promise<PreprocessedChain1Input> {
+  const deidentifiedOnly = await deidentifyCaseEMRs(
+    visits.map((visit) => ({
+      text: visit.text || '',
+      emrId: `visit_${visit.index}`
+    }))
+  );
+  const deidentifiedResults = visits.map((visit, index) => ({
+    visit,
+    deidentifiedEMR: deidentifiedOnly[index]
+  }));
+
+  const deidentifiedEMRs = deidentifiedResults.map(({ visit, deidentifiedEMR }) =>
+    toStoredDeidentifiedVisitRecord(deidentifiedEMR, visit)
+  );
+
+  const deidentifiedVisits: DeidentifiedVisitInput[] = deidentifiedResults.map(({ visit, deidentifiedEMR }) => ({
+    index: visit.index,
+    date: visit.date,
+    text: deidentifiedEMR.deidentifiedText,
+    riskLevel: deidentifiedEMR.riskLevel
+  }));
+
+  const reviewRequired = buildReviewRequiredState(deidentifiedEMRs);
+
+  // Privacy gate ahead of every external call. `prepareVisitsForChain1` reaches
+  // the OpenAI embedding and terminology-resolver APIs, so the HIGH-risk
+  // decision has to be made BEFORE it runs - otherwise a case the system itself
+  // flagged as still carrying identifiers would already have been sent out.
+  // Returning early keeps the outbound call count at zero; the caller detects
+  // `reviewRequired.riskLevel === 'HIGH'` and blocks the rest of the pipeline.
+  if (reviewRequired?.riskLevel === 'HIGH') {
+    return {
+      deidentifiedEMRs,
+      deidentifiedVisits,
+      preparedVisits: [],
+      pendingTermConfirmations: options.storedConfirmations || [],
+      reviewRequired
+    };
+  }
+
+  const preparedVisits = applyTermConfirmationDecisions(
+    await prepareVisitsForChain1(deidentifiedVisits, options),
+    options.storedConfirmations || []
+  );
+  const pendingTermConfirmations = mergePendingTermConfirmations(
+    options.storedConfirmations || [],
+    buildPendingTermConfirmations(preparedVisits)
+  );
+
+  return {
+    deidentifiedEMRs,
+    deidentifiedVisits,
+    preparedVisits,
+    pendingTermConfirmations,
+    reviewRequired
+  };
+}
+
+async function prepareVisitsForChain1(
+  visits: DeidentifiedVisitInput[],
+  options: {
+    semanticMatcher?: NormalizerSemanticMatcher;
+    llmResolver?: NormalizerLlmResolver;
+  } = {}
+): Promise<PreparedVisit[]> {
+  return Promise.all(
+    visits.map(async (visit) => {
+      const rawClauses = splitIntoClauses(visit.text || '');
+      const clauses: PreparedClause[] = [];
+
+      for (const clause of rawClauses) {
+        const normalized = await normalizeTextWithTerms(clause.text, {
+          semanticMatcher: options.semanticMatcher,
+          llmResolver: options.llmResolver
+        });
+        clauses.push({
+          sourceText: clause.text,
+          normalizedText: normalized.normalizedText || clause.text,
+          terms: normalized.terms,
+          sectionHints: normalized.sectionHints,
+          start: clause.start,
+          end: clause.end,
+          score: scoreClause(clause.text, normalized.terms)
+        });
+      }
+
+      const normalizedText = clauses.map((clause) => clause.normalizedText).join(' ');
+
+      return {
+        index: visit.index,
+        date: visit.date,
+        text: visit.text || '',
+        normalizedText,
+        clauses
+      };
+    })
+  );
+}
+
+function selectPromptClauses(clauses: PreparedClause[], maxClauses = 12): PreparedClause[] {
+  if (clauses.length <= maxClauses) return clauses;
+
+  const selected = new Map<number, PreparedClause>();
+  const sortedByScore = [...clauses].sort((a, b) => b.score - a.score);
+
+  if (clauses[0]) selected.set(clauses[0].start, clauses[0]);
+  if (clauses[clauses.length - 1]) selected.set(clauses[clauses.length - 1].start, clauses[clauses.length - 1]);
+
+  for (const clause of sortedByScore) {
+    if (selected.size >= maxClauses) break;
+    selected.set(clause.start, clause);
+  }
+
+  return Array.from(selected.values()).sort((a, b) => a.start - b.start);
+}
+
+function buildNarrativeVisitPromptText(preparedVisits: PreparedVisit[]): string {
+  return preparedVisits
+    .map((visit) => {
+      const selectedClauses = selectPromptClauses(visit.clauses);
+      const clauseText = selectedClauses
+        .map((clause, index) => {
+          const termText =
+            clause.terms.length > 0
+              ? clause.terms
+                  .map((term) =>
+                    `${term.surface}=>${term.normalizedTerm || '(confirmation needed)'}:${term.matchType}:${term.confidence}`
+                  )
+                  .join(', ')
+              : '-';
+          const hintText = clause.sectionHints.length > 0 ? clause.sectionHints.join(', ') : '-';
+          return [
+            `- Clause ${index + 1}`,
+            `  source: ${clause.sourceText}`,
+            `  normalized: ${clause.normalizedText}`,
+            `  sectionHints: ${hintText}`,
+            `  terms: ${termText}`
+          ].join('\n');
+        })
+        .join('\n');
+
+      return [`[Visit ${visit.index}] date=${visit.date || '(unknown)'}`, clauseText].join('\n');
+    })
+    .join('\n\n');
+}
+
+function textSimilarity(a: string, b: string): number {
+  const normalizedA = normalizeLookupKey(a);
+  const normalizedB = normalizeLookupKey(b);
+  if (!normalizedA || !normalizedB) return 0;
+  if (normalizedA === normalizedB) return 1;
+  if (normalizedA.includes(normalizedB) || normalizedB.includes(normalizedA)) {
+    return Math.min(normalizedA.length, normalizedB.length) / Math.max(normalizedA.length, normalizedB.length);
+  }
+
+  const aTokens = normalizedA.match(/.{1,2}/g) || [];
+  const bTokens = normalizedB.match(/.{1,2}/g) || [];
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  const overlap = Array.from(aSet).filter((token) => bSet.has(token)).length;
+  return overlap / Math.max(aSet.size, bSet.size, 1);
+}
+
+function findBestClauseMatch(cardText: string, visit: PreparedVisit | undefined): PreparedClause | null {
+  if (!visit || !cardText.trim()) return null;
+
+  let bestClause: PreparedClause | null = null;
+  let bestScore = 0;
+
+  for (const clause of visit.clauses) {
+    const score = Math.max(
+      textSimilarity(cardText, clause.sourceText),
+      textSimilarity(cardText, clause.normalizedText)
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      bestClause = clause;
+    }
+  }
+
+  return bestScore >= 0.35 ? bestClause : null;
+}
+
+function buildTaggedEvidenceSummary(evidenceCards: EvidenceCard[]): string {
+  return CORE_AI_SECTIONS.map((sectionId) => {
+    const relevant = evidenceCards.filter((card) => {
+      const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
+      return hints.includes(sectionId);
+    });
+
+    const items =
+      relevant.length > 0
+        ? relevant
+            .map((card) => `- (${card.id}) ${card.normalizedText || card.sourceText || ''}`)
+            .join('\n')
+        : '- (none)';
+
+    return `[${sectionId}]\n${items}`;
+  }).join('\n\n');
+}
+
+function buildSectionAssessmentSummary(
+  evidenceCards: EvidenceCard[],
+  targetSectionIds: CareSection[] = CORE_AI_SECTIONS
+): string {
+  return targetSectionIds.map((sectionId) => {
+    const relevant = evidenceCards.filter((card) => {
+      const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
+      return hints.includes(sectionId);
+    });
+    return `[${sectionId}] evidenceCount=${relevant.length}`;
+  }).join('\n');
+}
+
+function getEvidenceForSection(evidenceCards: EvidenceCard[], sectionId: CareSection): EvidenceCard[] {
+  return evidenceCards.filter((card) => {
+    const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
+    return hints.includes(sectionId);
+  });
+}
+
+function hasMeaningfulText(cards: EvidenceCard[], minLength = 12): boolean {
+  return cards.some((card) => String(card.normalizedText || card.sourceText || '').trim().length >= minLength);
+}
+
+function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: EvidenceCard[]): SectionAssessment {
+  const relevant = getEvidenceForSection(evidenceCards, sectionId);
+  const count = relevant.length;
+
+  if (sectionId === 'TITLE' || sectionId === 'ABSTRACT' || sectionId === 'INTRODUCTION' || sectionId === 'INFORMED_CONSENT') {
+    return {
+      sectionId,
+      status: 'IMPOSSIBLE',
+      rationaleText: 'This section typically requires author-provided context beyond EMR evidence alone.'
+    };
+  }
+
+  if (sectionId === 'DISCUSSION_CONCLUSION') {
+    return {
+      sectionId,
+      status: count > 0 ? 'INCOMPLETE' : 'IMPOSSIBLE',
+      rationaleText:
+        count > 0
+          ? 'Some case-specific evidence is available, but interpretation and discussion still need additional author input.'
+          : 'No discussion-ready evidence was identified yet from the current EMR alone.'
+    };
+  }
+
+  if (sectionId === 'PATIENT_PERSPECTIVE') {
+    return {
+      sectionId,
+      status: hasMeaningfulText(relevant, 8) ? 'INCOMPLETE' : 'IMPOSSIBLE',
+      rationaleText:
+        hasMeaningfulText(relevant, 8)
+          ? 'Patient-reported expressions are partially present, but a fuller patient perspective still needs direct wording or context.'
+          : 'Direct patient perspective content was not clearly documented in the current EMR.'
+    };
+  }
+
+  if (sectionId === 'TIMELINE') {
+    return {
+      sectionId,
+      status: count >= 2 ? 'READY' : count === 1 ? 'INCOMPLETE' : 'IMPOSSIBLE',
+      rationaleText:
+        count >= 2
+          ? 'Multiple time-ordered evidence items are available, so a timeline draft can be assembled.'
+          : count === 1
+            ? 'Some temporal evidence exists, but the longitudinal sequence is still thin.'
+            : 'No usable time-ordered evidence was found for a timeline draft.'
+    };
+  }
+
+  if (sectionId === 'THERAPEUTIC_INTERVENTIONS' || sectionId === 'FOLLOW_UP_OUTCOMES') {
+    return {
+      sectionId,
+      status: count >= 2 ? 'READY' : count === 1 ? 'INCOMPLETE' : 'IMPOSSIBLE',
+      rationaleText:
+        count >= 2
+          ? 'Enough treatment or follow-up evidence is present to draft this section from EMR alone.'
+          : count === 1
+            ? 'Some relevant evidence exists, but treatment or outcome detail is still limited.'
+            : 'No clearly grounded treatment or follow-up evidence was identified for this section.'
+    };
+  }
+
+  return {
+    sectionId,
+    status: count >= 1 ? 'READY' : 'IMPOSSIBLE',
+    rationaleText:
+      count >= 1
+        ? 'Relevant grounded evidence is available to produce an initial draft for this section.'
+        : 'Not enough evidence was identified to draft this section yet.'
+  };
+}
+
+function shouldRefineAssessmentWithLLM(
+  sectionId: CareSection,
+  heuristic: SectionAssessment,
+  evidenceCards: EvidenceCard[]
+): boolean {
+  const relevant = getEvidenceForSection(evidenceCards, sectionId);
+  const count = relevant.length;
+
+  if (count === 0) {
+    return false;
+  }
+
+  if (sectionId === 'PATIENT_PERSPECTIVE' || sectionId === 'DISCUSSION_CONCLUSION') {
+    return true;
+  }
+
+  return heuristic.status === 'INCOMPLETE';
+}
+
+function buildDraftSummary(sectionDrafts: Array<{ sectionId: string; draftText?: string }>): string {
+  return sectionDrafts
+    .map((draft) => `[${draft.sectionId}]\n${draft.draftText || '(empty)'}`)
+    .join('\n\n');
+}
+
+function buildSectionMissingSummary(sectionMissing: SectionMissing[]): string {
+  return sectionMissing
+    .map((item) => `[${item.sectionId}]\n${item.missingItems.length ? item.missingItems.map((v) => `- ${v}`).join('\n') : '- (none)'}`)
+    .join('\n\n');
+}
+
+function buildCommonMissingSummary(commonMissing: CommonMissingItem[]): string {
+  if (!commonMissing.length) return '(none)';
+  return commonMissing
+    .map(
+      (item) =>
+        `- ${item.item} (relatedSectionIds: ${(item.relatedSectionIds || []).join(', ') || 'none'}${
+          item.category ? `, category: ${item.category}` : ''
+        })`
+    )
+    .join('\n');
+}
+
+export function normalizeOverlapKey(text: string): string {
+  return String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[?.,:;()[\]{}"'`~!@#$%^&*+=\\|/_\-\s]/g, '');
+}
+
+function tokenizeOverlapText(text: string): string[] {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[?.,:;()[\]{}"'`~!@#$%^&*+=\\|/_\-]/g, ' ')
+    .replace(/가족/g, ' family ')
+    .replace(/갈등/g, ' conflict ')
+    .replace(/스트레스/g, ' stress ')
+    .replace(/증상/g, ' symptom ')
+    .replace(/변화/g, ' change ')
+    .replace(/관련성|연결되었는지|연결/g, ' relation ')
+    .replace(/요인/g, ' factor ')
+    .replace(/설명해|알려줘|알려주세요|주세요|구체적으로|있다면|어떻게/g, ' ')
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2)
+    .filter((item) => !['the', 'and', 'factor'].includes(item));
+}
+
+function questionSemanticSimilarity(a: string, b: string): number {
+  const normalizedA = normalizeQuestionComparisonKey(a) || normalizeOverlapKey(a);
+  const normalizedB = normalizeQuestionComparisonKey(b) || normalizeOverlapKey(b);
+  if (!normalizedA || !normalizedB) return 0;
+  if (normalizedA === normalizedB) return 1;
+
+  const tokensA = new Set(tokenizeOverlapText(a));
+  const tokensB = new Set(tokenizeOverlapText(b));
+  const overlap = Array.from(tokensA).filter((token) => tokensB.has(token)).length;
+  const jaccard = overlap / Math.max(tokensA.size + tokensB.size - overlap, 1);
+  const coverage = overlap / Math.max(Math.min(tokensA.size, tokensB.size), 1);
+  const charScore = textSimilarity(a, b);
+  return Math.max(jaccard, coverage, charScore);
+}
+
+function preferQuestionText(current: string, candidate: string): string {
+  const currentNormalized = normalizeQuestionText(current);
+  const candidateNormalized = normalizeQuestionText(candidate);
+  if (!currentNormalized) return candidateNormalized;
+  if (!candidateNormalized) return currentNormalized;
+  const currentHasKorean = /[가-힣]/.test(currentNormalized);
+  const candidateHasKorean = /[가-힣]/.test(candidateNormalized);
+  if (!currentHasKorean && candidateHasKorean) return candidateNormalized;
+  if (currentHasKorean && !candidateHasKorean) return currentNormalized;
+  return candidateNormalized.length < currentNormalized.length ? candidateNormalized : currentNormalized;
+}
+
+export function sanitizeGeneratedQuestionSets(result: {
+  commonQuestions: CommonQuestionSet[];
+  sectionQuestions: SectionQuestionSet[];
+}): { commonQuestions: CommonQuestionSet[]; sectionQuestions: SectionQuestionSet[] } {
+  const commonQuestions: CommonQuestionSet[] = [];
+  for (const item of result.commonQuestions || []) {
+    const normalizedQuestion = normalizeQuestionText(item.question, item.category);
+    if (!normalizedQuestion) continue;
+    commonQuestions.push({
+      ...item,
+      question: normalizedQuestion,
+      category: item.category || inferQuestionCategoryFromText(normalizedQuestion)
+    });
+  }
+
+  return {
+    commonQuestions,
+    sectionQuestions: (result.sectionQuestions || []).map((entry) => ({
+      ...entry,
+      questions: uniqueStrings(
+        (entry.questions || [])
+          .map((question) =>
+            normalizeQuestionText(question, inferQuestionCategoryFromText(question))
+          )
+          .filter(Boolean)
+      )
+    }))
+  };
+}
+
+function hasExplicitPsychosocialSignal(text: string): boolean {
+  const normalized = normalizeOverlapKey(text);
+  return [
+    '가족',
+    '가정',
+    '스트레스',
+    '직장',
+    '갈등',
+    '생활사건',
+    '심리사회',
+    '대인관계'
+  ].some((keyword) => normalized.includes(normalizeOverlapKey(keyword)));
+}
+
+function inferCommonMissingCategory(item: {
+  item: string;
+  relatedSectionIds: string[];
+  category?: CommonMissingItem['category'];
+}): NonNullable<CommonMissingItem['category']> {
+  if (item.category) return item.category;
+
+  const sections = new Set(item.relatedSectionIds || []);
+  const normalized = normalizeOverlapKey(item.item);
+
+  if (
+    sections.has('TIMELINE') &&
+    sections.has('FOLLOW_UP_OUTCOMES')
+  ) {
+    return normalized.includes(normalizeOverlapKey('추적')) ||
+      normalized.includes(normalizeOverlapKey('재방문'))
+      ? 'follow_up_outcome'
+      : 'symptom_course';
+  }
+
+  if (sections.has('THERAPEUTIC_INTERVENTIONS') && sections.has('FOLLOW_UP_OUTCOMES')) {
+    return 'treatment_response';
+  }
+
+  if (sections.has('PATIENT_PERSPECTIVE') && sections.has('DISCUSSION_CONCLUSION')) {
+    return 'patient_perspective';
+  }
+
+  if (sections.has('DIAGNOSTIC_ASSESSMENT') && sections.has('DISCUSSION_CONCLUSION')) {
+    return 'diagnostic_reasoning';
+  }
+
+  if (sections.has('PATIENT_INFORMATION') && sections.has('DISCUSSION_CONCLUSION')) {
+    return hasExplicitPsychosocialSignal(item.item) ? 'psychosocial_context' : 'functional_impact';
+  }
+
+  if (normalized.includes(normalizeOverlapKey('수면')) || normalized.includes(normalizeOverlapKey('식사')) || normalized.includes(normalizeOverlapKey('일상'))) {
+    return 'functional_impact';
+  }
+  if (normalized.includes(normalizeOverlapKey('호전')) || normalized.includes(normalizeOverlapKey('잔여')) || normalized.includes(normalizeOverlapKey('치료 후'))) {
+    return 'treatment_response';
+  }
+  if (normalized.includes(normalizeOverlapKey('추적')) || normalized.includes(normalizeOverlapKey('재방문'))) {
+    return 'follow_up_outcome';
+  }
+  if (normalized.includes(normalizeOverlapKey('진단')) || normalized.includes(normalizeOverlapKey('감별')) || normalized.includes(normalizeOverlapKey('배제'))) {
+    return 'diagnostic_reasoning';
+  }
+  if (normalized.includes(normalizeOverlapKey('환자')) || normalized.includes(normalizeOverlapKey('소감')) || normalized.includes(normalizeOverlapKey('느낀'))) {
+    return 'patient_perspective';
+  }
+  if (normalized.includes(normalizeOverlapKey('부작용')) || normalized.includes(normalizeOverlapKey('이상반응'))) {
+    return 'adverse_event';
+  }
+  if (normalized.includes(normalizeOverlapKey('동의'))) {
+    return 'consent';
+  }
+
+  return 'symptom_course';
+}
+
+function isEligibleCommonMissing(item: CommonMissingItem): boolean {
+  const sections = uniqueSections(item.relatedSectionIds || []);
+  if (sections.length < 2) return false;
+
+  const category = inferCommonMissingCategory(item);
+  if (category === 'psychosocial_context') {
+    const relevantSections = sections.filter((sectionId) =>
+      ['PATIENT_INFORMATION', 'DIAGNOSTIC_ASSESSMENT', 'DISCUSSION_CONCLUSION', 'PATIENT_PERSPECTIVE'].includes(sectionId)
+    );
+    return relevantSections.length >= 2 && hasExplicitPsychosocialSignal(item.item);
+  }
+
+  if (category === 'adverse_event' || category === 'consent') {
+    return false;
+  }
+
+  return true;
+}
+
+export function mergeCommonMissingWithOverlaps(result: {
+  sectionMissing: SectionMissing[];
+  commonMissing: CommonMissingItem[];
+}): { sectionMissing: SectionMissing[]; commonMissing: CommonMissingItem[] } {
+  const existingCommon = new Map<string, CommonMissingItem>();
+
+  for (const item of result.commonMissing || []) {
+    const key = normalizeOverlapKey(item.item);
+    if (!key) continue;
+    const existing = existingCommon.get(key);
+    if (existing) {
+      existing.relatedSectionIds = uniqueSections([...(existing.relatedSectionIds || []), ...(item.relatedSectionIds || [])]);
+      existing.category = existing.category || item.category || inferCommonMissingCategory(item);
+    } else {
+      existingCommon.set(key, {
+        item: item.item,
+        relatedSectionIds: uniqueSections(item.relatedSectionIds || []),
+        category: item.category || inferCommonMissingCategory(item)
+      });
+    }
+  }
+
+  const overlapMap = new Map<string, { item: string; relatedSectionIds: string[] }>();
+  for (const section of result.sectionMissing || []) {
+    for (const missingItem of section.missingItems || []) {
+      const key = normalizeOverlapKey(missingItem);
+      if (!key) continue;
+      const entry = overlapMap.get(key);
+      if (entry) {
+        entry.relatedSectionIds = uniqueSections([...entry.relatedSectionIds, section.sectionId]);
+      } else {
+        overlapMap.set(key, {
+          item: missingItem,
+          relatedSectionIds: [section.sectionId]
+        });
+      }
+    }
+  }
+
+  for (const [key, entry] of overlapMap.entries()) {
+    if ((entry.relatedSectionIds || []).length < 2) continue;
+    const existing = existingCommon.get(key);
+    if (existing) {
+      existing.relatedSectionIds = uniqueSections([...(existing.relatedSectionIds || []), ...(entry.relatedSectionIds || [])]);
+    } else {
+      existingCommon.set(key, {
+        item: entry.item,
+        relatedSectionIds: uniqueSections(entry.relatedSectionIds || []),
+        category: inferCommonMissingCategory(entry)
+      });
+    }
+  }
+
+  const promotedKeys = new Set(
+    Array.from(existingCommon.entries())
+      .filter(([, item]) => isEligibleCommonMissing(item))
+      .map(([key]) => key)
+  );
+
+  const sectionMissing = (result.sectionMissing || []).map((section) => ({
+    ...section,
+    missingItems: uniqueStrings((section.missingItems || []).filter((item) => !promotedKeys.has(normalizeOverlapKey(item))))
+  }));
+
+  return {
+    sectionMissing,
+    commonMissing: Array.from(existingCommon.values()).filter((item) => isEligibleCommonMissing(item))
+  };
+}
+
+export function mergeCommonQuestionsWithOverlaps(result: {
+  commonQuestions: CommonQuestionSet[];
+  sectionQuestions: SectionQuestionSet[];
+}): { commonQuestions: CommonQuestionSet[]; sectionQuestions: SectionQuestionSet[] } {
+  const commonByKey = new Map<string, CommonQuestionSet>();
+
+  function findParaphraseKey(question: string): string | null {
+    const normalized = normalizeQuestionComparisonKey(question) || normalizeOverlapKey(question);
+    if (!normalized) return null;
+
+    for (const existingKey of commonByKey.keys()) {
+      const existingQuestion = commonByKey.get(existingKey)?.question || '';
+      if (questionSemanticSimilarity(question, existingQuestion) >= 0.72) {
+        return existingKey;
+      }
+    }
+
+    return normalized;
+  }
+
+  for (const item of result.commonQuestions || []) {
+    const normalizedQuestion = normalizeQuestionText(item.question, item.category);
+    const key = findParaphraseKey(normalizedQuestion);
+    if (!key) continue;
+    const existing = commonByKey.get(key);
+    if (existing) {
+      existing.targetSectionIds = uniqueSections([...(existing.targetSectionIds || []), ...(item.targetSectionIds || [])]);
+      existing.category = existing.category || item.category;
+      existing.question = preferQuestionText(existing.question, normalizedQuestion);
+    } else {
+      commonByKey.set(key, {
+        question: normalizedQuestion,
+        targetSectionIds: uniqueSections(item.targetSectionIds || []),
+        category: item.category || inferQuestionCategoryFromText(normalizedQuestion)
+      });
+    }
+  }
+
+  const overlapByKey = new Map<string, { question: string; targetSectionIds: string[] }>();
+  for (const section of result.sectionQuestions || []) {
+    for (const question of section.questions || []) {
+      const normalizedQuestion = normalizeQuestionText(question, inferQuestionCategoryFromText(question));
+      const key = normalizeQuestionComparisonKey(normalizedQuestion) || normalizeOverlapKey(normalizedQuestion);
+      if (!key) continue;
+      const entry = overlapByKey.get(key);
+      if (entry) {
+        entry.targetSectionIds = uniqueSections([...entry.targetSectionIds, section.sectionId]);
+      } else {
+        overlapByKey.set(key, {
+          question: normalizedQuestion,
+          targetSectionIds: [section.sectionId]
+        });
+      }
+    }
+  }
+
+  for (const [key, entry] of overlapByKey.entries()) {
+    if ((entry.targetSectionIds || []).length < 2) continue;
+    const existing = commonByKey.get(key);
+    if (existing) {
+      existing.targetSectionIds = uniqueSections([...(existing.targetSectionIds || []), ...(entry.targetSectionIds || [])]);
+    } else {
+      commonByKey.set(key, {
+        question: entry.question,
+        targetSectionIds: uniqueSections(entry.targetSectionIds || [])
+      });
+    }
+  }
+
+  const promotedKeys = new Set(
+    Array.from(commonByKey.entries())
+      .filter(([, item]) => (item.targetSectionIds || []).length >= 2)
+      .map(([key]) => key)
+  );
+
+  const sectionQuestions = (result.sectionQuestions || []).map((section) => ({
+    ...section,
+    questions: uniqueStrings(
+      (section.questions || [])
+        .map((item) => normalizeQuestionText(item, inferQuestionCategoryFromText(item)))
+        .filter((item) => item && !promotedKeys.has(normalizeQuestionComparisonKey(item)))
+    )
+  }));
+
+  return {
+    commonQuestions: Array.from(commonByKey.values())
+      .filter((item) => (item.targetSectionIds || []).length >= 2)
+      .slice(0, 3),
+    sectionQuestions
+  };
+}
+
+export function synthesizeCommonQuestionsFromMissing(commonMissing: CommonMissingItem[]): CommonQuestionSet[] {
+  return (commonMissing || [])
+    .filter((item) => isEligibleCommonMissing(item))
+    .map((item) => {
+      const category = inferCommonMissingCategory(item);
+      return {
+        question:
+          COMMON_QUESTION_FALLBACK_TEMPLATES[category] ||
+          '관련 변화와 배경을 구체적으로 설명해 주세요.',
+        targetSectionIds: uniqueSections(item.relatedSectionIds || []),
+        category
+      };
+    })
+    .slice(0, 3);
+}
+
+function buildCompactRubricSummary(sectionIds: string[]): string {
+  return buildCareRubricSummary(sectionIds);
+}
+
+function buildRubricSummaryForDrafts(sectionDrafts: Array<{ sectionId: string }>): string {
+  const ids = sectionDrafts
+    .map((draft) => draft.sectionId)
+    .filter((sectionId): sectionId is SupportedCareSectionId => sectionId in careSectionRubricMap);
+  return buildCareRubricSummary(ids);
+}
+
+function buildQnaSummary(qnaHistoryBySection: Record<string, Array<{ question: string; answer: string }>>): string {
+  const sections = Object.entries(qnaHistoryBySection || {});
+  if (sections.length === 0) return '(none)';
+
+  return sections
+    .map(([sectionId, history]) => {
+      const items =
+        history.length > 0
+          ? history.map((item) => `- Q: ${item.question}\n  A: ${item.answer}`).join('\n')
+          : '- (none)';
+      return `[${sectionId}]\n${items}`;
+    })
+    .join('\n\n');
+}
+
+function normalizeSectionDrafts(
+  sectionDrafts: Array<{
+    sectionId: SectionDraft['sectionId'];
+    evidenceCardIdsUsed: string[];
+    timelineEventIdsUsed?: string[];
+    draftText: string;
+    openIssues: string[];
+    evidenceLinks?: Array<{ sentence: string; evidenceCardIds: string[] }>;
+    unsupportedClaims?: Array<{ sentence: string; reason: string }>;
+  }>,
+  evidenceCards: EvidenceCard[]
+): SectionDraft[] {
+  const validIds = new Set(evidenceCards.map((card) => card.id));
+  return sectionDrafts.map((draft) => ({
+    ...draft,
+    evidenceCardIdsUsed: uniqueStrings((draft.evidenceCardIdsUsed || []).filter((id) => validIds.has(id))),
+    timelineEventIdsUsed: draft.timelineEventIdsUsed || [],
+    ...buildDraftTraceability({
+      draftText: draft.draftText || '',
+      evidenceCards,
+      preferredEvidenceIds: uniqueStrings((draft.evidenceCardIdsUsed || []).filter((id) => validIds.has(id)))
+    })
+  }));
 }
 
 function isGroundedInVisitText(snippet: string, visitText: string): boolean {
   const normalizedSnippet = normalizeForGrounding(snippet);
-  const normalizedVisitText = normalizeForGrounding(visitText);
-
-  if (!normalizedSnippet || normalizedSnippet.length < 4) {
-    return false;
-  }
-
-  return normalizedVisitText.includes(normalizedSnippet);
+  const normalizedVisit = normalizeForGrounding(visitText);
+  if (!normalizedSnippet || !normalizedVisit) return false;
+  if (normalizedVisit.includes(normalizedSnippet)) return true;
+  return textSimilarity(snippet, visitText) >= 0.45;
 }
 
-function normalizeEvidenceCards(
-  evidenceCards: EvidenceCard[],
-  visits: Array<{ index: number; date: string; text: string }>
-): EvidenceCard[] {
-  const seenIds = new Set<string>();
+export async function runEvidenceSplit(
+  preparedVisits: PreparedVisit[],
+  runtimeMeta?: ChainRuntimeMeta
+): Promise<EvidenceCard[]> {
+  const deidentifiedVisits: DeidentifiedVisitInput[] = preparedVisits.map((visit) => ({
+    index: visit.index,
+    date: visit.date,
+    text: visit.text,
+    riskLevel: 'LOW'
+  }));
+  const structuredVisitsText = buildNarrativeVisitPromptText(preparedVisits);
 
-  return (evidenceCards || []).map((card, index) => {
-    let normalizedId = UUID_PATTERN.test(String(card.id || '')) ? String(card.id) : randomUUID();
-    while (seenIds.has(normalizedId)) {
-      normalizedId = randomUUID();
-    }
-    seenIds.add(normalizedId);
-
-    return {
-      ...card,
-      id: normalizedId,
-      visitIndex: Number.isInteger(card.visitIndex) && card.visitIndex > 0 ? card.visitIndex : index + 1,
-      confidence:
-        typeof card.confidence === 'number'
-          ? Math.max(0, Math.min(1, card.confidence))
-          : 0.8
-    };
-  }).filter((card) => {
-    const visit = visits.find((item) => item.index === card.visitIndex) || visits[0];
-    return visit ? isGroundedInVisitText(card.normalizedText, visit.text) : false;
-  });
-}
-
-function normalizeSectionDrafts(sectionDrafts: SectionDraft[], evidenceCards: EvidenceCard[]): SectionDraft[] {
-  const validEvidenceIds = new Set(evidenceCards.map((card) => card.id));
-
-  return (sectionDrafts || []).map((draft) => {
-    const normalizedEvidenceIds = Array.from(
-      new Set((draft.evidenceCardIdsUsed || []).filter((id) => validEvidenceIds.has(id)))
-    );
-
-    return {
-      ...draft,
-      evidenceCardIdsUsed: normalizedEvidenceIds,
-      openIssues: draft.openIssues || []
-    };
-  });
-}
-
-export async function runEvidenceSplit(visits: Array<{ index: number; date: string; text: string }>): Promise<EvidenceCard[]> {
-  const visitsText = buildNarrativeVisitPromptText(visits);
-
-  const output = await callLLMWithSchema(
+  const result = await callLLMWithSchema(
     Chain1OutputSchema,
     chain1SystemPrompt,
-    buildChain1UserPrompt(visitsText),
-    { model: getModelForChain('CHAIN1'), label: 'CHAIN1 extraction' }
+    buildChain1UserPrompt(structuredVisitsText),
+    {
+      model: getModelForChain('chain1'),
+      label: 'CHAIN1 extraction',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
 
-  return normalizeEvidenceCards(output.evidenceCards ?? [], visits);
+  const normalizedCards: EvidenceCard[] = [];
+
+  for (const card of result.evidenceCards || []) {
+    const visitIndex = card.visitIndex || 1;
+    const visit = preparedVisits.find((item) => item.index === visitIndex);
+    const baseText = (card.sourceText || card.normalizedText || '').trim();
+    const matchedClause = findBestClauseMatch(baseText, visit);
+    const sourceText = matchedClause?.sourceText || card.sourceText || card.normalizedText || '';
+    const localNormalization = await normalizeTextWithTerms(sourceText);
+    const terms = localNormalization.terms.length > 0 ? localNormalization.terms : matchedClause?.terms || [];
+    const sectionHints = uniqueSections([
+      ...(card.tags || []),
+      ...(card.sectionHints || []),
+      ...(matchedClause?.sectionHints || []),
+      ...buildSectionHintsFromTerms(terms)
+    ]);
+    const normalizedText =
+      localNormalization.normalizedText && localNormalization.normalizedText !== sourceText
+        ? localNormalization.normalizedText
+        : matchedClause?.normalizedText || card.normalizedText || sourceText;
+
+    const groundedVisit = deidentifiedVisits.find((item) => item.index === visitIndex);
+    if (!groundedVisit || !sourceText.trim() || !isGroundedInVisitText(sourceText, groundedVisit.text || '')) {
+      continue;
+    }
+
+    normalizedCards.push({
+      id: UUID_PATTERN.test(card.id || '') ? card.id : randomUUID(),
+      visitIndex,
+      visitDateTime: card.visitDateTime || groundedVisit.date || '',
+      sourceText,
+      normalizedText,
+      evidenceType: card.evidenceType && card.evidenceType !== 'other'
+        ? card.evidenceType
+        : inferEvidenceType(sectionHints),
+      tags: uniqueSections(card.tags || sectionHints),
+      sectionHints,
+      terms,
+      sourceRef: card.sourceRef,
+      confidence: clampConfidence(card.confidence)
+    });
+  }
+
+  return repairSplitClinicalEvidenceCards(normalizedCards, preparedVisits).cards as EvidenceCard[];
 }
 
-export async function runSectionAssessment(evidenceCards: EvidenceCard[]): Promise<SectionState[]> {
-  const output = await callLLMWithSchema(
-    Chain2OutputSchema,
-    chain2SystemPrompt,
-    buildChain2UserPrompt(buildSectionAssessmentSummary(evidenceCards)),
-    { model: getModelForChain('CHAIN2'), label: 'CHAIN2 assessment' }
+export async function runSectionAssessment(
+  evidenceCards: EvidenceCard[],
+  runtimeMeta?: ChainRuntimeMeta
+): Promise<SectionAssessment[]> {
+  const heuristicAssessments = (CareSectionEnum.options as CareSection[]).map((sectionId) =>
+    buildHeuristicAssessment(sectionId, evidenceCards)
   );
 
-  return (output.sectionAssessments ?? []).map((assessment: SectionAssessment) => ({
-    sectionId: assessment.sectionId,
-    status: assessment.status,
-    rationaleText: assessment.rationaleText,
-    missingInfoBullets: [],
-    recommendedQuestions: []
-  }));
+  const llmTargetSectionIds = heuristicAssessments
+    .filter((item) => shouldRefineAssessmentWithLLM(item.sectionId, item, evidenceCards))
+    .map((item) => item.sectionId);
+
+  if (llmTargetSectionIds.length === 0) {
+    runtimeMeta?.onUsage?.(null);
+    return heuristicAssessments;
+  }
+
+  const result = await callLLMWithSchema(
+    Chain2OutputSchema,
+    chain2SystemPrompt,
+    buildChain2UserPrompt({
+      evidenceSummary: buildSectionAssessmentSummary(evidenceCards, llmTargetSectionIds),
+      targetSectionIds: llmTargetSectionIds
+    }),
+    {
+      model: getModelForChain('chain2'),
+      label: 'CHAIN2 assessment',
+      onUsage: runtimeMeta?.onUsage
+    }
+  );
+
+  const llmBySection = new Map((result.sectionAssessments || []).map((item) => [item.sectionId, item]));
+
+  return heuristicAssessments.map((item) => llmBySection.get(item.sectionId) || item);
 }
 
 export async function runInitialSectionDrafts(
   evidenceCards: EvidenceCard[],
-  sectionStates: SectionState[]
+  sectionAssessments: SectionAssessment[],
+  runtimeMeta?: ChainRuntimeMeta
 ): Promise<SectionDraft[]> {
-  const statusSummary = sectionStates
-    .map((state) => `${state.sectionId}: ${state.status}`)
-    .join('\n');
-  const compactRubricSummary = buildCompactRubricSummary(sectionStates.map((state) => state.sectionId));
+  const statusSummary = (sectionAssessments || [])
+    .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
+    .join('\n\n');
 
-  const output = await callLLMWithSchema(
+  const result = await callLLMWithSchema(
     Chain3OutputSchema,
     chain3SystemPrompt,
     buildChain3UserPrompt(
       buildTaggedEvidenceSummary(evidenceCards),
       statusSummary,
-      compactRubricSummary
+      buildCompactRubricSummary(CORE_AI_SECTIONS)
     ),
-    { model: getModelForChain('CHAIN3'), label: 'CHAIN3 draft' }
+    {
+      model: getModelForChain('chain3'),
+      label: 'CHAIN3 draft',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
 
-  return normalizeSectionDrafts(output.sectionDrafts ?? [], evidenceCards);
+  return normalizeSectionDrafts(result.sectionDrafts || [], evidenceCards);
 }
 
 export async function runSectionMissingDetection(params: {
   sectionDrafts: SectionDraft[];
   evidenceCards: EvidenceCard[];
   caseTitle?: string;
-}): Promise<{ sectionMissing: SectionMissing[]; commonMissing: CommonMissingItem[] }> {
-  const output = await callLLMWithSchema(
+},
+runtimeMeta?: ChainRuntimeMeta): Promise<{ sectionMissing: SectionMissing[]; commonMissing: CommonMissingItem[] }> {
+  const result = await callLLMWithSchema(
     Chain4MissingOutputSchema,
     chain4MissingSystemPrompt,
     buildChain4MissingUserPrompt({
@@ -420,13 +1492,17 @@ export async function runSectionMissingDetection(params: {
       evidenceSummary: buildTaggedEvidenceSummary(params.evidenceCards),
       rubricSummary: buildRubricSummaryForDrafts(params.sectionDrafts)
     }),
-    { model: getModelForChain('CHAIN4'), label: 'CHAIN4 missing' }
+    {
+      model: getModelForChain('chain4'),
+      label: 'CHAIN4 missing',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
 
-  return {
-    sectionMissing: output.sectionMissing ?? [],
-    commonMissing: output.commonMissing ?? []
-  };
+  return mergeCommonMissingWithOverlaps({
+    sectionMissing: result.sectionMissing || [],
+    commonMissing: result.commonMissing || []
+  });
 }
 
 export async function runQuestionGeneration(params: {
@@ -434,8 +1510,9 @@ export async function runQuestionGeneration(params: {
   sectionMissing: SectionMissing[];
   commonMissing: CommonMissingItem[];
   caseTitle?: string;
-}): Promise<{ commonQuestions: CommonQuestionSet[]; sectionQuestions: SectionQuestionSet[] }> {
-  const output = await callLLMWithSchema(
+},
+runtimeMeta?: ChainRuntimeMeta): Promise<{ commonQuestions: CommonQuestionSet[]; sectionQuestions: SectionQuestionSet[] }> {
+  const result = await callLLMWithSchema(
     Chain5QuestionOutputSchema,
     chain5QuestionSystemPrompt,
     buildChain5QuestionUserPrompt({
@@ -445,30 +1522,53 @@ export async function runQuestionGeneration(params: {
       commonMissingSummary: buildCommonMissingSummary(params.commonMissing),
       rubricSummary: buildRubricSummaryForDrafts(params.sectionDrafts)
     }),
-    { model: getModelForChain('CHAIN5'), label: 'CHAIN5 questions' }
+    {
+      model: getModelForChain('chain5'),
+      label: 'CHAIN5 questions',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
 
-  return {
-    commonQuestions: output.commonQuestions ?? [],
-    sectionQuestions: output.sectionQuestions ?? []
-  };
+  const sanitized = sanitizeGeneratedQuestionSets({
+    commonQuestions: result.commonQuestions || [],
+    sectionQuestions: result.sectionQuestions || []
+  });
+  const merged = mergeCommonQuestionsWithOverlaps({
+    commonQuestions: sanitized.commonQuestions,
+    sectionQuestions: sanitized.sectionQuestions
+  });
+  const fallbackCommonQuestions = synthesizeCommonQuestionsFromMissing(params.commonMissing);
+  const finalCommonQuestions = mergeCommonQuestionsWithOverlaps({
+    commonQuestions: [...merged.commonQuestions, ...fallbackCommonQuestions],
+    sectionQuestions: merged.sectionQuestions
+  });
+
+  return finalCommonQuestions;
 }
 
 export async function runSectionDraftUpdate(params: {
   sectionId: string;
   currentDraft: string;
   evidenceCards: EvidenceCard[];
-  qnaHistory: Array<{ question: string; answer: string; timestamp: string }>;
+  qnaHistory: Array<{ question: string; answer: string }>;
   pendingItems: string[];
   question: string;
   answer: string;
-}): Promise<Chain6SectionUpdateOutput> {
-  const evidenceText = params.evidenceCards.map((card) => `[#${card.id}] ${card.normalizedText}`).join('\n');
-  const qnaHistoryText = params.qnaHistory
-    .map((qna, idx) => `Q${idx + 1}: ${qna.question}\nA${idx + 1}: ${qna.answer}`)
-    .join('\n\n');
+},
+runtimeMeta?: ChainRuntimeMeta): Promise<Chain6SectionUpdateOutput> {
+  const evidenceText =
+    params.evidenceCards.length > 0
+      ? params.evidenceCards
+          .map((card) => `- ${card.normalizedText || card.sourceText || ''}`)
+          .join('\n')
+      : '(none)';
 
-  return callLLMWithSchema(
+  const qnaHistoryText =
+    params.qnaHistory.length > 0
+      ? params.qnaHistory.map((item) => `- Q: ${item.question}\n  A: ${item.answer}`).join('\n')
+      : '(none)';
+
+  const result = await callLLMWithSchema(
     Chain6SectionUpdateOutputSchema,
     chain6UpdateSystemPrompt,
     buildChain6UpdateUserPrompt({
@@ -480,23 +1580,45 @@ export async function runSectionDraftUpdate(params: {
       question: params.question,
       answer: params.answer
     }),
-    { model: getModelForChain('CHAIN6'), label: `CHAIN6 update ${params.sectionId}` }
+    {
+      model: getModelForChain('chain6'),
+      label: 'CHAIN6 update',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
+
+  const traceability = buildDraftTraceability({
+    draftText: result.updatedDraftText || params.currentDraft || '',
+    evidenceCards: params.evidenceCards
+  });
+
+  return {
+    ...result,
+    evidenceLinks: traceability.evidenceLinks,
+    unsupportedClaims: traceability.unsupportedClaims
+  };
 }
 
 export async function runSectionAdequacyReview(params: {
   sectionId: string;
   currentDraft: string;
   evidenceCards: EvidenceCard[];
-  qnaHistory: Array<{ question: string; answer: string; timestamp?: string }>;
-}): Promise<SectionAdequacyReviewOutput> {
-  const evidenceSummary = params.evidenceCards.map((card) => `[#${card.id}] ${card.normalizedText}`).join('\n');
-  const qnaSummary = params.qnaHistory
-    .map((item, index) => `Q${index + 1}: ${item.question}\nA${index + 1}: ${item.answer}`)
-    .join('\n\n');
+  qnaHistory: Array<{ question: string; answer: string }>;
+},
+runtimeMeta?: ChainRuntimeMeta): Promise<SectionAdequacyReviewOutput> {
+  const evidenceSummary =
+    params.evidenceCards.length > 0
+      ? params.evidenceCards
+          .map((card) => `- ${card.normalizedText || card.sourceText || ''}`)
+          .join('\n')
+      : '(none)';
+  const qnaSummary =
+    params.qnaHistory.length > 0
+      ? params.qnaHistory.map((item) => `- Q: ${item.question}\n  A: ${item.answer}`).join('\n')
+      : '(none)';
 
-  return callLLMWithSchema(
-    SectionAdequacyReviewOutputSchema,
+  return callLLMWithSchema<SectionAdequacyReviewOutput>(
+    SectionAdequacyReviewOutputSchema as any,
     sectionAdequacyReviewSystemPrompt,
     buildSectionAdequacyReviewUserPrompt({
       sectionId: params.sectionId,
@@ -505,7 +1627,11 @@ export async function runSectionAdequacyReview(params: {
       qnaSummary,
       rubricSummary: buildCareRubricSummary([params.sectionId])
     }),
-    { model: getModelForChain('CHAIN4'), label: `ADEQUACY ${params.sectionId}` }
+    {
+      model: getModelForChain('review'),
+      label: 'SECTION review',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
 }
 
@@ -514,32 +1640,60 @@ export async function runFinalManuscriptCompose(params: {
   evidenceCards: EvidenceCard[];
   qnaHistoryBySection: Record<string, Array<{ question: string; answer: string }>>;
   contributionAnswers?: Array<{ question: string; answer: string }>;
-}): Promise<FinalDraft> {
-  const qnaSummary = Object.entries(params.qnaHistoryBySection)
-    .map(([section, list]) => {
-      const text = list
-        .map((qna, idx) => `Q${idx + 1}: ${qna.question}\nA${idx + 1}: ${qna.answer}`)
-        .join('\n');
-      return `[${section}]\n${text}`;
-    })
-    .join('\n\n---\n\n');
+},
+runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
+  const contributionAnswersText =
+    params.contributionAnswers && params.contributionAnswers.length > 0
+      ? params.contributionAnswers.map((item) => `- ${item.question}: ${item.answer}`).join('\n')
+      : '(none)';
 
-  const contributionAnswersText = params.contributionAnswers
-    ?.map((qa, idx) => `Q${idx + 1}: ${qa.question}\nA${idx + 1}: ${qa.answer}`)
-    .join('\n') || '';
-
-  return callLLMWithSchema(
+  const result = await callLLMWithSchema(
     FinalDraftSchema,
     chain7SystemPrompt,
     buildChain7UserPrompt({
       sectionDraftSummary: buildDraftSummary(params.sectionDrafts),
       evidenceSummary: buildTaggedEvidenceSummary(params.evidenceCards),
-      qnaSummary,
+      qnaSummary: buildQnaSummary(params.qnaHistoryBySection),
       contributionAnswersText,
-      rubricSummary: buildRubricSummaryForDrafts(params.sectionDrafts)
+      rubricSummary: buildCareRubricSummary()
     }),
-    { model: getModelForChain('CHAIN7'), label: 'CHAIN7 final compose' }
+    {
+      model: getModelForChain('chain7'),
+      label: 'CHAIN7 final',
+      onUsage: runtimeMeta?.onUsage
+    }
   );
+
+  const sectionTraceability = params.sectionDrafts.reduce<Record<string, { evidenceLinks: any[]; unsupportedClaims: any[] }>>(
+    (acc, draft) => {
+      acc[draft.sectionId] = {
+        evidenceLinks: draft.evidenceLinks || [],
+        unsupportedClaims: draft.unsupportedClaims || []
+      };
+      return acc;
+    },
+    {}
+  );
+
+  const keywordSuggestions = uniqueStrings(
+    (result.keywordSuggestions || []).map((item) => String(item || '').trim())
+  );
+  const normalizedKeywordLine =
+    String(result.fullTextBySection.KEYWORDS || '').trim() ||
+    keywordSuggestions.join(', ');
+
+  return {
+    ...result,
+    fullTextBySection: {
+      ...result.fullTextBySection,
+      KEYWORDS: normalizedKeywordLine
+    },
+    keywordSuggestions:
+      keywordSuggestions.length > 0
+        ? keywordSuggestions
+        : uniqueStrings(normalizedKeywordLine.split(',').map((item) => item.trim())),
+    sectionTraceability
+  };
 }
 
 export const runChain1_splitEvidence = runEvidenceSplit;
@@ -549,8 +1703,6 @@ export const runChain4_detectMissing = runSectionMissingDetection;
 export const runChain5_generateQuestions = runQuestionGeneration;
 export const runChain6_updateDraft = runSectionDraftUpdate;
 export const runChain7_finalCompose = runFinalManuscriptCompose;
-
-// Legacy aliases retained while routes are being simplified.
 export const runLegacySectionDraftUpdate = runSectionDraftUpdate;
 export const runFastSectionDraftUpdate = runSectionDraftUpdate;
 export const runFinalDraftCompose = runFinalManuscriptCompose;

@@ -4,20 +4,25 @@ export const chain2SystemPrompt = `
 제공된 EMR evidence만 보고, 각 CARE 섹션이 현재 초안 가능한지 평가하세요.
 
 중요 규칙:
-1. 판단은 오직 evidence 내용에만 근거하세요.
-2. 추측하지 마세요.
+1. 판단은 오직 evidence 내용만 근거로 하세요.
+2. 추론하지 마세요.
 3. 이 단계에서는 질문을 생성하지 마세요.
 4. 이 단계에서는 missing item을 나열하지 마세요.
 5. 섹션별 가능성과 짧은 근거만 반환하세요.
-6. 요청된 JSON 형식으로 각 섹션당 1개의 평가를 반환하세요.
+6. 요청된 JSON 형식으로 각 섹션별 1개의 평가를 반환하세요.
 `;
 
-export const buildChain2UserPrompt = (evidenceSummary: string) => `
-아래는 EMR에서 정리된 CARE 섹션별 evidence 요약입니다.
+export const buildChain2UserPrompt = (params: {
+  evidenceSummary: string;
+  targetSectionIds?: string[];
+}) => `
+아래는 EMR에서 정리한 CARE 섹션별 evidence 요약입니다.
 
-${evidenceSummary}
+${params.evidenceSummary}
 
-각 섹션에 대해 아래 상태 중 하나를 선택하세요:
+${params.targetSectionIds?.length ? `이번에는 다음 섹션만 평가하세요: ${params.targetSectionIds.join(', ')}` : ''}
+
+각 섹션마다 아래 상태 중 하나를 선택하세요.
 - IMPOSSIBLE
 - INCOMPLETE
 - READY
@@ -29,10 +34,10 @@ ${evidenceSummary}
 
 출력 규칙:
 - sectionId, status, rationaleText만 반환하세요.
-- rationaleText는 현재 evidence가 왜 충분하거나 부족한지 짧게 설명하세요.
+- rationaleText에는 현재 evidence가 왜 충분하거나 부족한지 짧게 설명하세요.
 - missing item이나 질문은 포함하지 마세요.
 
-반드시 JSON만 반환하세요:
+반드시 JSON만 반환하세요.
 {
   "sectionAssessments": [
     {

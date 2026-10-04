@@ -1,6 +1,6 @@
 .case-list-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--bg);
   padding: 2rem;
 }
 
@@ -18,72 +18,67 @@
 
 .case-list-page h1 {
   font-size: 2rem;
-  color: #333;
+  color: var(--text);
   margin: 0;
 }
 
 .btn-back {
-  background: #6c757d;
+  background: var(--neutral);
   color: white;
   border: none;
   padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-size: 1rem;
   transition: background 0.2s;
 }
 
 .btn-back:hover {
-  background: #5a6268;
+  background: var(--neutral-hover);
 }
 
 .error-message {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--danger-soft);
+  color: var(--danger-text);
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 1.5rem;
 }
 
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.empty-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
 }
 
 .empty-state p {
   font-size: 1.2rem;
-  color: #666;
+  color: var(--text-muted);
   margin-bottom: 2rem;
 }
 
 .btn-primary {
-  background: #667eea;
+  background: var(--accent);
   color: white;
   border: none;
   padding: 0.75rem 2rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-size: 1rem;
   transition: background 0.2s;
 }
 
 .btn-primary:hover {
-  background: #5568d3;
+  background: var(--accent-hover);
 }
 
 .loading {
   text-align: center;
   padding: 4rem;
   font-size: 1.2rem;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .cases-list {
@@ -92,18 +87,17 @@
 }
 
 .case-card {
-  background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   padding: 1.5rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .case-card:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
-  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
 }
 
 .case-header {
@@ -115,13 +109,13 @@
 
 .case-header h3 {
   font-size: 1.25rem;
-  color: #333;
+  color: var(--text);
   margin: 0;
 }
 
 .case-date {
   font-size: 0.9rem;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .case-info {
@@ -132,5 +126,5 @@
 
 .info-item {
   font-size: 0.9rem;
-  color: #666;
+  color: var(--text-muted);
 }

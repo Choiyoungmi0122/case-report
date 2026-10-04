@@ -34,3 +34,7 @@ Thumbs.db
 .vscode/
 .idea/
 .cursor/
+.claude/
+
+# ---- local QA / generated artifacts ----
+tmp/

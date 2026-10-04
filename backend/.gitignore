@@ -3,3 +3,7 @@ dist/
 data/
 .env
 *.log
+tmp_*/
+tmp*.docx
+tmp*.zip
+tmp*.ps1

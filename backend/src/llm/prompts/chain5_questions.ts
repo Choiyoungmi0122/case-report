@@ -1,27 +1,53 @@
 export const chain5QuestionSystemPrompt = `
-당신은 CARE 증례보고를 보완하기 위한 후속 질문 생성기입니다.
+You generate concise follow-up questions for a CARE case report workflow.
 
-목표:
-- missing item을 의사가 바로 답할 수 있는 자연스러운 한국어 질문으로 바꿉니다.
+Goal:
+- Convert missing items into natural, answerable user questions.
+- Common questions should only be used when one answer can truly support 2 or more CARE sections.
+- Generate diverse questions based on the actual missing category, not a fixed psychosocial template.
+- All user-facing questions must be written in Korean.
 
-핵심 규칙:
-1. 제공된 missing item만 바탕으로 질문을 만듭니다.
-2. 이미 draft나 evidence에 있는 내용은 다시 묻지 않습니다.
-3. 질문은 짧지만 구체적으로, 답변 문장을 바로 초안에 반영할 수 있게 만듭니다.
-4. field name이나 schema label을 그대로 묻지 않습니다.
-5. 공통 질문은 여러 섹션에 함께 반영될 정보만 묻습니다.
-6. 섹션 질문은 해당 섹션을 완성하는 데 필요한 정보만 묻습니다.
+Rules:
+1. Use the missing items as the source of truth.
+2. Prefer short, natural questions that users can answer from facts or experience.
+3. Keep one main topic per question.
+4. If coverage requires it, generate 2-3 short questions instead of one vague broad question.
+5. Maximum common questions: 3.
+6. Do not overproduce psychosocial questions.
+7. Family conflict/stress questions are allowed only when:
+   - evidence explicitly mentions family conflict, stress, work stress, or a psychosocial event
+   - and the information can truly be reused in at least 2 relevant sections
+   - and the current drafts do not already cover it well
+8. Do not ask adverse event or consent questions by default.
+9. Remove paraphrase duplicates. If two common questions mean nearly the same thing, keep only one.
+10. Do not output English questions.
+11. Internal category values may remain English enums, but question text itself must be Korean.
 
-공통 질문 감각:
-- 가족 갈등, 스트레스, 생활 배경, 사회적 맥락
-- 증상과 배경 요인의 관련성
-- 진단 해석과 discussion에 동시에 필요한 기능 변화
-- 환자 관점이나 치료 의미가 논의에도 연결되는 정보
+Suggested category directions:
+- symptom_course: explain how symptoms changed over time or across visits
+- functional_impact: explain sleep, appetite, daily life, work, relationships, or functioning
+- treatment_response: explain perceived improvement, most improved symptoms, residual symptoms
+- patient_perspective: explain what the patient felt was important or meaningful
+- diagnostic_reasoning: explain what supported the diagnosis or why another diagnosis was excluded
+- follow_up_outcome: explain follow-up changes and longer-term course
+- psychosocial_context: explain stress/family/life context only when explicitly supported
 
-질문 톤:
-- 체크리스트를 읽는 말투보다, 논문 초안을 보완하기 위해 필요한 정보를 요청하는 말투로 적습니다.
-- 너무 포괄적으로 묻지 말고, 의사가 짧게 답해도 초안에 바로 들어갈 수 있게 만듭니다.
-- "왜 그렇게 판단했는지", "논문에 반영할 수 있도록 구체적으로" 같은 표현은 적절히 사용할 수 있습니다.
+Return JSON only:
+{
+  "commonQuestions": [
+    {
+      "question": "...",
+      "targetSectionIds": ["PATIENT_INFORMATION", "DISCUSSION_CONCLUSION"],
+      "category": "functional_impact"
+    }
+  ],
+  "sectionQuestions": [
+    {
+      "sectionId": "DIAGNOSTIC_ASSESSMENT",
+      "questions": ["..."]
+    }
+  ]
+}
 `;
 
 export const buildChain5QuestionUserPrompt = (params: {
@@ -31,45 +57,33 @@ export const buildChain5QuestionUserPrompt = (params: {
   commonMissingSummary: string;
   rubricSummary: string;
 }) => `
-현재 사용자가 정한 증례 제목:
-${params.caseTitle?.trim() || '(제목 미지정)'}
+Generate question sets for the CARE case below.
 
-현재 섹션 초안:
+Case title:
+${params.caseTitle?.trim() || '(untitled)'}
+
+Current section drafts:
 ${params.draftSummary}
 
-섹션별 missing item:
+Section-specific missing items:
 ${params.sectionMissingSummary}
 
-공통 missing item:
+Common missing items:
 ${params.commonMissingSummary}
 
-섹션별 CARE rubric:
+CARE rubric summary:
 ${params.rubricSummary}
 
-추가 지침:
-- 제목이 있다면, 제목이 강조하는 증례의 중심 주제와 핵심 메시지에 맞게 질문 우선순위를 조정합니다.
-- 단, 제목을 맞추기 위해 evidence에 없는 내용을 유도하거나 과도하게 몰아가지는 않습니다.
-- Patient Information 질문은 환자 배경과 psychosocial context를 자연스럽게 묻게 합니다.
-- Diagnostic Assessment 질문은 진단 근거, 감별 과정, 평가 방법이 드러나게 묻게 합니다.
-- 가족 갈등, 스트레스, psychosocial context, 기능 변화처럼 discussion에도 중요한 내용은 공통 질문으로 우선 만듭니다.
-- 공통 질문은 targetSectionIds가 2개 이상이 되도록 하세요.
-- 섹션 질문은 한 번에 너무 많은 항목을 묻지 마세요.
+Instructions:
+- Use the commonMissing categories to diversify common questions.
+- Do not fall back to a family-conflict or stress question unless the missing item clearly requires it.
+- Prefer treatment_response, symptom_course, functional_impact, follow_up_outcome, diagnostic_reasoning, or patient_perspective when those better fit the evidence.
+- Keep common questions distinct from each other.
+- Keep wording natural. Avoid phrases like "so that it can be reflected in the manuscript".
+- 모든 질문은 한국어로 작성하세요.
+- 영어 질문이나 영어 문장 조각을 출력하지 마세요.
+- common question, section question 모두 한국어만 사용하세요.
+- If there is no good common question, return an empty commonQuestions array.
 
-반드시 JSON만 반환하세요.
-{
-  "commonQuestions": [
-    {
-      "question": "가족 갈등이나 스트레스가 증상 악화와 어떤 시점 또는 양상으로 연결되었는지 논문에 반영할 수 있도록 구체적으로 알려주세요.",
-      "targetSectionIds": ["PATIENT_INFORMATION", "DIAGNOSTIC_ASSESSMENT", "DISCUSSION_CONCLUSION"]
-    }
-  ],
-  "sectionQuestions": [
-    {
-      "sectionId": "DIAGNOSTIC_ASSESSMENT",
-      "questions": [
-        "화병 가능성을 고려한 근거와 감별 과정이 있다면 논문에 반영할 수 있도록 구체적으로 알려주세요."
-      ]
-    }
-  ]
-}
+Return JSON only.
 `;

@@ -1,7 +1,15 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { caseApi, SectionDetail } from '../services/api';
+import ChainProgressBanner from '../components/ChainProgressBanner';
+import PendingTermConfirmationModal from '../components/PendingTermConfirmationModal';
+import TimelineDraftView from '../components/TimelineDraftView';
+import { caseApi, Case, CommonAnswerSubmitResponse, CommonQuestionItem, SectionDetail } from '../services/api';
+import { getReviewRequiredDescription, getReviewRequiredTitle, getStaleReasonLabel } from '../utils/caseStatusUi';
+import { getCommonQuestionCategoryLabel, normalizeQuestionTextForDisplay } from '../utils/commonQuestionUi';
+import { buildAcademicKeywordPreview, buildAcademicTitlePreview } from '../utils/frontMatterPreview';
+import { createResearchEventId, logResearchEvent } from '../utils/research';
 import { formatSectionDraftForDisplay } from '../utils/sectionDraftFormatter';
+import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import './SectionDetailPage.css';
 
 type QnaItem = {
@@ -14,6 +22,7 @@ type QuestionItem = {
   id: string;
   text: string;
   kind: 'common' | 'section';
+  category?: string;
   answered?: boolean;
 };
 
@@ -22,7 +31,7 @@ type SectionSubmitResult = {
   updatedDraftsBySection: Record<string, string>;
   nextQuestion?: string;
   sectionQuestions: string[];
-  commonQuestions: string[];
+  commonQuestions: CommonQuestionItem[];
   sectionMissingInfo: string[];
   commonMissingInfo: string[];
   qnaHistory: QnaItem[];
@@ -41,7 +50,7 @@ const SECTION_LABELS: Record<string, string> = {
   DIAGNOSTIC_ASSESSMENT: '진단 평가',
   THERAPEUTIC_INTERVENTIONS: '치료 개입',
   FOLLOW_UP_OUTCOMES: '추적 결과',
-  DISCUSSION_CONCLUSION: '논의 및 결론',
+  DISCUSSION_CONCLUSION: '논의',
   PATIENT_PERSPECTIVE: '환자 관점',
   INFORMED_CONSENT: '사전 동의'
 };
@@ -53,6 +62,7 @@ const QUESTION_STAGE_SECTIONS = [
   'DIAGNOSTIC_ASSESSMENT',
   'THERAPEUTIC_INTERVENTIONS',
   'FOLLOW_UP_OUTCOMES',
+  'DISCUSSION_CONCLUSION',
   'PATIENT_PERSPECTIVE'
 ] as const;
 
@@ -89,7 +99,7 @@ function getSectionTitle(sectionId?: string) {
 function splitIntoSentences(text: string) {
   return String(text || '')
     .split(/\n+/)
-    .flatMap((line) => line.split(/(?<=[.!??ㅼ슂])\s+/))
+    .flatMap((line) => line.split(/(?<=[.!?])\s+|(?<=[다요])\s+/))
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -105,13 +115,24 @@ function compactText(text: string, maxLength = 120) {
   return `${normalized.slice(0, maxLength - 1).trim()}...`;
 }
 
-function extractKeywordCandidates(text: string) {
-  const source = String(text || '');
-  const matches = source.match(/[\uAC00-\uD7A3A-Za-z0-9()/-]{2,}/g) || [];
-  return matches.filter((item) => item.length >= 2);
+function getReviewScoreLabel(score?: 'LOW' | 'MEDIUM' | 'HIGH') {
+  if (score === 'HIGH') return '높음';
+  if (score === 'MEDIUM') return '보통';
+  if (score === 'LOW') return '낮음';
+  return '-';
 }
 
-function buildFrontMatterPreview(draftsBySection: Record<string, string>): FrontMatterPreview | null {
+function getEvidenceGroundingLabel(value?: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'UNSUPPORTED_OR_UNVERIFIABLE') {
+  if (value === 'SUPPORTED') return '충분히 근거 기반';
+  if (value === 'PARTIALLY_SUPPORTED') return '일부 근거 보완 필요';
+  if (value === 'UNSUPPORTED_OR_UNVERIFIABLE') return '근거 부족 또는 검증 어려움';
+  return '-';
+}
+
+function buildFrontMatterPreview(
+  draftsBySection: Record<string, string>,
+  evidenceCards: Case['evidenceCards'] = []
+): FrontMatterPreview | null {
   const patient = draftsBySection.PATIENT_INFORMATION || '';
   const clinical = draftsBySection.CLINICAL_FINDINGS || '';
   const timeline = draftsBySection.TIMELINE || '';
@@ -127,23 +148,8 @@ function buildFrontMatterPreview(draftsBySection: Record<string, string>): Front
     return null;
   }
 
-  const titleSeed =
-    compactText(firstSentence(diagnostic), 46) ||
-    compactText(firstSentence(clinical), 46) ||
-    compactText(firstSentence(patient), 46);
-
-  const title = titleSeed ? `${titleSeed} 증례보고` : '현재 초안 기반 증례보고';
-
-  const keywordPool = [
-    ...extractKeywordCandidates(diagnostic),
-    ...extractKeywordCandidates(clinical),
-    ...extractKeywordCandidates(intervention),
-    ...extractKeywordCandidates(followUp)
-  ];
-
-  const keywords = Array.from(new Set(keywordPool))
-    .filter((item) => !['?섏옄', '利앹긽', '移섎즺', '利앸?', '蹂닿퀬', '寃쎌슦'].includes(item))
-    .slice(0, 5);
+  const title = buildAcademicTitlePreview(draftsBySection, evidenceCards || []);
+  const keywords = buildAcademicKeywordPreview(draftsBySection, evidenceCards || []);
 
   const abstractParts = [
     firstSentence(patient),
@@ -247,19 +253,37 @@ function shouldFormatSection(sectionId: string) {
 }
 
 function makeQuestionItems(
-  questions: string[] | undefined,
+  questions: Array<string | CommonQuestionItem> | undefined,
   kind: 'common' | 'section',
   qnaHistory: QnaItem[] = []
 ): QuestionItem[] {
-  const answeredSet = new Set(qnaHistory.map((item) => item.question.trim()));
+  const answeredSet = new Set(
+    qnaHistory.map((item) => normalizeQuestionTextForDisplay(item.question).trim())
+  );
+  const seenTexts = new Set<string>();
 
   return (questions || [])
-    .filter((text) => String(text || '').trim().length > 0)
-    .map((text, idx) => ({
-      id: `${kind}-${idx}-${text}`,
-      text,
+    .map((entry) =>
+      typeof entry === 'string'
+        ? { text: entry, category: undefined }
+        : { text: entry?.question || '', category: entry?.category }
+    )
+    .map((entry) => ({
+      ...entry,
+      text: normalizeQuestionTextForDisplay(entry.text, entry.category)
+    }))
+    .filter((entry) => {
+      const text = String(entry.text || '').trim();
+      if (!text || seenTexts.has(text)) return false;
+      seenTexts.add(text);
+      return true;
+    })
+    .map((entry, idx) => ({
+      id: `${kind}-${idx}-${entry.text}`,
+      text: entry.text,
       kind,
-      answered: answeredSet.has(text.trim())
+      category: entry.category,
+      answered: answeredSet.has(entry.text.trim())
     }));
 }
 
@@ -292,13 +316,13 @@ function HistoryList({
         .map((item, idx) => (
           <div key={`${item.question}-${idx}`} className="chat-message">
             <div className="message-question">
-              <div className="message-avatar">Q</div>
+              <div className="message-avatar">질문</div>
               <div className="message-content">
                 <div className="message-text">{item.question}</div>
               </div>
             </div>
             <div className="message-answer">
-              <div className="message-avatar answer">A</div>
+              <div className="message-avatar answer">답변</div>
               <div className="message-content">
                 <div className="message-text">{item.answer}</div>
               </div>
@@ -309,10 +333,12 @@ function HistoryList({
   );
 }
 
-export default function SectionDetailPage() {
+export default function SectionDetailPage({ studyMode = false }: { studyMode?: boolean }) {
   const { caseId, sectionId } = useParams();
   const navigate = useNavigate();
+  const writeBasePath = studyMode ? '/study/write' : '';
 
+  const [caseData, setCaseData] = useState<Case | null>(null);
   const [section, setSection] = useState<SectionDetail | null>(null);
   const [draftsBySection, setDraftsBySection] = useState<Record<string, string>>({});
   const [selectedCommonQuestion, setSelectedCommonQuestion] = useState<QuestionItem | null>(null);
@@ -331,10 +357,12 @@ export default function SectionDetailPage() {
   const [isSavingFrontMatter, setIsSavingFrontMatter] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [isPendingTermModalOpen, setIsPendingTermModalOpen] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const currentPreviewSectionRef = useRef<HTMLDivElement | null>(null);
+  const loggedOpenRef = useRef<string | null>(null);
 
   const isQuestionStageSection = sectionId
     ? QUESTION_STAGE_SECTIONS.includes(sectionId as (typeof QUESTION_STAGE_SECTIONS)[number])
@@ -344,9 +372,72 @@ export default function SectionDetailPage() {
     if (!caseId || !sectionId || !isQuestionStageSection) return;
 
     const sectionResult = await caseApi.getSectionDetail(caseId, sectionId);
+    if ((sectionResult.caseSummary?.mode || 'write') === 'scaffold') {
+      navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/sections/${sectionId}`, { replace: true });
+      return;
+    }
     setSection(sectionResult);
+    setCaseData(sectionResult.caseSummary || null);
     setDraftsBySection(sectionResult.draftsBySection || {});
     setCanUndo(Boolean(sectionResult.canUndo));
+  };
+
+  const applyCaseStatePatch = (payload: {
+    draftsBySection?: Record<string, string>;
+    sectionStates?: Array<{
+      sectionId: string;
+      status: string;
+      rationaleText: string;
+      missingInfoBullets: string[];
+      recommendedQuestions: string[];
+    }>;
+    commonQuestionSets?: Array<{ question: string; category?: string }>;
+    commonMissingItems?: string[];
+    staleState?: any;
+    finalComposeStatus?: any;
+    finalDraft?: any;
+    qnaHistory?: Array<{ question: string; answer: string; timestamp: string }>;
+    commonQnaHistory?: Array<{ question: string; answer: string; timestamp: string }>;
+  }) => {
+    const nextDraftMap = mergeDraftMaps(draftsBySection, payload.draftsBySection || {});
+    const nextSectionState = (payload.sectionStates || caseData?.sectionStates || []).find(
+      (item) => item.sectionId === sectionId
+    );
+    setDraftsBySection(nextDraftMap);
+    setCaseData((prev) =>
+      prev
+        ? {
+            ...prev,
+            draftsBySection: mergeDraftMaps(prev.draftsBySection || {}, payload.draftsBySection || {}),
+            sectionStates: payload.sectionStates || prev.sectionStates,
+            commonQuestionSets: payload.commonQuestionSets || prev.commonQuestionSets,
+            commonMissingItems: payload.commonMissingItems || prev.commonMissingItems,
+            staleState: payload.staleState || prev.staleState,
+            finalComposeStatus: payload.finalComposeStatus || prev.finalComposeStatus,
+            finalDraft: payload.finalDraft ?? prev.finalDraft
+          }
+        : prev
+    );
+    setSection((prev) =>
+      prev
+        ? {
+            ...prev,
+            draftsBySection: nextDraftMap,
+            currentDraft: nextDraftMap[sectionId || ''] || prev.currentDraft,
+            qnaHistory: payload.qnaHistory || prev.qnaHistory,
+            commonQnaHistory: payload.commonQnaHistory || prev.commonQnaHistory,
+            missingInfoBullets: nextSectionState?.missingInfoBullets || prev.missingInfoBullets,
+            sectionMissingInfo: nextSectionState?.missingInfoBullets || prev.sectionMissingInfo,
+            recommendedQuestions:
+              nextSectionState?.recommendedQuestions || prev.recommendedQuestions,
+            sectionQuestions: nextSectionState?.recommendedQuestions || prev.sectionQuestions,
+            status: nextSectionState?.status || prev.status,
+            rationaleText: nextSectionState?.rationaleText || prev.rationaleText,
+            commonQuestions: payload.commonQuestionSets || prev.commonQuestions,
+            commonMissingInfo: payload.commonMissingItems || prev.commonMissingInfo
+          }
+        : prev
+    );
   };
 
   const handleReviewSection = async () => {
@@ -356,14 +447,38 @@ export default function SectionDetailPage() {
     setErrorMessage(null);
     setFeedbackMessage(null);
 
+    const researchSession = caseData?.researchState;
+    if (researchSession?.sessionId) {
+      void logResearchEvent(caseId, {
+        eventType: 'review_ai_requested',
+        sectionId: String(sectionId),
+        sessionId: researchSession.sessionId,
+        participantCode: researchSession.participantCode
+      });
+    }
+
     try {
       const sectionResult = await caseApi.reviewSection(caseId, sectionId);
       setSection(sectionResult);
+      setCaseData(sectionResult.caseSummary || null);
       setDraftsBySection(sectionResult.draftsBySection || {});
       setCanUndo(Boolean(sectionResult.canUndo));
-      setFeedbackMessage('?꾩옱 ?뱀뀡???꾩껜 寃?좊? ?ㅼ떆 ?ㅽ뻾?덉뒿?덈떎.');
+      setFeedbackMessage('현재 섹션의 전체 검토를 다시 실행했습니다.');
+
+      if (researchSession?.sessionId) {
+        void logResearchEvent(caseId, {
+          eventType: 'review_ai_result_viewed',
+          sectionId: String(sectionId),
+          sessionId: researchSession.sessionId,
+          participantCode: researchSession.participantCode,
+          metadata: {
+            hasAdequacyReview: Boolean(sectionResult.adequacyReview),
+            unsupportedClaimCount: sectionResult.adequacyReview?.unsupportedClaims?.length || 0
+          }
+        });
+      }
     } catch (error: any) {
-      setErrorMessage(error?.message || '?뱀뀡 ?꾩껜 寃?좊? ?ㅼ떆 ?ㅽ뻾?섏? 紐삵뻽?듬땲??');
+      setErrorMessage(error?.message || '섹션 전체 검토를 다시 실행하지 못했습니다.');
     } finally {
       setIsReviewing(false);
     }
@@ -381,7 +496,7 @@ export default function SectionDetailPage() {
           await loadData();
         }
       } catch (error: any) {
-        setErrorMessage(error?.message || '?뱀뀡 ?뺣낫瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??');
+        setErrorMessage(error?.message || '섹션 정보를 불러오지 못했습니다.');
       } finally {
         setIsLoading(false);
       }
@@ -390,11 +505,62 @@ export default function SectionDetailPage() {
     void run();
   }, [caseId, sectionId, isQuestionStageSection]);
 
+  useEffect(() => {
+    if (
+      !caseId ||
+      !sectionId ||
+      !isQuestionStageSection ||
+      !caseData?.chainProgress?.currentStep ||
+      caseData.chainProgress.currentStep === 'BLOCKED'
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) return;
+
+      try {
+        await loadData();
+      } catch (error: any) {
+        if (!cancelled) {
+          setErrorMessage(error?.message || '섹션 상태를 갱신하는 중 오류가 발생했습니다.');
+        }
+      }
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    caseId,
+    sectionId,
+    isQuestionStageSection,
+    caseData?.chainProgress?.currentStep,
+    caseData?.chainProgress?.updatedAt
+  ]);
+
+  useEffect(() => {
+    if (!caseId || !sectionId || !caseData?.researchState?.sessionId) return;
+    const key = `${caseId}:${sectionId}`;
+    if (loggedOpenRef.current === key) return;
+    loggedOpenRef.current = key;
+    void logResearchEvent(caseId, {
+      eventId: createResearchEventId(`section-opened-${sectionId}`),
+      eventType: 'section_opened',
+      sectionId: String(sectionId),
+      sessionId: caseData.researchState.sessionId,
+      participantCode: caseData.researchState.participantCode,
+      metadata: { route: 'write_section' }
+    });
+  }, [caseData?.researchState?.participantCode, caseData?.researchState?.sessionId, caseId, sectionId]);
+
   const isInlineLoading = (isLoading && Boolean(section)) || isReviewing;
 
   const frontMatterPreview = useMemo(
-    () => buildFrontMatterPreview(draftsBySection),
-    [draftsBySection]
+    () => buildFrontMatterPreview(draftsBySection, caseData?.evidenceCards || []),
+    [draftsBySection, caseData?.evidenceCards]
   );
 
   useEffect(() => {
@@ -452,6 +618,34 @@ export default function SectionDetailPage() {
     [section?.sectionQuestions, section?.recommendedQuestions, sectionQnaHistory]
   );
 
+  const pendingTermCount = useMemo(
+    () =>
+      (caseData?.pendingTermConfirmations || []).filter((item) => item.status === 'PENDING').length,
+    [caseData?.pendingTermConfirmations]
+  );
+
+  const transientProgress = useMemo(() => {
+    if (isSubmitting) {
+      return {
+        currentStep: 'CHAIN6',
+        completedSteps: [],
+        estimatedRemainingSteps: ['CHAIN4', 'CHAIN5'],
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    if (isReviewing) {
+      return {
+        currentStep: `REVIEW:${sectionId || ''}`,
+        completedSteps: [],
+        estimatedRemainingSteps: [],
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    return null;
+  }, [isReviewing, isSubmitting, sectionId]);
+
   useEffect(() => {
     setSelectedCommonQuestion((previous) => {
       if (!commonQuestionItems.length) return null;
@@ -486,6 +680,15 @@ export default function SectionDetailPage() {
     setCommonAnswerText('');
     setFeedbackMessage(null);
     setErrorMessage(null);
+    if (caseId && caseData?.researchState?.sessionId) {
+      void logResearchEvent(caseId, {
+        eventType: 'question_viewed',
+        sectionId: String(sectionId || ''),
+        sessionId: caseData.researchState.sessionId,
+        participantCode: caseData.researchState.participantCode,
+        metadata: { questionId: question.id, kind: question.kind, category: question.category }
+      });
+    }
   };
 
   const handleSelectSectionQuestion = (question: QuestionItem) => {
@@ -493,6 +696,15 @@ export default function SectionDetailPage() {
     setSectionAnswerText('');
     setFeedbackMessage(null);
     setErrorMessage(null);
+    if (caseId && caseData?.researchState?.sessionId) {
+      void logResearchEvent(caseId, {
+        eventType: 'question_viewed',
+        sectionId: String(sectionId || ''),
+        sessionId: caseData.researchState.sessionId,
+        participantCode: caseData.researchState.participantCode,
+        metadata: { questionId: question.id, kind: question.kind, category: question.category }
+      });
+    }
   };
 
   const handleSubmitCommonAnswer = async () => {
@@ -503,23 +715,63 @@ export default function SectionDetailPage() {
     setFeedbackMessage(null);
 
     try {
-      const result = await caseApi.submitCommonAnswer(caseId, selectedCommonQuestion.text, commonAnswerText);
+      const result: CommonAnswerSubmitResponse = await caseApi.submitCommonAnswer(
+        caseId,
+        selectedCommonQuestion.text,
+        commonAnswerText
+      );
 
-      setDraftsBySection((prev) => mergeDraftMaps(prev, result.updatedDraftsBySection));
+      const nextDrafts = mergeDraftMaps(draftsBySection, result.updatedDraftsBySection);
+      const nextSectionState = result.sectionStates.find((state) => state.sectionId === sectionId);
+
+      setDraftsBySection(nextDrafts);
       setSection((prev) =>
         prev
           ? {
               ...prev,
-              commonQnaHistory: result.qnaHistory
+              currentDraft: nextDrafts[sectionId || ''] || prev.currentDraft,
+              draftsBySection: nextDrafts,
+              commonQnaHistory: result.qnaHistory,
+              commonQuestions: result.commonQuestions,
+              commonMissingInfo: result.commonMissingInfo,
+              missingInfoBullets: nextSectionState?.missingInfoBullets || prev.missingInfoBullets,
+              sectionMissingInfo: nextSectionState?.missingInfoBullets || prev.sectionMissingInfo,
+              recommendedQuestions:
+                nextSectionState?.recommendedQuestions || prev.recommendedQuestions,
+              sectionQuestions: nextSectionState?.recommendedQuestions || prev.sectionQuestions,
+              status: nextSectionState?.status || prev.status,
+              rationaleText: nextSectionState?.rationaleText || prev.rationaleText
             }
           : prev
       );
-
-      await loadData();
+      setCaseData((prev) =>
+        prev
+          ? {
+              ...prev,
+              draftsBySection: nextDrafts,
+              staleState: result.staleState || prev.staleState,
+              finalDraft: null,
+              finalComposeStatus: { status: 'IDLE' }
+            }
+          : prev
+      );
       setCanUndo(true);
       setFeedbackMessage('공통 답변이 반영되어 초안과 질문 목록이 갱신되었습니다.');
       setSelectedCommonQuestion(null);
       setCommonAnswerText('');
+      if (caseData?.researchState?.sessionId) {
+        void logResearchEvent(caseId, {
+          eventType: 'question_answered',
+          sectionId: String(sectionId || ''),
+          sessionId: caseData.researchState.sessionId,
+          participantCode: caseData.researchState.participantCode,
+          metadata: {
+            kind: 'common',
+            question: selectedCommonQuestion?.text,
+            answerLength: commonAnswerText.trim().length
+          }
+        });
+      }
     } catch (error: any) {
       setErrorMessage(error?.message || '공통 질문 답변을 제출하지 못했습니다.');
     } finally {
@@ -543,7 +795,13 @@ export default function SectionDetailPage() {
       );
 
       setDraftsBySection((prev) => mergeDraftMaps(prev, result.updatedDraftsBySection));
-      setActiveSectionQuestion(result.nextQuestion || result.sectionQuestions[0] || null);
+      setActiveSectionQuestion(
+        result.nextQuestion
+          ? normalizeQuestionTextForDisplay(result.nextQuestion)
+          : result.sectionQuestions[0]
+            ? normalizeQuestionTextForDisplay(result.sectionQuestions[0])
+            : null
+      );
       setSection((prev) =>
         prev
           ? {
@@ -566,6 +824,19 @@ export default function SectionDetailPage() {
       setCanUndo(true);
       setFeedbackMessage('섹션 답변이 반영되어 초안과 질문 목록이 갱신되었습니다.');
       setSectionAnswerText('');
+      if (caseData?.researchState?.sessionId) {
+        void logResearchEvent(caseId, {
+          eventType: 'question_answered',
+          sectionId: String(sectionId || ''),
+          sessionId: caseData.researchState.sessionId,
+          participantCode: caseData.researchState.participantCode,
+          metadata: {
+            kind: 'section',
+            question: activeSectionQuestion,
+            answerLength: sectionAnswerText.trim().length
+          }
+        });
+      }
     } catch (error: any) {
       setErrorMessage(error?.message || '섹션 질문 답변을 제출하지 못했습니다.');
     } finally {
@@ -600,7 +871,20 @@ export default function SectionDetailPage() {
           DISCUSSION_CONCLUSION: editableDiscussion.trim()
         })
       );
-      await loadData();
+      applyCaseStatePatch({
+        draftsBySection: {
+          ...(result.draftsBySection || {}),
+          TITLE: result.title,
+          KEYWORDS: result.keywords.join(', '),
+          DISCUSSION_CONCLUSION: editableDiscussion.trim()
+        },
+        sectionStates: result.sectionStates,
+        commonQuestionSets: result.commonQuestionSets,
+        commonMissingItems: result.commonMissingItems,
+        staleState: result.staleState,
+        finalComposeStatus: result.finalComposeStatus,
+        finalDraft: result.finalDraft
+      });
       setFeedbackMessage('제목, 키워드, 논의 및 결론을 저장했습니다. 이후 질문 생성에도 반영됩니다.');
     } catch (error: any) {
       setErrorMessage(error?.message || '전면부 정보를 저장하지 못했습니다.');
@@ -618,7 +902,31 @@ export default function SectionDetailPage() {
 
     try {
       const result = await caseApi.undoLastAnswer(caseId);
-      await loadData();
+      const restoredSectionInteraction = (result.restoredInteractions || []).find(
+        (item) => item.sectionId === sectionId
+      );
+      const restoredCommonInteraction = (result.restoredInteractions || []).find(
+        (item) => item.sectionId === '__COMMON__'
+      );
+      applyCaseStatePatch({
+        draftsBySection: result.draftsBySection,
+        sectionStates: result.sectionStates,
+        commonQuestionSets: result.commonQuestionSets,
+        commonMissingItems: result.commonMissingItems,
+        staleState: result.staleState,
+        finalComposeStatus: result.finalComposeStatus,
+        finalDraft: result.finalDraft,
+        qnaHistory: restoredSectionInteraction?.qnaHistory?.map((item) => ({
+          question: item.question,
+          answer: item.answer,
+          timestamp: item.timestamp || new Date().toISOString()
+        })),
+        commonQnaHistory: restoredCommonInteraction?.qnaHistory?.map((item) => ({
+          question: item.question,
+          answer: item.answer,
+          timestamp: item.timestamp || new Date().toISOString()
+        }))
+      });
       setCanUndo(result.remainingUndoCount > 0);
       setFeedbackMessage('가장 최근 답변 반영을 되돌렸습니다.');
     } catch (error: any) {
@@ -652,7 +960,7 @@ export default function SectionDetailPage() {
     return (
       <div className="section-detail-page">
         <div className="header-bar">
-          <button type="button" className="btn-back" onClick={() => navigate(`/cases/${caseId}`)}>
+          <button type="button" className="btn-back" onClick={() => navigate(`${writeBasePath}/cases/${caseId}`)}>
             돌아가기
           </button>
           <h1>섹션 정보를 불러오는 중...</h1>
@@ -666,7 +974,7 @@ export default function SectionDetailPage() {
       return (
         <div className="section-detail-page">
           <div className="header-bar">
-            <button type="button" className="btn-back" onClick={() => navigate(`/cases/${caseId}`)}>
+            <button type="button" className="btn-back" onClick={() => navigate(`${writeBasePath}/cases/${caseId}`)}>
               돌아가기
             </button>
             <h1>{getSectionTitle(sectionId)}</h1>
@@ -681,7 +989,7 @@ export default function SectionDetailPage() {
                 </p>
               </div>
               <div className="error-message" style={{ margin: 0 }}>
-                <Link to={`/cases/${caseId}`}>케이스 개요로 돌아가기</Link>
+                <Link to={`${writeBasePath}/cases/${caseId}`}>케이스 개요로 돌아가기</Link>
               </div>
             </div>
           </div>
@@ -699,12 +1007,15 @@ export default function SectionDetailPage() {
   return (
     <div className="section-detail-page">
       <div className="header-bar">
-        <button type="button" className="btn-back" onClick={() => navigate(`/cases/${caseId}`)}>
+        <button type="button" className="btn-back" onClick={() => navigate(`${writeBasePath}/cases/${caseId}`)}>
           케이스 개요
         </button>
         <div className="chat-header-title">
           <h1>{sectionTitle}</h1>
           <span className="chat-subtitle">{sectionSubtitle}</span>
+          {caseData?.experiment_code || caseData?.experimentCode ? (
+            <span className="chat-subtitle">실험번호: {caseData.experiment_code || caseData.experimentCode}</span>
+          ) : null}
         </div>
         <div className="header-actions">
           {isQuestionStageSection ? (
@@ -732,6 +1043,91 @@ export default function SectionDetailPage() {
 
       {errorMessage ? <div className="error-message">{errorMessage}</div> : null}
       {feedbackMessage ? <div className="question-update-notice">{feedbackMessage}</div> : null}
+      <ChainProgressBanner
+        progress={transientProgress || caseData?.chainProgress}
+        title={
+          isReviewing
+            ? '현재 섹션 검토 진행 상태'
+            : isSubmitting
+              ? '답변 반영 진행 상태'
+              : '현재 처리 진행 상태'
+        }
+      />
+      {caseData?.staleState?.isStale ? (
+        <div className="status-banner status-banner-warning">
+          <div className="status-banner-body">
+            <strong>기존 결과가 최신 상태가 아닙니다.</strong>
+            <span>{getStaleReasonLabel(caseData.staleState.staleReason)}</span>
+          </div>
+          <div className="status-banner-actions">
+            {pendingTermCount > 0 ? (
+              <button
+                type="button"
+                className="btn-banner-action secondary"
+                onClick={() => setIsPendingTermModalOpen(true)}
+              >
+                전문용어 확인 {pendingTermCount}건
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn-banner-action"
+              onClick={() => navigate(`${writeBasePath}/cases/${caseId}/manuscript`)}
+            >
+              최종 원고 재생성
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {caseData?.reviewRequired ? (
+        <div
+          className={[
+            'status-banner',
+            caseData.reviewRequired.riskLevel === 'HIGH'
+              ? 'status-banner-danger'
+              : 'status-banner-info'
+          ].join(' ')}
+        >
+          <div className="status-banner-body">
+            <strong>{getReviewRequiredTitle(caseData.reviewRequired)}</strong>
+            <span>{getReviewRequiredDescription(caseData.reviewRequired)}</span>
+          </div>
+          <div className="status-banner-actions">
+            <button
+              type="button"
+              className="btn-banner-action secondary"
+              onClick={() => {
+                if (pendingTermCount > 0) {
+                  setIsPendingTermModalOpen(true);
+                  return;
+                }
+                navigate(`/cases/${caseId}`);
+              }}
+            >
+              {pendingTermCount > 0 ? `전문용어 확인 ${pendingTermCount}건` : '케이스 개요에서 검토'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingTermCount > 0 ? (
+        <div className="status-banner status-banner-neutral">
+          <div className="status-banner-body">
+            <strong>확인되지 않은 전문용어가 {pendingTermCount}건 있습니다.</strong>
+            <span>승인 전에는 표준 용어가 draft와 최종 원고에 반영되지 않습니다.</span>
+          </div>
+          <div className="status-banner-actions">
+            <button
+              type="button"
+              className="btn-banner-action secondary"
+              onClick={() => setIsPendingTermModalOpen(true)}
+            >
+              전문용어 확인 {pendingTermCount}건
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className={`three-panel-layout ${isInlineLoading ? 'is-inline-loading' : ''}`}>
         <aside
@@ -751,9 +1147,6 @@ export default function SectionDetailPage() {
           </div>
 
           <div className="question-priority-panel">
-            <div>
-              <strong>공통 질문 목록</strong>
-            </div>
             {commonQuestionItems.length === 0 ? (
               <div className="question-empty-state">현재 답변할 공통 질문이 없습니다.</div>
             ) : (
@@ -771,7 +1164,14 @@ export default function SectionDetailPage() {
                       ].join(' ')}
                       onClick={() => handleSelectCommonQuestion(question)}
                     >
-                      <span>{question.text}</span>
+                      <span className="question-chip-body">
+                        {question.category && getCommonQuestionCategoryLabel(question.category) ? (
+                          <span className="question-category-badge">
+                            {getCommonQuestionCategoryLabel(question.category)}
+                          </span>
+                        ) : null}
+                        <span>{renderClinicalAnonymizedText(question.text)}</span>
+                      </span>
                       {question.answered ? (
                         <span className="question-chip-status">답변 완료</span>
                       ) : null}
@@ -783,6 +1183,14 @@ export default function SectionDetailPage() {
 
             <div className="question-hint-box question-selection-box">
               <strong>선택한 공통 질문</strong>
+              {selectedCommonQuestion?.category &&
+              getCommonQuestionCategoryLabel(selectedCommonQuestion.category) ? (
+                <div className="question-selection-meta">
+                  <span className="question-category-badge">
+                    {getCommonQuestionCategoryLabel(selectedCommonQuestion.category)}
+                  </span>
+                </div>
+              ) : null}
               <div>{selectedCommonQuestion?.text || '위에서 공통 질문 하나를 선택해 주세요.'}</div>
             </div>
           </div>
@@ -872,7 +1280,8 @@ export default function SectionDetailPage() {
                           }}
                           aria-label="제목 수정"
                         >
-                          ??                        </button>
+                          수정
+                        </button>
                       ) : null}
                       {sid === 'KEYWORDS' ? (
                         <button
@@ -884,7 +1293,8 @@ export default function SectionDetailPage() {
                           }}
                           aria-label="키워드 수정"
                         >
-                          ??                        </button>
+                          수정
+                        </button>
                       ) : null}
                       {sid === 'DISCUSSION_CONCLUSION' ? (
                         <button
@@ -896,12 +1306,17 @@ export default function SectionDetailPage() {
                           }}
                           aria-label="논의 및 결론 수정"
                         >
-                          ??
+                          수정
                         </button>
                       ) : null}
                     </div>
                     <div className="section-content-text">
-                      {sid === 'TITLE' ? (
+                      {sid === 'TIMELINE' ? (
+                        <TimelineDraftView
+                          rawText={previewRawText}
+                          events={caseData?.timelineEvents || section.timelineEvents || []}
+                        />
+                      ) : sid === 'TITLE' ? (
                         isEditingTitle ? (
                           <div className="frontmatter-editor" onClick={(e) => e.stopPropagation()}>
                             <input
@@ -918,7 +1333,7 @@ export default function SectionDetailPage() {
                                 onClick={handleCancelTitleEdit}
                                 disabled={isSavingFrontMatter}
                               >
-                                痍⑥냼
+                                취소
                               </button>
                               <button
                                 type="button"
@@ -950,7 +1365,7 @@ export default function SectionDetailPage() {
                                 onClick={handleCancelKeywordEdit}
                                 disabled={isSavingFrontMatter}
                               >
-                                痍⑥냼
+                                취소
                               </button>
                               <button
                                 type="button"
@@ -1023,6 +1438,13 @@ export default function SectionDetailPage() {
           </div>
 
           <div className="section-insights">
+            {caseData?.staleState?.isStale ? (
+              <div className="section-review-reset-note">
+                전문용어 또는 evidence가 변경되어 Review AI 캐시가 초기화되었습니다. 오른쪽 위
+                <strong> 전체 확인</strong> 버튼으로 현재 섹션을 다시 검토해 주세요.
+              </div>
+            ) : null}
+
             <div className="section-rationale-box">
               <h3>섹션 설명</h3>
               <p>{section.rationaleText}</p>
@@ -1042,6 +1464,50 @@ export default function SectionDetailPage() {
                 </p>
               )}
             </div>
+
+            {section.adequacyReview ? (
+              <div className="section-review-metrics">
+                <h4>Review AI 평가</h4>
+                <div className="section-review-metric">
+                  <div className="section-review-metric-head">
+                    <strong>섹션 완성도</strong>
+                    <span>{getReviewScoreLabel(section.adequacyReview.sectionCompleteness)}</span>
+                  </div>
+                  <p>{renderClinicalAnonymizedText(section.adequacyReview.summary)}</p>
+                </div>
+                <div className="section-review-metric">
+                  <div className="section-review-metric-head">
+                    <strong>내용 완성도</strong>
+                    <span>{getReviewScoreLabel(section.adequacyReview.contentCompleteness)}</span>
+                  </div>
+                  <p>{renderClinicalAnonymizedText(section.adequacyReview.summary)}</p>
+                </div>
+                <div className="section-review-metric">
+                  <div className="section-review-metric-head">
+                    <strong>자연스러움</strong>
+                    <span>{getReviewScoreLabel(section.adequacyReview.naturalness)}</span>
+                  </div>
+                  <p>{renderClinicalAnonymizedText(section.adequacyReview.summary)}</p>
+                </div>
+                <div className="section-review-metric">
+                  <div className="section-review-metric-head">
+                    <strong>근거 기반 작성 여부</strong>
+                    <span>{getEvidenceGroundingLabel(section.adequacyReview.evidenceGrounding)}</span>
+                  </div>
+                  <p>{renderClinicalAnonymizedText(section.adequacyReview.summary)}</p>
+                  {section.adequacyReview.unsupportedClaims?.length ? (
+                    <ul className="section-review-unsupported-list">
+                      {section.adequacyReview.unsupportedClaims.map((claim, index) => (
+                        <li key={`${claim.sentence}-${index}`}>
+                          <strong>{renderClinicalAnonymizedText(claim.sentence)}</strong>
+                          <span>{renderClinicalAnonymizedText(claim.reason)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="question-priority-panel">
@@ -1050,7 +1516,6 @@ export default function SectionDetailPage() {
             </div>
 
             <div className="question-hint-box">
-              <strong>현재 질문</strong>
               <div>
                 {activeSectionQuestion ||
                   '현재 이 섹션에서 이어서 물을 질문이 없습니다. 필요하면 왼쪽 공통 질문부터 답변해 주세요.'}
@@ -1072,7 +1537,7 @@ export default function SectionDetailPage() {
                       ].join(' ')}
                       onClick={() => handleSelectSectionQuestion(question)}
                     >
-                      <span>{question.text}</span>
+                      <span>{renderClinicalAnonymizedText(question.text)}</span>
                       {question.answered ? (
                         <span className="question-chip-status">답변 완료</span>
                       ) : null}
@@ -1125,7 +1590,70 @@ export default function SectionDetailPage() {
           </div>
         </aside>
       </div>
+
+      {caseId ? (
+        <PendingTermConfirmationModal
+          caseId={caseId}
+          isOpen={isPendingTermModalOpen}
+          onClose={() => setIsPendingTermModalOpen(false)}
+          onResolved={async (result) => {
+            const pendingResult = result as any;
+            const nextDrafts = result.draftsBySection || draftsBySection;
+            const nextState = (pendingResult.sectionStates || []).find(
+              (state: any) => state.sectionId === sectionId
+            );
+
+            setCaseData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    draftsBySection: nextDrafts,
+                    pendingTermConfirmations: result.pendingTermConfirmations || [],
+                    reviewRequired: result.reviewRequired || null,
+                    chainProgress: result.chainProgress || prev.chainProgress || null,
+                    staleState: result.staleState || prev.staleState,
+                    finalComposeStatus: result.finalComposeStatus || prev.finalComposeStatus,
+                    finalDraft: result.finalDraft || null,
+                    sectionStates: pendingResult.sectionStates || prev.sectionStates
+                  }
+                : prev
+            );
+            setDraftsBySection(nextDrafts);
+            setSection((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    currentDraft: nextDrafts[sectionId || ''] || prev.currentDraft,
+                    draftsBySection: nextDrafts,
+                    commonQuestions: pendingResult.commonQuestionSets || prev.commonQuestions,
+                    commonMissingInfo: pendingResult.commonMissingItems || prev.commonMissingInfo,
+                    missingInfoBullets: nextState?.missingInfoBullets || prev.missingInfoBullets,
+                    sectionMissingInfo: nextState?.missingInfoBullets || prev.sectionMissingInfo,
+                    recommendedQuestions:
+                      nextState?.recommendedQuestions || prev.recommendedQuestions,
+                    sectionQuestions: nextState?.recommendedQuestions || prev.sectionQuestions,
+                    status: nextState?.status || prev.status,
+                    rationaleText: nextState?.rationaleText || prev.rationaleText
+                  }
+                : prev
+            );
+            setCanUndo(true);
+            setActiveSectionQuestion((prevQuestion) => {
+              const nextQuestions = nextState?.recommendedQuestions || [];
+              if (!nextQuestions.length) return null;
+              if (prevQuestion && nextQuestions.includes(prevQuestion)) return prevQuestion;
+              return nextQuestions[0];
+            });
+            setFeedbackMessage(
+              result.httpStatus === 202
+                ? '전문용어 선택을 저장했고, 현재 섹션에 반영 중입니다.'
+                : '전문용어 확인 결과를 반영해 현재 섹션을 갱신했습니다.'
+            );
+            setErrorMessage(null);
+          }}
+          pendingTerms={caseData?.pendingTermConfirmations || []}
+        />
+      ) : null}
     </div>
   );
 }
-

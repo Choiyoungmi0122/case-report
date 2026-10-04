@@ -65,7 +65,6 @@ function CaseListPage() {
 
         {cases.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-icon">📭</div>
             <p>저장된 케이스가 없습니다.</p>
             <button onClick={() => navigate('/input')} className="btn-primary">
               새 EMR 입력하기
@@ -84,6 +83,11 @@ function CaseListPage() {
                   <span className="case-date">{formatDate(case_.createdAt)}</span>
                 </div>
                 <div className="case-info">
+                  {(case_.experiment_code || case_.experimentCode) ? (
+                    <span className="info-item">
+                      실험번호: {case_.experiment_code || case_.experimentCode}
+                    </span>
+                  ) : null}
                   <span className="info-item">
                     방문 횟수: {case_.visits.length}회
                   </span>

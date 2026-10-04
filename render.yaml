@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: casereport
+    runtime: node
+    rootDir: .
+    buildCommand: npm run install:all && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

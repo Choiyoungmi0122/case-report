@@ -1,0 +1,442 @@
+/*
+ * Scaffold section workspace.
+ *
+ * The three panels - source record / current work / my own summary - have to be
+ * visible at the same time, because the whole point of the scaffold is that the
+ * learner compares the record, the AI draft, and their own prior judgement in
+ * one view. Media queries need real CSS, so this layout lives here rather than
+ * in inline styles like the rest of the scaffold components.
+ */
+
+.scaffold-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+/* ---------------------------------------------------------------- header -- */
+
+.scaffold-workspace__header {
+  flex: 0 0 auto;
+  border-bottom: 1px solid #d7e0e8;
+  background: #ffffff;
+}
+
+.scaffold-header__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+  flex-wrap: wrap;
+}
+
+.scaffold-header__identity {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scaffold-header__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #17324d;
+  line-height: 1.3;
+}
+
+.scaffold-header__category {
+  font-size: 12px;
+  color: #5a6c81;
+  white-space: nowrap;
+}
+
+.scaffold-header__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scaffold-header__count {
+  font-size: 12px;
+  color: #5a6c81;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scaffold-header__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #c8d2dd;
+  border-radius: 6px;
+  background: #fcfdff;
+  color: #17324d;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.scaffold-header__toggle:hover {
+  background: #f0f5fb;
+}
+
+.scaffold-header__toggle:focus-visible {
+  outline: 2px solid #5a9eca;
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------- progress panel -- */
+
+.scaffold-progress {
+  border-top: 1px solid #e2e8f0;
+  background: #fcfdff;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.scaffold-progress__group-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a8fa1;
+}
+
+.scaffold-progress__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.scaffold-progress__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: #17324d;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scaffold-progress__item:hover {
+  background: #f0f5fb;
+}
+
+.scaffold-progress__item:focus-visible {
+  outline: 2px solid #5a9eca;
+  outline-offset: 1px;
+}
+
+.scaffold-progress__item[aria-current='page'] {
+  border-color: #5a9eca;
+  background: #e8f3ff;
+  font-weight: 600;
+}
+
+.scaffold-progress__mark {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  color: #5a6c81;
+}
+
+.scaffold-progress__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scaffold-progress__state {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #5a6c81;
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------- three panels -- */
+
+.scaffold-workspace__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 33% minmax(0, 1fr) 27%;
+}
+
+.scaffold-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scaffold-pane--source {
+  border-right: 1px solid #d7e0e8;
+  background: #fcfdff;
+}
+
+.scaffold-pane--work {
+  background: #f8fafc;
+}
+
+.scaffold-pane--summary {
+  border-left: 1px solid #d7e0e8;
+  background: #fcfdff;
+}
+
+.scaffold-pane__head {
+  flex: 0 0 auto;
+  padding: 14px 16px;
+  border-bottom: 1px solid #d7e0e8;
+  background: #f8fafc;
+}
+
+.scaffold-pane--work .scaffold-pane__head {
+  background: #ffffff;
+}
+
+.scaffold-pane__title {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #17324d;
+}
+
+.scaffold-pane__hint {
+  margin: 0;
+  font-size: 12px;
+  color: #5a6c81;
+  line-height: 1.5;
+}
+
+/* Each pane scrolls on its own so a long record does not push the workspace
+ * off-screen. Visit cards inside deliberately do NOT scroll separately. */
+.scaffold-pane__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ------------------------------------------------------------- summary -- */
+
+.scaffold-summary__group + .scaffold-summary__group {
+  margin-top: 18px;
+}
+
+.scaffold-summary__label {
+  margin: 0 0 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #17324d;
+}
+
+.scaffold-summary__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4a5d73;
+}
+
+.scaffold-summary__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #4a5d73;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.scaffold-summary__empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #7a8fa1;
+}
+
+.scaffold-summary__frozen {
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f0f5fb;
+  border: 1px solid #d7e0e8;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #4a5d73;
+}
+
+/* ------------------------------------------------ educational feedback -- */
+
+.scaffold-learning-feedback {
+  margin-top: 14px;
+  padding: 12px 0 2px 14px;
+  border-left: 3px solid #2f855a;
+  color: #274c3b;
+}
+
+.scaffold-learning-feedback__label {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #23613f;
+}
+
+.scaffold-learning-feedback p,
+.scaffold-learning-feedback ul {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.scaffold-learning-feedback ul {
+  padding-left: 18px;
+}
+
+.scaffold-learning-feedback__evidence {
+  margin: 10px 0;
+  font-size: 12px;
+}
+
+.scaffold-learning-feedback__evidence blockquote {
+  margin: 6px 0 0;
+  padding: 7px 10px;
+  border-left: 2px solid #9ac7ad;
+  background: #f2faf5;
+  color: #345a47;
+  line-height: 1.6;
+}
+
+.scaffold-learning-feedback small {
+  display: block;
+  color: #5c7166;
+  line-height: 1.5;
+}
+
+.scaffold-post-ai-reflection {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid #d7e0e8;
+}
+
+.scaffold-post-ai-reflection__eyebrow {
+  margin-bottom: 4px;
+  color: #9a6700;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.scaffold-post-ai-reflection h3 {
+  margin: 0;
+  color: #17324d;
+  font-size: 15px;
+}
+
+.scaffold-post-ai-reflection p,
+.scaffold-post-ai-reflection__helper {
+  margin: 5px 0 0;
+  color: #5a6c81;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.scaffold-post-ai-reflection label {
+  display: grid;
+  gap: 6px;
+  color: #17324d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scaffold-post-ai-reflection textarea {
+  width: 100%;
+  min-height: 78px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid #c8d2dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17324d;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.scaffold-post-ai-reflection textarea:focus-visible {
+  outline: 2px solid #d5a63c;
+  outline-offset: 1px;
+}
+
+/* --------------------------------------------------------- breakpoints -- */
+
+@media (max-width: 1199px) {
+  .scaffold-workspace__grid {
+    grid-template-columns: 32% minmax(0, 1fr) 24%;
+  }
+
+  .scaffold-pane__body {
+    padding: 12px;
+  }
+}
+
+/* Desktop is the target environment for this study; below this width the
+ * columns simply stack rather than being squeezed. */
+@media (max-width: 899px) {
+  .scaffold-workspace {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .scaffold-workspace__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scaffold-pane {
+    overflow: visible;
+  }
+
+  .scaffold-pane--source,
+  .scaffold-pane--summary {
+    border-right: none;
+    border-left: none;
+    border-bottom: 1px solid #d7e0e8;
+  }
+
+  .scaffold-pane__body {
+    overflow-y: visible;
+  }
+
+  .scaffold-progress {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: none;
+  }
+}

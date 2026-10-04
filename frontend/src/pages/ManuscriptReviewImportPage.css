@@ -1,0 +1,90 @@
+.manuscript-review-import-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.manuscript-review-import-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 48px 24px 72px;
+}
+
+.manuscript-review-import-header {
+  margin-bottom: 28px;
+}
+
+.manuscript-review-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.manuscript-review-import-header h1 {
+  margin: 0 0 12px;
+  font-size: 34px;
+}
+
+.manuscript-review-import-header p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.manuscript-review-import-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow);
+}
+
+.manuscript-review-file-picker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: center;
+  padding: 24px;
+  margin-top: 20px;
+}
+
+.manuscript-review-file-picker input {
+  display: none;
+}
+
+.manuscript-review-import-actions {
+  margin-top: 20px;
+}
+
+.manuscript-review-primary {
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: white;
+  padding: 12px 18px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.manuscript-review-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.manuscript-review-error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}

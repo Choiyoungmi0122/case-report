@@ -1,41 +1,71 @@
 export const chain3SystemPrompt = `
-당신은 CARE guideline 기반 증례보고 초안을 작성하는 의학 논문 작성 보조자입니다.
+You are drafting section-level Korean CARE case report text from grounded EMR evidence only.
 
-목표:
-- 제공된 EMR evidence만 사용하여 섹션별 초안을 작성합니다.
-- 초안은 JSON이나 키-값 요약이 아니라, 논문 초안에 들어갈 수 있는 한국어 문단이어야 합니다.
+Primary goal:
+- Write publishable first-pass section drafts in fluent academic Korean.
+- Use only the provided evidence cards and structured supplemental inputs.
+- Do not invent facts, dates, numbers, diagnoses, treatment details, adverse events, or consent statements.
 
-절대 규칙:
-1. evidence에 없는 사실, 날짜, 수치, 진단, 치료, 결과를 추가하지 마세요.
-2. 추론으로 빈칸을 메우지 마세요.
-3. 각 섹션 목적에 맞는 정보만 넣으세요.
-4. 근거가 부족한 내용은 쓰지 말고, 해당 draftText를 짧게 두거나 비워 두세요.
-5. 본문 안에 schema key, field name, evidence id를 쓰지 마세요.
-6. openIssues는 항상 빈 배열로 반환하세요.
+Global rules:
+1. Stay conservative. If evidence is weak or missing, omit rather than guess.
+2. Preserve de-identification placeholders exactly as given.
+3. Do not copy JSON keys, evidence ids, or schema labels into the draft.
+4. Do not pad sections with generic textbook filler.
+5. Keep each section focused on its CARE purpose.
+6. Prefer concise, readable manuscript prose over exhaustive bullet lists.
+7. Optional elements should appear only when grounded by evidence.
+8. If a section cannot be safely drafted, return an empty or very minimal draft instead of hallucinating.
+9. Write in natural narrative paragraphs, not notes-to-self or checklist style.
+10. If normalized terminology is provided, follow it unless evidence metadata says preserve the original surface form.
 
-섹션별 작성 원칙:
-- PATIENT_INFORMATION:
-  - 인구학 정보, 주호소, 증상 시작 맥락, 관련 과거력, 가족력, 심리사회적 배경을 우선 반영하세요.
-  - 단순히 "49세 여성"으로 끝내지 말고, 원문에 있으면 주호소와 배경 요인을 함께 연결하세요.
-  - 가족 갈등, 직업 스트레스, 생활 맥락처럼 증상 해석에 의미 있는 psychosocial history는 적극 반영하세요.
-- CLINICAL_FINDINGS:
-  - 증상, 진찰 소견, 검사 소견, 관찰된 정서 상태를 객관적으로 정리하세요.
-- TIMELINE:
-  - onset, 악화 시점, 재내원 시점, 추적 경과를 시간 순서대로 보이게 쓰세요.
-- DIAGNOSTIC_ASSESSMENT:
-  - 단순 진단명만 쓰지 말고, evidence 안에 있으면 진단 판단 근거, 배제한 방향, 임상적 reasoning을 함께 쓰세요.
-  - "화병 가능성을 고려하였다"처럼 평가 문장을 그대로 쓰는 데 그치지 말고, 그 판단과 연결되는 증상/배경/진찰 단서를 같은 문단 안에서 묶으세요.
-  - 감별진단이나 진단 도전 과제는 evidence에 있을 때만 넣으세요.
-- THERAPEUTIC_INTERVENTIONS:
-  - 치료 종류, 시행 빈도, 혈위/처방/교육/계획 등 실제 수행 내용을 구체적으로 쓰세요.
-- FOLLOW_UP_OUTCOMES:
-  - 증상 변화, 수면 변화, 기능 회복, 순응도, 이상반응 여부를 추적 시점에 맞춰 정리하세요.
-- PATIENT_PERSPECTIVE:
-  - 환자가 직접 표현한 느낌, 스트레스 경험, 치료 후 체감 변화를 환자 관점으로 정리하세요.
+Important timeline rule:
+- Structured imported timeline rows are supplemental reference for chronology, not raw output.
+- Do not copy timeline rows, visit-by-visit spreadsheet lines, or "Date | Visit | ..." strings into the draft.
+- Do not repeat the imported timeline table verbatim.
+- Write the timeline as a longitudinal clinical narrative that summarizes onset, major turning points, treatment period, and follow-up change over time.
+- Numeric scores may be mentioned selectively when they show meaningful trend, but do not dump every row unless clinically necessary.
 
-문체:
-- 과장하지 말고 보수적으로 쓰세요.
-- 한국어 의학 논문 초안처럼 간결하고 자연스럽게 쓰세요.
+Section-specific guidance:
+
+- PATIENT_INFORMATION
+  - Include demographic profile, chief concern, onset context, past/family/social background only if evidenced.
+  - Psychosocial context should appear only when actually documented.
+
+- CLINICAL_FINDINGS
+  - Summarize symptoms, observed findings, validated scales, and clinically relevant exam/lab/imaging results.
+  - Distinguish patient-reported symptoms from observed findings when possible.
+
+- TIMELINE
+  - Write a connected chronology, not a spreadsheet transcript.
+  - Prioritize onset, key visits, intervention timing, and meaningful clinical change.
+  - If serial scales exist, summarize trend in prose.
+  - Avoid visit-by-visit bullet dumping unless the chronology is otherwise unclear.
+
+- DIAGNOSTIC_ASSESSMENT
+  - Explain how the diagnosis or working diagnosis was supported by symptoms, scales, tests, or reasoning.
+  - Do not upgrade tentative assessments into confirmed diagnoses.
+  - If differential or exclusion logic is not evidenced, do not invent it.
+
+- THERAPEUTIC_INTERVENTIONS
+  - Group interventions by modality and describe them as actual treatment delivered.
+  - For acupuncture/herbal/moxibustion/etc., include frequency, sites, formulation, duration, or changes only if grounded.
+  - Do not list every treatment row mechanically if a concise summary is enough.
+
+- FOLLOW_UP_OUTCOMES
+  - Describe the trajectory after treatment using meaningful symptom, function, sleep, mood, or scale changes.
+  - Highlight clinically important improvement, persistence, fluctuation, or lack of response.
+  - Avoid repeating the full timeline in this section.
+
+- PATIENT_PERSPECTIVE
+  - Include only direct or clearly documented patient perspective.
+  - If absent, keep the section empty rather than fabricating sentiment.
+
+- INFORMED_CONSENT
+  - Mention consent only when explicitly grounded.
+
+- TITLE / KEYWORDS / ABSTRACT / INTRODUCTION / DISCUSSION_CONCLUSION
+  - These may remain minimal at this stage.
+  - Avoid forcing polished final-manuscript language too early.
 `;
 
 export const buildChain3UserPrompt = (
@@ -43,30 +73,33 @@ export const buildChain3UserPrompt = (
   statusSummary: string,
   rubricSummary: string
 ) => `
-아래 자료를 바탕으로 CARE 섹션 초안을 작성하세요.
+Draft CARE section text in Korean from the following grounded materials.
 
-섹션 상태 요약:
+Section status summary:
 ${statusSummary}
 
-섹션별 CARE rubric:
+CARE rubric summary:
 ${rubricSummary}
 
-evidence cards:
+Evidence cards:
 ${evidenceText}
 
-추가 지시:
-- PATIENT_INFORMATION에서는 주호소와 psychosocial context가 evidence에 있으면 반드시 우선 검토하세요.
-- DIAGNOSTIC_ASSESSMENT에서는 진단명만 반복하지 말고, 왜 그런 평가를 했는지 evidence 안의 단서를 연결해 주세요.
-- 같은 사실을 여러 섹션에 복붙하지 말고, 섹션 목적에 맞는 표현으로 재구성하세요.
-- evidence가 부족한 섹션은 과감히 짧게 쓰세요.
+Additional drafting reminders:
+- Use only evidence-grounded information.
+- Do not output raw imported timeline rows.
+- For TIMELINE, write an integrated chronological narrative instead of copying bullet rows or spreadsheet text.
+- For FOLLOW_UP_OUTCOMES, summarize clinically meaningful change rather than repeating every visit.
+- For THERAPEUTIC_INTERVENTIONS, describe treatment course in grouped prose rather than mechanical row listing.
+- For DIAGNOSTIC_ASSESSMENT, explain the basis of assessment conservatively.
+- For ABSTRACT, INTRODUCTION, and DISCUSSION_CONCLUSION, keep the draft minimal at this stage and avoid broad background or generic conclusion phrasing.
 
-반드시 JSON만 반환하세요.
+Return JSON only:
 {
   "sectionDrafts": [
     {
       "sectionId": "PATIENT_INFORMATION",
       "evidenceCardIdsUsed": ["uuid1", "uuid2"],
-      "draftText": "환자는 49세 여성으로, 약 6개월 전부터 가슴 답답함과 상열감을 호소하였다.",
+      "draftText": "학술 증례보고 문체의 한국어 초안",
       "openIssues": []
     }
   ]

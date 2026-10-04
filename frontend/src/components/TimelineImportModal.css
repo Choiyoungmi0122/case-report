@@ -1,0 +1,180 @@
+.timeline-import-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1rem;
+}
+
+.timeline-import-modal {
+  width: min(980px, 100%);
+  max-height: 92vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+}
+
+.timeline-import-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.2rem 1.3rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-import-modal-header h2 {
+  margin: 0 0 0.25rem 0;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.timeline-import-modal-header p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+  font-size: 0.92rem;
+}
+
+.timeline-import-close {
+  border: none;
+  background: transparent;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.timeline-import-modal-body {
+  padding: 1.15rem 1.3rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.timeline-import-upload-box {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.timeline-import-submit {
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--info);
+  color: white;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+}
+
+.timeline-import-submit:hover:not(:disabled) {
+  background: var(--info-hover);
+}
+
+.timeline-import-submit:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.timeline-import-error {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1rem;
+}
+
+.timeline-import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.timeline-import-summary {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.timeline-import-summary span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-strong);
+  padding: 0.3rem 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
+.timeline-import-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  background: var(--surface-muted);
+}
+
+.timeline-import-panel h3 {
+  margin: 0 0 0.7rem 0;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+
+.timeline-import-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.timeline-import-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.timeline-import-table-wrap {
+  overflow: auto;
+}
+
+.timeline-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.timeline-import-table th,
+.timeline-import-table td {
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.timeline-import-table th {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.timeline-import-warning-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.timeline-import-empty {
+  color: var(--text-muted);
+  line-height: 1.6;
+}
