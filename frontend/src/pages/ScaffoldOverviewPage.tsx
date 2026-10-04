@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import {
@@ -362,6 +362,41 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     void persistCaseMap(currentPhase, '메모를 저장했습니다.', nextNotes);
   };
 
+  // AI 메모 추천을 내 메모로 가져온다. id에 'ai'와 추천 id를 넣어 두어
+  // 나중에 학습자가 직접 쓴 메모와 구분할 수 있게 한다.
+  const AI_NOTE_PREFIX = 'case-note-ai-';
+  const isSuggestionAdded = (suggestionId: string) =>
+    caseNotes.some((note) => note.id.startsWith(`${AI_NOTE_PREFIX}${suggestionId}-`));
+
+  const addSuggestedNote = (suggestion: { id: string; type: ScaffoldV2CaseNote['type']; text: string }) => {
+    if (isSuggestionAdded(suggestion.id)) return;
+    const nextNotes = [
+      ...caseNotes,
+      {
+        id: `${AI_NOTE_PREFIX}${suggestion.id}-${Date.now()}`,
+        type: suggestion.type,
+        text: suggestion.text,
+        sourceEvidenceIds: [],
+        createdAt: new Date().toISOString()
+      }
+    ];
+    setCaseNotes(nextNotes);
+    syncEvidenceIdsFromNotes(nextNotes);
+    setNoteFeedbackRevealedAt(undefined);
+    setError(null);
+    void persistCaseMap(currentPhase, '추천 메모를 내 메모에 추가했습니다.', nextNotes);
+  };
+
+  const visitListRef = useRef<HTMLDivElement | null>(null);
+  const jumpToVisit = (index: number) => {
+    const container = visitListRef.current;
+    const target = container?.querySelector<HTMLDetailsElement>(`[data-visit-index="${index}"]`);
+    if (!container || !target) return;
+    target.open = true;
+    // 목록 안에서의 실제 위치 차이만큼 옮긴다. 부드러운 스크롤은 창이 가려져 있으면 멈추므로 쓰지 않는다.
+    container.scrollTop += target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  };
+
   const updateCaseNote = (noteId: string, updates: Partial<ScaffoldV2CaseNote>) => {
     const nextNotes = caseNotes.map((note) =>
       note.id === noteId ? { ...note, ...updates } : note
@@ -506,16 +541,50 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                   <h3 id="record-column-title">방문 기록</h3>
                   <span>{visits.length}회</span>
                 </div>
-                <div className="scaffold-v2__visit-list">
+                <div className="scaffold-v2__visit-jump" role="group" aria-label="방문 회차로 이동">
                   {visits.map((visit, index) => (
-                    <details key={`${visit.date}-${index}`} open>
-                      <summary>
-                        <span>{visit.type} #{index + 1}</span>
-                        <time>{visit.date || '날짜 미상'}</time>
-                      </summary>
-                      <pre>{visit.soapText || '기록 내용이 없습니다.'}</pre>
-                    </details>
+                    <button key={`${visit.date}-jump-${index}`} type="button" onClick={() => jumpToVisit(index)}>
+                      {index + 1}회차
+                    </button>
                   ))}
+                </div>
+                <div className="scaffold-v2__visit-list" ref={visitListRef}>
+                  {visits.map((visit, index) => {
+                    const suggestions = (data.memoSuggestions || []).filter(
+                      (item) => item.visitIndex === index + 1
+                    );
+                    return (
+                      <details key={`${visit.date}-${index}`} data-visit-index={index} open>
+                        <summary>
+                          <span>{index + 1}회차 · {visit.type}</span>
+                          <time>{visit.date || '날짜 미상'}</time>
+                        </summary>
+                        {suggestions.length > 0 ? (
+                          <details className="scaffold-v2__memo-suggest">
+                            <summary>AI 메모 추천 {suggestions.length}개</summary>
+                            <p>기록을 읽고 내 생각을 먼저 적은 뒤 참고하세요. 살펴볼 만한 곳을 알려줄 뿐 정답은 아닙니다.</p>
+                            <ul>
+                              {suggestions.map((suggestion) => {
+                                const added = isSuggestionAdded(suggestion.id);
+                                return (
+                                  <li key={suggestion.id}>
+                                    <span>
+                                      <em>{suggestion.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}</em>
+                                      {suggestion.text}
+                                    </span>
+                                    <button type="button" onClick={() => addSuggestedNote(suggestion)} disabled={added || saving}>
+                                      {added ? '추가됨' : '내 메모에 추가'}
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </details>
+                        ) : null}
+                        <pre>{visit.soapText || '기록 내용이 없습니다.'}</pre>
+                      </details>
+                    );
+                  })}
                 </div>
               </section>
 

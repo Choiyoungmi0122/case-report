@@ -531,7 +531,10 @@ function buildScaffoldSummaryChildren(caseData: Case) {
     children.push(makeSectionHeading('기록을 읽으며 남긴 메모'));
     caseNotes.forEach((note: any) => {
       const label = note.type === 'question' ? '더 확인할 점' : '눈에 띈 점';
-      children.push(buildBulletParagraph(`[${label}] ${safeText(note.text)}`));
+      // Notes taken over from an AI memo suggestion are marked so they are not
+      // read as the learner's own observation.
+      const origin = String(note.id || '').startsWith('case-note-ai-') ? ' · AI 추천에서 가져옴' : '';
+      children.push(buildBulletParagraph(`[${label}${origin}] ${safeText(note.text)}`));
     });
   }
 

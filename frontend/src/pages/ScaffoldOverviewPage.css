@@ -1544,3 +1544,120 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Stage 1: jump to a visit, and per-visit AI memo suggestions. */
+.scaffold-v2__visit-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.scaffold-v2__visit-jump button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: #17324d;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scaffold-v2__visit-jump button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.scaffold-v2__visit-list {
+  position: relative;
+}
+
+.scaffold-v2__visit-list .scaffold-v2__memo-suggest {
+  margin: 0 0 12px;
+  border: 1px solid #c9d8f5;
+  border-left: 4px solid #3b6fd4;
+  border-radius: var(--radius);
+  background: #eef4ff;
+}
+
+.scaffold-v2__visit-list .scaffold-v2__memo-suggest > summary {
+  display: block;
+  padding: 10px 14px;
+  color: #2a55b0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.scaffold-v2__visit-list .scaffold-v2__memo-suggest > summary::before {
+  content: '▸ ';
+}
+
+.scaffold-v2__visit-list .scaffold-v2__memo-suggest[open] > summary::before {
+  content: '▾ ';
+}
+
+.scaffold-v2__memo-suggest p {
+  margin: 0;
+  padding: 0 14px 8px;
+  color: #3c5a94;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.scaffold-v2__memo-suggest ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 14px 12px;
+  list-style: none;
+}
+
+.scaffold-v2__memo-suggest li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #c9d8f5;
+  border-radius: 6px;
+  background: #fff;
+  color: #14253d;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.scaffold-v2__memo-suggest li em {
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #dbe7ff;
+  color: #2a55b0;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scaffold-v2__memo-suggest li button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid #3b6fd4;
+  border-radius: 6px;
+  background: #fff;
+  color: #2a55b0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.scaffold-v2__memo-suggest li button:disabled {
+  border-color: var(--border);
+  color: var(--text-muted);
+  cursor: default;
+}

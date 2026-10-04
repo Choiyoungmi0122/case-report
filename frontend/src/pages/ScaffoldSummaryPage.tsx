@@ -334,7 +334,9 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
           <ScaffoldBulletList
             items={caseNotes.map((note) => ({
               id: note.id,
-              text: `[${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}] ${note.text}`
+              text: `[${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}${
+                note.id.startsWith('case-note-ai-') ? ' · AI 추천에서 가져옴' : ''
+              }] ${note.text}`
             }))}
             emptyMessage="메모가 없습니다."
           />

@@ -705,7 +705,15 @@ export interface TimelineImportResponse {
   finalDraft?: FinalDraft | null;
 }
 
+export interface ScaffoldMemoSuggestion {
+  id: string;
+  visitIndex: number;
+  type: ScaffoldV2CaseNoteType;
+  text: string;
+}
+
 export interface ScaffoldStateResponse {
+  memoSuggestions?: ScaffoldMemoSuggestion[];
   caseId: string;
   experiment_code?: string;
   experimentCode?: string;

@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { DEFAULT_STUDY_MEMO_SUGGESTIONS, isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
@@ -722,7 +723,11 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
     finalDraft: studyMode ? null : caseData.finalDraft || null,
     scaffoldState: responseScaffoldState,
     researchState: (caseData as any).researchState || null,
-    studyConfig: (caseData as any).studyConfig || null
+    studyConfig: (caseData as any).studyConfig || null,
+    // 고정 실험 사례일 때만 방문별 메모 추천을 내려준다.
+    memoSuggestions: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+      ? DEFAULT_STUDY_MEMO_SUGGESTIONS.map(({ id, visitIndex, type, text }) => ({ id, visitIndex, type, text }))
+      : []
   };
 }
 

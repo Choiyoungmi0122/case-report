@@ -293,6 +293,105 @@ export const DEFAULT_STUDY_CASE: StudyCaseTemplate = {
   ]
 };
 
+export type StudyMemoSuggestion = {
+  id: string;
+  visitIndex: number;
+  type: 'observation' | 'question';
+  text: string;
+  /** 이 추천이 대응하는 CARE 체크리스트 세부 항목 (작성 기준 1). */
+  careItem: string;
+  /** 추천이 가리키는 원기록의 구절 (작성 기준 3). 화면에는 보여주지 않는다. */
+  recordAnchor: string;
+};
+
+/**
+ * 방문별 'AI 메모 추천'. 실험 사례가 고정이므로 추천도 미리 만들어 고정해 둔다.
+ *
+ * 작성 기준 (docs/memo_suggestions_basis.md에 근거와 함께 정리):
+ *  1. 추천 하나는 CARE 체크리스트의 세부 항목 하나에 대응한다.
+ *  2. 선행연구에서 보고율이 낮았던 세부 항목을 우선한다.
+ *  3. 그 방문의 원기록에 실제로 적힌 구절을 가리킨다.
+ *  4. 살펴볼 곳만 알려주고 값, 결론, 판단은 적지 않는다.
+ *  5. 방문마다 2개.
+ *  6. 이상반응(10d)은 추천을 두지 않는다. 학습자가 도움 없이 찾는지 보기 위해서다.
+ *
+ * id는 저장된 메모와 연결되므로 바꾸지 않는다. 문구를 고치면 문서의 표도 함께 고친다.
+ */
+export const DEFAULT_STUDY_MEMO_SUGGESTIONS: StudyMemoSuggestion[] = [
+  {
+    id: 'v1-1', visitIndex: 1, type: 'question',
+    text: '치매 진단, K-MMSE, MRI 결과가 어떤 경로로 확인된 정보인지 살펴본다.',
+    careItem: '8a 진단 방법',
+    recordAnchor: 'K-MMSE 22점이었다고 들음 (본인 진술, 결과지 없음)'
+  },
+  {
+    id: 'v1-2', visitIndex: 1, type: 'observation',
+    text: '복용 중인 약 가운데 이름이 확인된 것과 확인되지 않은 것이 섞여 있다.',
+    careItem: '5c 과거력과 과거 중재',
+    recordAnchor: '고혈압 약 복용 중 (약 이름 모름, 아침 1알) / 도네페질정 5mg qd'
+  },
+  {
+    id: 'v2-1', visitIndex: 2, type: 'observation',
+    text: '이날부터 침, 약침 등 새로운 치료가 시작되었다.',
+    careItem: '9a 중재의 종류',
+    recordAnchor: '처치 및 시술: 약침, 경혈침술, 복강내침술 …'
+  },
+  {
+    id: 'v2-2', visitIndex: 2, type: 'question',
+    text: '집에서 하도록 교육한 내용을 실제로 했는지 이후 기록에서 확인해 본다.',
+    careItem: '10c 중재 순응과 내약성',
+    recordAnchor: '자율훈련법 (귀가 후 1일 2회, 회당 10분 시행하도록 교육)'
+  },
+  {
+    id: 'v3-1', visitIndex: 3, type: 'observation',
+    text: '증상 변화에 대한 내용이 누구의 말인지 표시되어 있다.',
+    careItem: '10a 임상의와 환자가 평가한 결과',
+    recordAnchor: '며칠 전에도 폭력적 행위 보였으나 조금 수그러들었다고 함. (배우자 진술)'
+  },
+  {
+    id: 'v3-2', visitIndex: 3, type: 'question',
+    text: '약 복용 시간에 대한 안내가 이후 어떻게 되었는지 살펴본다.',
+    careItem: '9c 중재의 변경과 이유',
+    recordAnchor: '도네페질 복용 시간 저녁 -> 아침으로 바꿔보라고 신경과에 문의해보시라 안내함.'
+  },
+  {
+    id: 'v4-1', visitIndex: 4, type: 'observation',
+    text: '지난 방문 이후의 경과가 한 방향으로만 진행되지 않았다.',
+    careItem: '7 타임라인',
+    recordAnchor: '3/18 이후 1주는 잘 지냄. … 3/28부터 분노 조절 계속 안 됨.'
+  },
+  {
+    id: 'v4-2', visitIndex: 4, type: 'observation',
+    text: '보호자가 가져온 자료로 새로 확인된 정보가 있다.',
+    careItem: '8a 진단 방법',
+    recordAnchor: '딸이 신경과 결과지 가져옴: K-MMSE 22/30점, 뇌 MRI 경도 뇌위축 …'
+  },
+  {
+    id: 'v5-1', visitIndex: 5, type: 'observation',
+    text: '한방 치료 외에 이 시기에 달라진 것이 있다.',
+    careItem: '9a 중재의 종류 (병행 중재)',
+    recordAnchor: '4/8 신규 정신과 재진(딸 동반). … 기존 정신과 약도 4/8부터 딸이 챙겨줘서'
+  },
+  {
+    id: 'v5-2', visitIndex: 5, type: 'observation',
+    text: '시술 부위가 추가되었고 그 이유가 적혀 있다.',
+    careItem: '9c 중재의 변경과 이유',
+    recordAnchor: '안와부 다크서클 호소하여 약침 부위 추가'
+  },
+  {
+    id: 'v6-1', visitIndex: 6, type: 'observation',
+    text: '좋아진 지표와 그대로인 지표가 함께 기록되어 있다.',
+    careItem: '10b 중요한 추적 검사 결과 (양성·음성 모두)',
+    recordAnchor: 'PHQ-9 9점, ISI 8점, 화병증상척도 24점 / K-MMSE 22/30점'
+  },
+  {
+    id: 'v6-2', visitIndex: 6, type: 'question',
+    text: '같은 내용에 대해 환자와 보호자의 말이 다른 부분이 있는지 살펴본다.',
+    careItem: '10a 임상의와 환자가 평가한 결과',
+    recordAnchor: '남편 의심하는 말은 줄었으나 아직 가끔 한다고 함. (딸 진술) 본인은 … "그런 생각 잘 안 한다"'
+  }
+];
+
 /**
  * True when the visits are exactly the fixed virtual-patient case. That record is
  * synthetic and carries no real identifiers, so the pipeline skips de-identification
