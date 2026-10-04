@@ -53,6 +53,8 @@ import { chain3SystemPrompt, buildChain3UserPrompt } from '../llm/prompts/chain3
 import { chain7SystemPrompt } from '../llm/prompts/chain7_final';
 import { buildGenerationMetadata, getVersionMetadata, hashPromptParts } from '../config/researchMetadata';
 import { DEFAULT_STUDY_CASE_ID, DEFAULT_STUDY_CASE_VERSION, getStudyCaseTemplate } from '../study/cases/defaultStudyCase';
+import { getFixedStudyCaseAnalysis } from '../study/cases/studyCaseSnapshot';
+import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
 
 const router = express.Router();
 const caseModel = new CaseModel();
@@ -1283,12 +1285,30 @@ export async function reprocessCaseFromStoredTerms(params: {
     }))
   );
 
-  const preprocessedChain1 = await measureStage('preprocessing', () =>
-    preprocessVisitsForChain1Impl(visitsForChain1, {
-      storedConfirmations: params.caseData.pendingTermConfirmations || [],
-      semanticMatcher: params.semanticMatcher,
-      llmResolver: params.llmResolver
-    })
+  // The fixed study EMR is identical for every participant, so its
+  // preprocessing + CHAIN1 + CHAIN2 result is computed once and reused. It only
+  // applies to the untouched case: a term decision or an imported timeline
+  // changes the input, and tests that inject their own stages must run them.
+  const hasTermDecisions = (params.caseData.pendingTermConfirmations || []).some(
+    (item: any) => item?.status === 'CONFIRMED' || item?.status === 'REJECTED'
+  );
+  const fixedStudyAnalysis =
+    !params.dependencies?.preprocessVisitsForChain1 &&
+    !params.dependencies?.runEvidenceSplit &&
+    !params.dependencies?.runSectionAssessment &&
+    !hasTermDecisions &&
+    (params.caseData.timelineEvents || []).length === 0
+      ? getFixedStudyCaseAnalysis(visitsForChain1)
+      : null;
+
+  const preprocessedChain1 = await measureStage('preprocessing', async () =>
+    fixedStudyAnalysis
+      ? (fixedStudyAnalysis.preprocessed as Awaited<ReturnType<typeof preprocessVisitsForChain1>>)
+      : preprocessVisitsForChain1Impl(visitsForChain1, {
+          storedConfirmations: params.caseData.pendingTermConfirmations || [],
+          semanticMatcher: params.semanticMatcher,
+          llmResolver: params.llmResolver
+        })
   );
 
   const chain1InputHash = buildChain1InputHash(preprocessedChain1.preparedVisits);
@@ -1342,11 +1362,14 @@ export async function reprocessCaseFromStoredTerms(params: {
   const chain1StartedAt = new Date().toISOString();
   let chain1Usage: any = null;
   const reuseChain1 =
-    hasChainCacheHit(params.caseData, 'CHAIN1', chain1InputHash) &&
-    Array.isArray(params.caseData.evidenceCards) &&
-    params.caseData.evidenceCards.length > 0;
+    Boolean(fixedStudyAnalysis) ||
+    (hasChainCacheHit(params.caseData, 'CHAIN1', chain1InputHash) &&
+      Array.isArray(params.caseData.evidenceCards) &&
+      params.caseData.evidenceCards.length > 0);
   const chain1EvidenceCards = await measureStage('chain1', async () =>
-    reuseChain1
+    fixedStudyAnalysis
+      ? fixedStudyAnalysis.evidenceCards
+      : reuseChain1
       ? params.caseData.evidenceCards || []
       : runEvidenceSplitImpl(preprocessedChain1.preparedVisits, {
           onUsage: (usage) => {
@@ -1385,11 +1408,14 @@ export async function reprocessCaseFromStoredTerms(params: {
   const chain2StartedAt = new Date().toISOString();
   let chain2Usage: any = null;
   const reuseChain2 =
-    hasChainCacheHit(params.caseData, 'CHAIN2', chain2InputHash) &&
-    Array.isArray(params.caseData.sectionStates) &&
-    params.caseData.sectionStates.length > 0;
+    Boolean(fixedStudyAnalysis) ||
+    (hasChainCacheHit(params.caseData, 'CHAIN2', chain2InputHash) &&
+      Array.isArray(params.caseData.sectionStates) &&
+      params.caseData.sectionStates.length > 0);
   const sectionStates = await measureStage('chain2', async () =>
-    reuseChain2
+    fixedStudyAnalysis
+      ? ensureAllSectionStates(fixedStudyAnalysis.sectionStates)
+      : reuseChain2
       ? ensureAllSectionStates(cloneJson(params.caseData.sectionStates || []))
       : ensureAllSectionStates(
           await runSectionAssessmentImpl(evidenceCards, {
@@ -2611,6 +2637,62 @@ router.post('/:id/process', async (req: Request, res: Response) => {
         riskLevel: anyCase.reviewRequired?.riskLevel || 'LOW',
         reviewRequired: anyCase.reviewRequired || null,
         pendingTermConfirmations: anyCase.pendingTermConfirmations || []
+      });
+    }
+
+    // The fixed study EMR gets one frozen, reviewed result so that every
+    // participant judges the same evidence cards and the same AI drafts.
+    const hasTermDecisionsForFrozen = (anyCase.pendingTermConfirmations || []).some(
+      (item: any) => item?.status === 'CONFIRMED' || item?.status === 'REJECTED'
+    );
+    const frozenStudyResult =
+      (anyCase.mode || 'write') === 'scaffold' &&
+      (anyCase.timelineEvents || []).length === 0 &&
+      !hasTermDecisionsForFrozen
+        ? getFrozenStudyCaseResult(visitsForChain1.map((visit: any) => visit.text))
+        : null;
+
+    if (frozenStudyResult) {
+      const frozenAt = new Date().toISOString();
+      const researchState = normalizeResearchState(anyCase.researchState, Boolean(anyCase.studyConfig?.studyMode));
+      await caseModel.updateCase(id, {
+        ...frozenStudyResult,
+        staleState: { isStale: true, staleReason: 'EVIDENCE_REGENERATED', staleAt: frozenAt },
+        chainProgress: {
+          currentStep: null,
+          completedSteps: ['PREPROCESS', 'CHAIN1', 'CHAIN2', 'CHAIN3', 'CHAIN4', 'CHAIN5'],
+          estimatedRemainingSteps: [],
+          updatedAt: frozenAt
+        },
+        chainPerformanceLogs: [],
+        ...(isResearchTracked(researchState)
+          ? {
+              researchState: appendResearchEvent(researchState, {
+                eventId: randomUUID(),
+                eventType: 'case_processed',
+                caseId: id,
+                mode: anyCase.mode || 'write',
+                sessionId: researchState.sessionId,
+                participantCode: researchState.participantCode,
+                metadata: { cached: true, frozenStudyCase: true }
+              })
+            }
+          : {})
+      } as any);
+
+      console.log(`[PROCESS ${id}] frozen study case result applied in ${Date.now() - processStartedAt}ms`);
+      return res.json({
+        caseId: id,
+        sectionsOverview: buildProcessSectionsOverview(
+          anyCase,
+          (frozenStudyResult.sectionStates as any[]) || [],
+          (frozenStudyResult.sectionDrafts as any[]) || []
+        ),
+        cached: true,
+        frozenStudyCase: true,
+        riskLevel: 'LOW',
+        reviewRequired: null,
+        pendingTermConfirmations: frozenStudyResult.pendingTermConfirmations || []
       });
     }
 

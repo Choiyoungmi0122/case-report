@@ -262,7 +262,12 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     }
   };
 
-  const persistCaseMap = async (nextPhase = currentPhase, successMessage = '저장되었습니다.') => {
+  const persistCaseMap = async (
+    nextPhase = currentPhase,
+    successMessage = '저장되었습니다.',
+    // 방금 바뀐 메모를 바로 저장할 때 쓴다. state는 다음 렌더에서야 바뀌기 때문이다.
+    notesOverride?: ScaffoldV2CaseNote[]
+  ) => {
     if (!caseId) return false;
     setSaving(true);
     setError(null);
@@ -273,7 +278,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
         evidenceReflections,
         learnerAddedEvidence,
         evidenceFeedbackRevealedAt: evidenceFeedbackRevealedAt || null,
-        caseNotes,
+        caseNotes: notesOverride || caseNotes,
         noteFeedbackRevealedAt: noteFeedbackRevealedAt || null,
         problemRepresentation,
         reportabilityRationale,
@@ -353,6 +358,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     setNewCaseNoteText('');
     setNoteFeedbackRevealedAt(undefined);
     setError(null);
+    // 추가하는 즉시 저장한다. 새로고침하거나 창을 닫아도 메모가 남는다.
+    void persistCaseMap(currentPhase, '메모를 저장했습니다.', nextNotes);
   };
 
   const updateCaseNote = (noteId: string, updates: Partial<ScaffoldV2CaseNote>) => {
@@ -369,6 +376,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     setCaseNotes(nextNotes);
     syncEvidenceIdsFromNotes(nextNotes);
     setNoteFeedbackRevealedAt(undefined);
+    void persistCaseMap(currentPhase, '메모를 삭제했습니다.', nextNotes);
   };
 
   const revealNoteFeedback = () => {
@@ -487,7 +495,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <div>
                 <span>1단계</span>
                 <h2 id="case-understanding-title">기록을 읽고 내 말로 메모하기</h2>
-                <p>정답을 고르거나 분류하지 않아도 됩니다. 눈에 띈 점과 더 확인하고 싶은 점을 짧게 남겨보세요.</p>
+                <p>{studyMode ? '이 환자를 증례보고로 쓴다면 중요하다고 생각하는 점과 더 확인하고 싶은 점을 짧게 적어 보세요. 메모는 추가하는 즉시 저장되고, 마지막 학습 기록에 함께 실립니다.' : '정답을 고르거나 분류하지 않아도 됩니다. 눈에 띈 점과 더 확인하고 싶은 점을 짧게 남겨보세요.'}</p>
               </div>
               <strong>{caseNotes.length}개 메모</strong>
             </div>
@@ -596,7 +604,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
 
             <div className="scaffold-v2__stage-actions">
               <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>
-                {saving ? '저장 중...' : '메모 저장'}
+                {saving ? '저장 중...' : '수정한 메모 저장'}
               </button>
               <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo(studyMode ? 'section_drafting' : 'core_message')} disabled={saving}>
                 {studyMode ? '다음: CARE 항목 작성' : '다음: 핵심 메시지 작성'}
