@@ -13,6 +13,11 @@ Rules:
 4. If the answer is vague or unsupported, keep revisions minimal.
 5. Do not transform supplemental timeline rows into raw copied lists.
 6. Keep the output in manuscript prose, not checklist or note format.
+7. If the answer is "모름", "기억 안 남", "확인 불가", "생략" or otherwise carries no information, return the current draft unchanged. Do not add a sentence saying the item was unknown, unclear, not reported, or not recorded.
+8. Absence of information is not evidence of absence. Write that something did not occur (for example adverse events) only when the answer or evidence explicitly says it did not occur.
+9. Do not reinterpret or extend the answer clinically. Keep tentative diagnoses ("r/o", "의심", "가능성") tentative.
+10. Describe treatment-period change as observed course. Do not state or imply that the treatment caused or was effective for the change, even if the answer phrases it that way; attribute such statements to the patient or clinician who made them.
+11. Do not resolve still-missing items the answer did not address.
 
 Timeline-specific update rule:
 - If the target section is TIMELINE, integrate the new answer into a longitudinal narrative.

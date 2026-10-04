@@ -104,7 +104,7 @@ export const careSectionRubricMap: Record<SupportedCareSectionId, CareSectionRub
   FOLLOW_UP_OUTCOMES: {
     sectionId: 'FOLLOW_UP_OUTCOMES',
     title: 'Follow-up and Outcomes Section',
-    requiredItems: ['임상 및 환자 평가 결과', '부작용 및 예기치 않은 사건 명시'],
+    requiredItems: ['임상 및 환자 평가 결과', '부작용 및 예기치 않은 사건(기록 또는 답변으로 확인된 경우에만 기술하고, 확인되지 않으면 없었다고 쓰지 않음)'],
     optionalItems: ['중요한 추적 검사 결과', '치료 준수 및 내약성 평가 방법'],
     editorialGoal: '치료 후 변화와 추적 결과를 시간 흐름에 맞춰 보여준다.'
   },

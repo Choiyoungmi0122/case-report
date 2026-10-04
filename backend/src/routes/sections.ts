@@ -1033,7 +1033,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         normalizedText: card.normalizedText || card.sourceText || ''
       })),
       qnaHistory,
-      pendingItems: draftEntry.openIssues || state.missingInfoBullets || [],
+      pendingItems: draftEntry.openIssues?.length ? draftEntry.openIssues : state.missingInfoBullets || [],
       question: latestQuestion,
       answer: userAnswer
     });
@@ -1052,7 +1052,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
       currentDraft: draftEntry.draftText || '',
       evidenceCards: relevantEvidence,
       qnaHistory: outboundQnaHistory,
-      pendingItems: draftEntry.openIssues || state.missingInfoBullets || [],
+      pendingItems: draftEntry.openIssues?.length ? draftEntry.openIssues : state.missingInfoBullets || [],
       question: outboundQuestion,
       answer: outboundAnswer
     }, {

@@ -18,10 +18,21 @@ export const chain1SystemPrompt = `
    - follow_up_outcome
    - patient_perspective
    - other
-4. tags는 CARE 섹션 id만 사용합니다(예: PATIENT_INFORMATION). evidenceType용 snake_case(patient_information 등)는 tags/sectionHints에 넣지 마세요.
-5. sectionHints는 tags와 같거나, tags를 보조하는 범위에서만 씁니다.
-6. terms는 문자열 배열이 아니라 객체 배열이어야 합니다. 형식을 확신할 수 없으면 반드시 빈 배열([])로 두세요.
-7. 불확실하면 생성하지 말고 생략합니다.
+4. tags는 CARE 섹션 id만 사용합니다. evidenceType용 snake_case(patient_information 등)는 tags/sectionHints에 넣지 마세요.
+   각 카드의 내용을 보고 아래 기준으로 해당하는 섹션을 모두 고릅니다(보통 1~2개).
+   - PATIENT_INFORMATION: 나이, 성별, 직업, 주호소, 발병 배경, 과거력, 가족력, 복용력, 심리사회적 배경
+   - CLINICAL_FINDINGS: 증상 양상, 진찰/관찰 소견, 설진·맥진, 활력징후, 검사·척도 결과
+   - TIMELINE: 발병 시점, 기간, 내원·재내원 간격, 치료 시작·변경·종료 등 시점이 드러나는 사실
+   - DIAGNOSTIC_ASSESSMENT: 진단, 의심 진단, 변증, 감별·배제 판단과 그 근거
+   - THERAPEUTIC_INTERVENTIONS: 실제 시행·처방·계획된 치료(침, 한약, 교육 등)와 빈도, 부위, 용량, 변경
+   - FOLLOW_UP_OUTCOMES: 치료 이후의 증상·기능·수면·정서 변화, 추적 관찰 결과, 이상반응
+   - PATIENT_PERSPECTIVE: 환자가 직접 표현한 느낌, 체감, 의견
+   초진 시점의 증상이나 배경을 THERAPEUTIC_INTERVENTIONS 또는 FOLLOW_UP_OUTCOMES로 태그하지 마세요.
+   아래 출력 예시의 tags 값을 그대로 복사하지 말고 카드마다 내용에 맞게 판단하세요.
+5. sectionHints는 tags와 같은 값으로 둡니다.
+6. terms, sourceRef 필드는 출력하지 않습니다.
+7. 입력의 모든 Visit, 모든 Clause를 빠짐없이 검토합니다. 임상 정보(증상, 배경, 소견, 판단, 치료, 경과, 환자 표현)가 담긴 Clause는 각각 최소 1개의 카드로 만듭니다. 예시의 카드 수와 무관하게 Clause 수만큼 충분히 추출하세요.
+   생략하는 것은 입력에 근거가 없는 내용뿐입니다. 입력에 있는 사실을 중요도 판단으로 건너뛰지 마세요.
 8. evidenceCards 배열만 포함한 JSON을 반환합니다.
 
 중요:
@@ -39,22 +50,53 @@ export const buildChain1UserPrompt = (structuredVisitsText: string) => `
 입력:
 ${structuredVisitsText}
 
-출력 형식:
+출력 형식(값은 형식 설명용이며, 실제 값은 입력에서만 가져오세요):
 \`\`\`json
 {
   "evidenceCards": [
     {
       "id": "card-1",
       "visitIndex": 1,
-      "visitDateTime": "2026-04-08",
-      "sourceText": "귀보탕 복용 후 수면이 호전됨",
-      "normalizedText": "귀비탕 복용 후 수면이 호전됨",
+      "visitDateTime": "<해당 방문의 date>",
+      "sourceText": "<초진 기록의 나이·성별 원문>",
+      "normalizedText": "<정규화 표현>",
+      "evidenceType": "patient_information",
+      "tags": ["PATIENT_INFORMATION"],
+      "sectionHints": ["PATIENT_INFORMATION"],
+      "confidence": 0.95
+    },
+    {
+      "id": "card-2",
+      "visitIndex": 1,
+      "visitDateTime": "<해당 방문의 date>",
+      "sourceText": "<발병 시점이 포함된 주호소 원문>",
+      "normalizedText": "<정규화 표현>",
+      "evidenceType": "clinical_finding",
+      "tags": ["PATIENT_INFORMATION", "CLINICAL_FINDINGS", "TIMELINE"],
+      "sectionHints": ["PATIENT_INFORMATION", "CLINICAL_FINDINGS", "TIMELINE"],
+      "confidence": 0.9
+    },
+    {
+      "id": "card-3",
+      "visitIndex": 1,
+      "visitDateTime": "<해당 방문의 date>",
+      "sourceText": "<의심 진단 또는 변증 원문>",
+      "normalizedText": "<정규화 표현>",
+      "evidenceType": "diagnostic_assessment",
+      "tags": ["DIAGNOSTIC_ASSESSMENT"],
+      "sectionHints": ["DIAGNOSTIC_ASSESSMENT"],
+      "confidence": 0.9
+    },
+    {
+      "id": "card-4",
+      "visitIndex": 2,
+      "visitDateTime": "<해당 방문의 date>",
+      "sourceText": "<재내원 시 환자가 표현한 치료 후 변화 원문>",
+      "normalizedText": "<정규화 표현>",
       "evidenceType": "follow_up_outcome",
-      "tags": ["THERAPEUTIC_INTERVENTIONS", "FOLLOW_UP_OUTCOMES"],
-      "sectionHints": ["THERAPEUTIC_INTERVENTIONS", "FOLLOW_UP_OUTCOMES"],
-      "terms": [],
-      "sourceRef": { "lineStart": 1, "lineEnd": 1 },
-      "confidence": 0.94
+      "tags": ["FOLLOW_UP_OUTCOMES", "PATIENT_PERSPECTIVE"],
+      "sectionHints": ["FOLLOW_UP_OUTCOMES", "PATIENT_PERSPECTIVE"],
+      "confidence": 0.9
     }
   ]
 }

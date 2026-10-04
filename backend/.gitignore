@@ -7,3 +7,5 @@ tmp_*/
 tmp*.docx
 tmp*.zip
 tmp*.ps1
+
+backups/

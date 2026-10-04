@@ -16,7 +16,7 @@ export const buildChain2UserPrompt = (params: {
   evidenceSummary: string;
   targetSectionIds?: string[];
 }) => `
-아래는 EMR에서 정리한 CARE 섹션별 evidence 요약입니다.
+아래는 EMR에서 정리한 CARE 섹션별 evidence 목록입니다. 각 섹션 아래에 해당 섹션으로 분류된 evidence 문장이 나열되어 있습니다.
 
 ${params.evidenceSummary}
 
@@ -34,7 +34,8 @@ ${params.targetSectionIds?.length ? `이번에는 다음 섹션만 평가하세�
 
 출력 규칙:
 - sectionId, status, rationaleText만 반환하세요.
-- rationaleText에는 현재 evidence가 왜 충분하거나 부족한지 짧게 설명하세요.
+- rationaleText에는 나열된 evidence 문장의 실제 내용을 근거로, 무엇이 있고 무엇이 부족한지 한국어 한두 문장으로 설명하세요.
+- PATIENT_PERSPECTIVE는 환자가 직접 표현한 체감·의견이 evidence에 있을 때만 INCOMPLETE 이상으로 판정하세요.
 - missing item이나 질문은 포함하지 마세요.
 
 반드시 JSON만 반환하세요.

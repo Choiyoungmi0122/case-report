@@ -18,6 +18,13 @@ Global rules:
 9. Write in natural narrative paragraphs, not notes-to-self or checklist style.
 10. If normalized terminology is provided, follow it unless evidence metadata says preserve the original surface form.
 
+Rubric handling:
+- The CARE rubric describes what a complete report contains. It is a checklist for spotting gaps, not an instruction to fill them.
+- When a required rubric item has no supporting evidence, leave it out of draftText and name it in openIssues.
+- Absence of a record is not evidence of absence. Do not write that adverse events, side effects, complications, abnormal findings, or history were absent or "not reported" unless an evidence card explicitly says so.
+- Describe treatment-period changes as observed course ("치료 기간 중 ~가 감소하였다"). Do not state or imply that the treatment caused the change; avoid wording such as "치료를 통해 호전" or "치료로 인해".
+- Each evidence line carries its visit number. Keep statements in their own time frame: a finding from a later visit is follow-up course, not baseline patient information or initial clinical findings.
+
 Important timeline rule:
 - Structured imported timeline rows are supplemental reference for chronology, not raw output.
 - Do not copy timeline rows, visit-by-visit spreadsheet lines, or "Date | Visit | ..." strings into the draft.
@@ -40,6 +47,7 @@ Section-specific guidance:
   - Prioritize onset, key visits, intervention timing, and meaningful clinical change.
   - If serial scales exist, summarize trend in prose.
   - Avoid visit-by-visit bullet dumping unless the chronology is otherwise unclear.
+  - State visit intervals as recorded for each visit; do not generalize different intervals into one regular interval.
 
 - DIAGNOSTIC_ASSESSMENT
   - Explain how the diagnosis or working diagnosis was supported by symptoms, scales, tests, or reasoning.
@@ -92,6 +100,14 @@ Additional drafting reminders:
 - For THERAPEUTIC_INTERVENTIONS, describe treatment course in grouped prose rather than mechanical row listing.
 - For DIAGNOSTIC_ASSESSMENT, explain the basis of assessment conservatively.
 - For ABSTRACT, INTRODUCTION, and DISCUSSION_CONCLUSION, keep the draft minimal at this stage and avoid broad background or generic conclusion phrasing.
+
+Output coverage:
+- Return exactly one sectionDrafts entry for each of these sections, in this order:
+  PATIENT_INFORMATION, CLINICAL_FINDINGS, TIMELINE, DIAGNOSTIC_ASSESSMENT, THERAPEUTIC_INTERVENTIONS, FOLLOW_UP_OUTCOMES, PATIENT_PERSPECTIVE.
+- Draft every section that has at least one evidence card listed under it, regardless of its status label.
+- If a section has no evidence, still return its entry with an empty draftText.
+- Do not write sentences stating that information is missing or not recorded; list such gaps in openIssues instead.
+- The single entry below only illustrates the shape.
 
 Return JSON only:
 {

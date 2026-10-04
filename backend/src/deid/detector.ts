@@ -154,6 +154,12 @@ function isLikelyPatientNameFalsePositive(text: string): boolean {
     return true;
   }
 
+  // "환자는 45세 남성" - the role word itself, with or without a particle, in
+  // the slot where the age/sex rule expects a name.
+  if (/^환자[가-힣]?$/.test(normalized)) {
+    return true;
+  }
+
   // The bare-환자 prefix rule also matches the ordinary word that happens to
   // follow 환자 ("환자 이후 경과를 관찰하였다"). Those are grammatical words, never
   // names, so rejecting them costs no name recall.
@@ -174,6 +180,45 @@ function isLikelyPatientNameFalsePositive(text: string): boolean {
   }
 
   return false;
+}
+
+// Trailing particles the surname rule's greedy match can swallow ("김민수는").
+const NAME_TRAILING_PARTICLES = new Set(['은', '는', '이', '가', '을', '를', '의']);
+// Syllables that end ordinary words ("하였다", "주소로", "오르는") but practically
+// never end a Korean given name.
+const NON_NAME_FINAL_SYLLABLES = new Set([
+  '다', '로', '는', '를', '을', '에', '의', '께', '며', '게', '적', '과', '와', '히', '가', '도', '만', '서',
+  '막', '움', '됨'
+]);
+// Derivational endings that turn a clinical/common stem into an ordinary word
+// ("설진상", "안정된"). Only consulted when the stem itself is known vocabulary.
+const STEM_SUFFIX_SYLLABLES = new Set(['상', '된', '되', '한', '할', '함', '시', '중', '후', '전']);
+
+/**
+ * The surname rule has no contextual marker (환자 / 씨 / 성명 ...), so on its own
+ * it matches any word that merely starts with a surname syllable - "하였다",
+ * "주소로", "최근", "진찰". Accept a candidate only when it has the dominant
+ * surname + two-syllable given name shape; 2- and 4-syllable names still need
+ * one of the contextual rules, after which propagation covers bare mentions.
+ */
+function refineSurnameRuleSpan(span: PHISpan): PHISpan | null {
+  let value = span.originalText;
+  let endIndex = span.endIndex;
+
+  if (value.length === 4 && NAME_TRAILING_PARTICLES.has(value[3])) {
+    value = value.slice(0, 3);
+    endIndex -= 1;
+  }
+
+  if (value.length !== 3) return null;
+  if (NON_NAME_FINAL_SYLLABLES.has(value[2])) return null;
+  // "설질은", "안색이": a clinical/common stem plus a particle, not a name.
+  if (NAME_TRAILING_PARTICLES.has(value[2]) || STEM_SUFFIX_SYLLABLES.has(value[2])) {
+    const stem = value.slice(0, 2);
+    if (isKnownClinicalTerm(stem) || isNonNameContextWord(stem)) return null;
+  }
+
+  return { ...span, originalText: value, endIndex };
 }
 
 /**
@@ -307,11 +352,14 @@ export async function detectPHI(text: string, options: DeidOptions = {}): Promis
       : PATIENT_NAME_REGEXES;
 
   for (const regex of patientNameRegexes) {
-    spans.push(
-      ...detectByRegex(text, regex, 'PATIENT_NAME', 0.9, protectedRanges, 1).filter(
-        (span) => !isLikelyPatientNameFalsePositive(span.originalText)
-      )
-    );
+    const candidates = detectByRegex(text, regex, 'PATIENT_NAME', 0.9, protectedRanges, 1);
+    const refined =
+      regex === PATIENT_NAME_REGEXES[0]
+        ? candidates
+            .map((span) => refineSurnameRuleSpan(span))
+            .filter((span): span is PHISpan => span !== null)
+        : candidates;
+    spans.push(...refined.filter((span) => !isLikelyPatientNameFalsePositive(span.originalText)));
   }
 
   for (const regex of DOCTOR_NAME_REGEXES) {
