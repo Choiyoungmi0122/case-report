@@ -214,7 +214,7 @@ export function buildScaffoldItemId(
  * 이 사례에서 판단할 거리가 많은 항목만, CARE 지침의 순서대로 둔다.
  * 항목을 바꾸려면 이 배열만 고치면 된다.
  */
-export const STUDY_SECTION_IDS = ['DIAGNOSTIC_ASSESSMENT', 'THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
+export const STUDY_SECTION_IDS = ['THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
 
 /**
  * CARE 지침(Riley 등, 2017)의 13개 항목을 한 줄씩 풀어 쓴 것.

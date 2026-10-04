@@ -208,6 +208,7 @@ export interface ScaffoldPostAiReflection {
   changedJudgment: string;
   unresolvedQuestion: string;
   transferPlan: string;
+  missingInDraft?: string;
   savedAt: string;
 }
 
@@ -1417,6 +1418,13 @@ export const caseApi = {
       scaffoldState: ScaffoldState;
       caseMap: ScaffoldV2CaseMap;
     }>(`/cases/${caseId}/scaffold/case-map`, data);
+    return response.data;
+  },
+
+  deleteScaffoldReviewItem: async (caseId: string, itemId: string) => {
+    const response = await api.delete<{ success: boolean; scaffoldState: ScaffoldState }>(
+      `/cases/${caseId}/scaffold/review-items/${encodeURIComponent(itemId)}`
+    );
     return response.data;
   },
 

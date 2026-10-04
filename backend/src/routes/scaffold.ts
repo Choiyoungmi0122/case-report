@@ -291,6 +291,7 @@ function normalizePostAiReflection(value: any) {
     changedJudgment: String(value.changedJudgment || '').trim(),
     unresolvedQuestion: String(value.unresolvedQuestion || '').trim(),
     transferPlan: String(value.transferPlan || '').trim(),
+    missingInDraft: String(value.missingInDraft || '').trim(),
     savedAt: typeof value.savedAt === 'string' ? value.savedAt : ''
   };
 }
@@ -1734,6 +1735,34 @@ router.put('/:caseId/scaffold/review-items/:itemId', async (req: Request, res: R
   }
 });
 
+/** 학습자가 AI 초안 문장에 해 둔 표시를 취소한다. */
+router.delete('/:caseId/scaffold/review-items/:itemId', async (req: Request, res: Response) => {
+  try {
+    const caseData = await getValidatedScaffoldCase(req.params.caseId, res);
+    if (!caseData) return;
+
+    const itemId = String(req.params.itemId || '').trim();
+    const scaffoldState = normalizeScaffoldState(caseData.scaffoldState || emptyScaffoldState());
+    const target = scaffoldState.reviewItems.find((item) => item.id === itemId);
+    if (target && target.sourceType !== 'draft_sentence') {
+      return res.status(400).json({ error: 'Only draft sentence review items can be removed.' });
+    }
+
+    const reviewItems = scaffoldState.reviewItems.filter((item) => item.id !== itemId);
+    const nextScaffoldState: ScaffoldState = {
+      ...scaffoldState,
+      reviewItems,
+      ...deriveSummaryLists(reviewItems)
+    };
+    await persistScaffoldState(caseData.id, nextScaffoldState);
+
+    res.json({ success: true, scaffoldState: nextScaffoldState });
+  } catch (error: any) {
+    console.error('Error removing scaffold review item:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove scaffold review item' });
+  }
+});
+
 router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request, res: Response) => {
   try {
     const caseData = await getValidatedScaffoldCase(req.params.caseId, res);
@@ -1837,7 +1866,8 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
     }
     if (req.body?.draftReviewCompleted === true) {
       const gate = evaluateStudyCompletionGate(caseData, scaffoldState, sectionId);
-      if (!gate.draftRevealed || !gate.allDraftJudgmentsSaved || !gate.postAiReflectionSaved) {
+      // 일반 흐름에서는 의심되는 문장만 표시하므로 모든 문장의 판단을 요구하지 않는다.
+      if (!gate.draftRevealed || !gate.postAiReflectionSaved || (studyMode && !gate.allDraftJudgmentsSaved)) {
         return res.status(409).json({
           error: 'Scaffold draft review requirements are not complete.',
           completionGate: gate
@@ -1956,6 +1986,7 @@ router.put('/:caseId/scaffold/sections/:sectionId/reflection', async (req: Reque
                 changedJudgment: String(req.body.postAiReflection.changedJudgment || '').trim(),
                 unresolvedQuestion: String(req.body.postAiReflection.unresolvedQuestion || '').trim(),
                 transferPlan: String(req.body.postAiReflection.transferPlan || '').trim(),
+                missingInDraft: String(req.body.postAiReflection.missingInDraft || '').trim(),
                 savedAt: new Date().toISOString()
               }
             : undefined,

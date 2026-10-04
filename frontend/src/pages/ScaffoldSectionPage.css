@@ -591,3 +591,120 @@
   font-size: 16px;
   line-height: 1.8;
 }
+
+
+/* AI draft sentences are clickable: the learner flags only what they doubt. */
+.scaffold-ai-sentence {
+  display: inline;
+  margin: 0;
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.scaffold-ai-sentence + .scaffold-ai-sentence {
+  margin-left: 4px;
+}
+
+.scaffold-ai-sentence:hover {
+  background: #d6e4ff;
+}
+
+.scaffold-ai-sentence.is-flagged {
+  background: #ffe2a8;
+  box-shadow: inset 0 -2px 0 #d9822b;
+}
+
+.scaffold-flag-list h4 {
+  margin: 0 0 10px;
+  color: #17324d;
+  font-size: 17px;
+}
+
+.scaffold-flag-list__empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed #c8d2dd;
+  border-radius: 8px;
+  color: #5a6c81;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.scaffold-flag-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid #f0cf8e;
+  border-left: 5px solid #d9822b;
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.scaffold-flag-card + .scaffold-flag-card {
+  margin-top: 12px;
+}
+
+.scaffold-flag-card blockquote {
+  margin: 0;
+  color: #14253d;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.scaffold-flag-card__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scaffold-flag-card__types button {
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 1px solid #c8d2dd;
+  border-radius: 999px;
+  background: #fff;
+  color: #4a5d73;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scaffold-flag-card__types button.is-active {
+  border-color: #d9822b;
+  background: #ffe9c7;
+  color: #7a4300;
+}
+
+.scaffold-flag-card textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #c8d2dd;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.scaffold-flag-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.scaffold-flag-card__hint {
+  color: #9f3412;
+  font-size: 14px;
+}

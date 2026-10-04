@@ -445,8 +445,8 @@ const SCAFFOLD_SECTION_LABELS_KO: Record<string, string> = {
 const SCAFFOLD_JUDGMENT_LABELS_KO: Record<string, string> = {
   supported_by_record: '기록 근거 충분',
   differs_from_record: '기록과 다름',
-  needs_additional_confirmation: '추가 확인 필요',
-  needs_instructor_review: '교수 검토 필요',
+  needs_additional_confirmation: '기록만으로 확인하기 어려움',
+  needs_instructor_review: '교수님께 확인',
   uncertain: '판단 어려움',
   available_in_record: '기록에서 확인 가능',
   unavailable: '현재 기록으로 확인할 수 없음',
@@ -520,7 +520,7 @@ function buildScaffoldSummaryChildren(caseData: Case) {
       children: [makeTextRun('증례보고 작성 학습 기록', { bold: true, size: TITLE_FONT_SIZE })]
     }),
     makeBodyParagraph(
-      '학습자가 AI 초안을 보기 전에 정리한 내용, AI 초안의 각 문장에 대한 판단과 이유, AI를 본 뒤 달라진 점을 CARE 항목별로 모은 기록입니다. AI 초안은 최종 원고가 아닙니다.'
+      '학습자가 AI 초안을 보기 전에 정리한 내용, AI 초안에서 다시 봐야 한다고 표시한 문장과 그 이유, 초안에 빠졌다고 본 내용, AI를 본 뒤 달라진 점을 CARE 항목별로 모은 기록입니다. AI 초안은 최종 원고가 아닙니다.'
     ),
     makeBodyParagraph(`실험번호: ${safeText((caseData as any).experiment_code || '-')}`),
     makeBodyParagraph(`방문 기록: ${(caseData.visits || []).length}회`),
@@ -604,20 +604,27 @@ function buildScaffoldSummaryChildren(caseData: Case) {
     if (!progress.draftRevealed) {
       children.push(makeBodyParagraph('아직 AI 초안을 확인하지 않았습니다.'));
     } else {
+      // Only the sentences the learner flagged as needing another look.
       const sentenceItems = reviewItems.filter(
-        (item: any) => item.sectionId === sectionId && item.sourceType === 'draft_sentence'
+        (item: any) =>
+          item.sectionId === sectionId &&
+          item.sourceType === 'draft_sentence' &&
+          item.judgment !== 'supported_by_record' &&
+          item.judgment !== 'pending'
       );
+      children.push(makeBodyParagraph('AI 초안'));
+      children.push(...buildParagraphsFromText(safeText(draft?.draftText) || 'AI 초안이 없습니다.'));
       if (sentenceItems.length === 0) {
-        children.push(...buildParagraphsFromText(safeText(draft?.draftText) || 'AI 초안이 없습니다.'));
-        children.push(makeBodyParagraph('문장별 검토 기록이 없습니다.'));
+        children.push(makeBodyParagraph('다시 볼 문장으로 표시한 것이 없습니다.'));
       } else {
+        children.push(makeBodyParagraph(`내가 표시한 문장 ${sentenceItems.length}개`));
         children.push(
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
             borders: tableBorders(),
             rows: [
               new TableRow({
-                children: [makeHeaderCell('AI 초안 문장'), makeHeaderCell('내 판단'), makeHeaderCell('이유와 연결한 기록')]
+                children: [makeHeaderCell('표시한 AI 문장'), makeHeaderCell('종류'), makeHeaderCell('이유와 연결한 기록')]
               }),
               ...sentenceItems.map((item: any) => {
                 const linked = (item.evidenceIds || [])
@@ -647,6 +654,10 @@ function buildScaffoldSummaryChildren(caseData: Case) {
 
     // 3. What changed after seeing the AI draft
     const postAi = reflection.postAiReflection || {};
+    if (progress.draftRevealed) {
+      children.push(makeSubHeading('AI 초안에 빠졌다고 본 내용'));
+      children.push(makeBodyParagraph(safeText(postAi.missingInDraft) || '적은 내용이 없습니다.'));
+    }
     children.push(makeSubHeading('③ AI를 보고 달라진 점'));
     children.push(makeBodyParagraph(safeText(postAi.changedJudgment) || '기록된 내용이 없습니다.'));
     if (safeText(postAi.unresolvedQuestion)) {

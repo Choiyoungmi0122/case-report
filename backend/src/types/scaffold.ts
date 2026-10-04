@@ -71,6 +71,8 @@ export interface ScaffoldPostAiReflection {
   changedJudgment: string;
   unresolvedQuestion: string;
   transferPlan: string;
+  /** AI 초안에 빠졌다고 학습자가 적은 내용. */
+  missingInDraft?: string;
   savedAt: string;
 }
 

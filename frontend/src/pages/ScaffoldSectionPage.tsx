@@ -4,7 +4,6 @@ import ScaffoldActionButton from '../components/scaffold/ScaffoldActionButton';
 import ScaffoldEvidenceSelector from '../components/scaffold/ScaffoldEvidenceSelector';
 import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldProgressHeader from '../components/scaffold/ScaffoldProgressHeader';
-import ScaffoldReviewCard from '../components/scaffold/ScaffoldReviewCard';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
   caseApi,
@@ -12,14 +11,12 @@ import {
   ScaffoldInteractionEventType,
   ScaffoldReviewItem,
   ScaffoldReviewJudgment,
-  ScaffoldReviewSourceType,
   ScaffoldStateResponse,
   SectionDetail
 } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import {
   buildScaffoldItemId,
-  DRAFT_JUDGMENT_OPTIONS,
   splitScaffoldDraftSentences,
   getSectionConfig,
   type ScaffoldType,
@@ -365,6 +362,23 @@ function fromInformationStatusJudgment(value: string): string {
   return value === 'unavailable' ? 'cannot_confirm_in_record' : value;
 }
 
+/** 학습자가 '다시 볼 문장'으로 표시해 저장한 AI 문장인지. */
+function isFlaggedDraftSentence(item?: ScaffoldReviewItem) {
+  return Boolean(
+    item &&
+      item.sourceType === 'draft_sentence' &&
+      item.judgment &&
+      item.judgment !== 'pending' &&
+      item.judgment !== 'supported_by_record'
+  );
+}
+
+const DRAFT_FLAG_OPTIONS: Array<{ value: ScaffoldReviewJudgment; label: string }> = [
+  { value: 'differs_from_record', label: '기록과 다름' },
+  { value: 'needs_additional_confirmation', label: '기록만으로 확인하기 어려움' },
+  { value: 'needs_instructor_review', label: '교수님께 확인' }
+];
+
 function isCompleteDraftSentenceReview(item?: ScaffoldReviewItem) {
   if (!item || item.sourceType !== 'draft_sentence') return false;
   if (!item.judgment || item.judgment === 'pending') return false;
@@ -418,6 +432,9 @@ export default function ScaffoldSectionPage() {
   const [changedJudgmentReflection, setChangedJudgmentReflection] = useState('');
   const [unresolvedQuestionReflection, setUnresolvedQuestionReflection] = useState('');
   const [transferPlanReflection, setTransferPlanReflection] = useState('');
+  const [missingInDraftReflection, setMissingInDraftReflection] = useState('');
+  // 눌러서 표시했지만 아직 저장하지 않은 AI 문장.
+  const [openFlagIds, setOpenFlagIds] = useState<Record<string, boolean>>({});
 
   // additional_authoring 섹션의 직접 작성 내용 (learnerNotes에 저장된다)
   const [authoringNotes, setAuthoringNotes] = useState('');
@@ -560,6 +577,7 @@ export default function ScaffoldSectionPage() {
     setChangedJudgmentReflection(sectionReflection.postAiReflection?.changedJudgment || '');
     setUnresolvedQuestionReflection(sectionReflection.postAiReflection?.unresolvedQuestion || '');
     setTransferPlanReflection(sectionReflection.postAiReflection?.transferPlan || '');
+    setMissingInDraftReflection(sectionReflection.postAiReflection?.missingInDraft || '');
   }, [sectionReflection]);
 
   const sectionDraftEntry = useMemo(
@@ -792,7 +810,31 @@ export default function ScaffoldSectionPage() {
     return isCompleteDraftSentenceReview(stored);
   }).length;
 
-  const allDraftJudgmentsSaved = draftSentences.length === 0 || draftJudgmentCount >= draftSentences.length;
+  // 표시한 문장: 저장된 것과, 눌러 놓고 아직 저장하지 않은 것.
+  const flaggedSentences = draftSentences
+    .map((sentence, index) => {
+      const itemId = buildScaffoldItemId(sectionId || '', 'draft_sentence', sentence, index);
+      const stored = existingReviewMap.get(itemId);
+      const savedFlag = isFlaggedDraftSentence(stored) ? stored : undefined;
+      return { sentence, itemId, savedFlag, isOpen: Boolean(openFlagIds[itemId]) };
+    })
+    .filter((item) => item.savedFlag || item.isOpen);
+
+  const isFlagDirty = (item: (typeof flaggedSentences)[number]) => {
+    if (!item.savedFlag) return true;
+    const note = noteDrafts[item.itemId];
+    const judgment = judgmentDrafts[item.itemId];
+    const evidence = evidenceDrafts[item.itemId];
+    return (
+      (note !== undefined && note.trim() !== (item.savedFlag.note || '').trim()) ||
+      (judgment !== undefined && judgment !== item.savedFlag.judgment) ||
+      (evidence !== undefined && evidence.join('|') !== (item.savedFlag.evidenceIds || []).join('|'))
+    );
+  };
+  const unsavedFlagCount = flaggedSentences.filter(isFlagDirty).length;
+
+  // 문장마다 판단을 요구하지 않는다. 표시해 둔 문장을 모두 저장했는지만 확인한다.
+  const allDraftJudgmentsSaved = unsavedFlagCount === 0;
   // 회고는 첫 항목만 필수다. 나머지는 적고 싶을 때만 적는다.
   const postAiReflectionComplete = Boolean(changedJudgmentReflection.trim());
 
@@ -944,6 +986,7 @@ export default function ScaffoldSectionPage() {
       changedJudgment: string;
       unresolvedQuestion: string;
       transferPlan: string;
+      missingInDraft?: string;
     };
   }) => {
     if (!caseId || !sectionId) return null;
@@ -970,7 +1013,8 @@ export default function ScaffoldSectionPage() {
           ? {
               changedJudgment: sectionReflection.postAiReflection.changedJudgment,
               unresolvedQuestion: sectionReflection.postAiReflection.unresolvedQuestion,
-              transferPlan: sectionReflection.postAiReflection.transferPlan
+              transferPlan: sectionReflection.postAiReflection.transferPlan,
+              missingInDraft: sectionReflection.postAiReflection.missingInDraft
             }
           : undefined),
       draftRevealedAt: sectionReflection.draftRevealedAt,
@@ -1215,50 +1259,83 @@ export default function ScaffoldSectionPage() {
     }
   };
 
-  const saveReviewItem = async (
-    itemId: string,
-    sourceType: ScaffoldReviewSourceType,
-    sourceText: string,
-    judgment?: ScaffoldReviewJudgment
-  ) => {
-    if (!caseId || !sectionId) return;
-    if (sourceType === 'draft_sentence') {
-      const nextJudgment = judgment || 'pending';
-      const nextEvidenceIds = evidenceDrafts[itemId] || [];
-      const nextNote = noteDrafts[itemId] || '';
-
-      if (nextJudgment === 'pending') {
-        setError('AI 초안 문장의 판단을 먼저 선택해주세요.');
-        return;
-      }
-
-      if (nextJudgment !== 'supported_by_record' && !nextNote.trim() && nextEvidenceIds.length === 0) {
-        setError('판단 이유를 입력하거나 SOAP 근거를 선택해주세요.');
-        return;
-      }
+  /** 문장을 누르면 표시하고, 표시된 문장을 다시 누르면 표시를 푼다. */
+  const toggleDraftFlag = (itemId: string) => {
+    const existing = flaggedSentences.find((item) => item.itemId === itemId);
+    if (!existing) {
+      setOpenFlagIds((prev) => ({ ...prev, [itemId]: true }));
+      setError(null);
+      return;
     }
-    setSavingItemId(itemId);
+    const hasWrittenReason = Boolean(
+      existing.savedFlag || (noteDrafts[itemId] || '').trim() || (evidenceDrafts[itemId] || []).length > 0
+    );
+    if (hasWrittenReason && !window.confirm('이 문장의 표시를 풀까요? 적어 둔 이유도 함께 지워집니다.')) {
+      return;
+    }
+    void cancelDraftFlag(existing);
+  };
 
+  const saveDraftFlag = async (item: { sentence: string; itemId: string; savedFlag?: ScaffoldReviewItem }) => {
+    if (!caseId || !sectionId) return;
+    const judgment = (judgmentDrafts[item.itemId] ||
+      item.savedFlag?.judgment ||
+      'differs_from_record') as ScaffoldReviewJudgment;
+    const note = (noteDrafts[item.itemId] ?? item.savedFlag?.note ?? '').trim();
+    const evidenceIds = evidenceDrafts[item.itemId] ?? item.savedFlag?.evidenceIds ?? [];
+    if (!note && evidenceIds.length === 0) {
+      setError('표시한 이유를 적거나 기록 근거를 연결해주세요.');
+      return;
+    }
+
+    setSavingItemId(item.itemId);
+    setError(null);
     try {
-      const nextState = await caseApi.upsertScaffoldReviewItem(caseId, itemId, {
+      const nextState = await caseApi.upsertScaffoldReviewItem(caseId, item.itemId, {
         sectionId,
-        sourceType,
-        sourceText,
-        judgment: judgment || 'pending',
-        note: noteDrafts[itemId] || '',
-        evidenceIds: evidenceDrafts[itemId] || []
+        sourceType: 'draft_sentence',
+        sourceText: item.sentence,
+        judgment,
+        note,
+        evidenceIds
       });
       patchScaffoldState(nextState.scaffoldState);
-
-      setFeedback('검토 내용이 저장되었습니다.');
-      setTimeout(() => setFeedback(null), 2000);
-
-      await logScaffoldEvent('draft_judgment_saved', {
-        sourceType,
-        judgment
+      setNoteDrafts((prev) => ({ ...prev, [item.itemId]: note }));
+      setJudgmentDrafts((prev) => ({ ...prev, [item.itemId]: judgment }));
+      setEvidenceDrafts((prev) => ({ ...prev, [item.itemId]: evidenceIds }));
+      setOpenFlagIds((prev) => {
+        const next = { ...prev };
+        delete next[item.itemId];
+        return next;
       });
+      await logScaffoldEvent('draft_judgment_saved', { sourceType: 'draft_sentence', judgment });
     } catch (err: any) {
       setError(err.message || '저장에 실패했습니다.');
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const cancelDraftFlag = async (item: { itemId: string; savedFlag?: ScaffoldReviewItem }) => {
+    if (!caseId) return;
+    setSavingItemId(item.itemId);
+    setError(null);
+    try {
+      if (item.savedFlag) {
+        const nextState = await caseApi.deleteScaffoldReviewItem(caseId, item.itemId);
+        patchScaffoldState(nextState.scaffoldState);
+      }
+      const drop = <T,>(prev: Record<string, T>) => {
+        const next = { ...prev };
+        delete next[item.itemId];
+        return next;
+      };
+      setOpenFlagIds(drop);
+      setNoteDrafts(drop);
+      setJudgmentDrafts(drop);
+      setEvidenceDrafts(drop);
+    } catch (err: any) {
+      setError(err.message || '표시를 취소하지 못했습니다.');
     } finally {
       setSavingItemId(null);
     }
@@ -1279,7 +1356,8 @@ export default function ScaffoldSectionPage() {
           postAiReflection: {
             changedJudgment: changedJudgmentReflection.trim(),
             unresolvedQuestion: unresolvedQuestionReflection.trim(),
-            transferPlan: transferPlanReflection.trim()
+            transferPlan: transferPlanReflection.trim(),
+            missingInDraft: missingInDraftReflection.trim()
           }
         });
         await logScaffoldEvent('post_ai_reflection_saved', {
@@ -2031,74 +2109,77 @@ export default function ScaffoldSectionPage() {
                     여기서 다시 보여주지 않는다. 세 영역을 나란히 두는 것이
                     원기록 ↔ AI ↔ 내 판단 비교의 목적이다. */}
 
-                {/* AI Draft */}
+                {/* AI Draft: 문장을 눌러 다시 볼 문장으로 표시한다 */}
                 <div className="scaffold-ai-draft">
                   <div className="scaffold-ai-draft__badge">AI가 쓴 초안</div>
                   <p className="scaffold-ai-draft__hint">
-                    아래 문장은 AI가 기록을 바탕으로 쓴 것입니다. 왼쪽 원기록, 오른쪽 내 정리와 비교해 보세요.
+                    왼쪽 원기록, 오른쪽 내 정리와 비교하며 읽어 보세요. 기록과 다르거나 확인이 필요한 문장이 있으면
+                    그 문장을 눌러 표시하세요. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 두면 됩니다.
                   </p>
                   <div className="scaffold-ai-draft__text">
-                    {renderClinicalAnonymizedText(
-                      detail?.currentDraft || sectionDraftEntry?.draftText
-                    ) || '초안이 없습니다.'}
+                    {draftSentences.length === 0
+                      ? renderClinicalAnonymizedText(detail?.currentDraft || sectionDraftEntry?.draftText) ||
+                        '초안이 없습니다.'
+                      : draftSentences.map((sentence, index) => {
+                          const itemId = buildScaffoldItemId(sectionId || '', 'draft_sentence', sentence, index);
+                          const flagged = flaggedSentences.some((item) => item.itemId === itemId);
+                          return (
+                            <button
+                              key={itemId}
+                              type="button"
+                              className={`scaffold-ai-sentence${flagged ? ' is-flagged' : ''}`}
+                              onClick={() => toggleDraftFlag(itemId)}
+                              aria-pressed={flagged}
+                            >
+                              {renderClinicalAnonymizedText(sentence)}
+                            </button>
+                          );
+                        })}
                   </div>
                 </div>
 
-                {/* Draft Sentences Review */}
-                {draftSentences.length > 0 && (
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 15,
-                        fontWeight: 600,
-                        color: '#17324d',
-                        marginBottom: 12
-                      }}
-                    >
-                      초안 검토 ({draftJudgmentCount} / {draftSentences.length} 완료)
-                    </div>
-
-                    <div style={{ display: 'grid', gap: 12 }}>
-                      {draftSentences.map((sentence, index) => {
-                        const itemId = buildScaffoldItemId(sectionId || '', 'draft_sentence', sentence, index);
-                        const stored = existingReviewMap.get(itemId);
-                        const selectedJudgment = judgmentDrafts[itemId] || stored?.judgment || 'pending';
-                        const note = noteDrafts[itemId] ?? stored?.note ?? '';
-                        const selectedEvidenceIds = evidenceDrafts[itemId] ?? stored?.evidenceIds ?? [];
-                        const learningFeedback = stored?.learningFeedback;
-                        const hasSupport = Boolean(note.trim() || selectedEvidenceIds.length > 0);
-                        const validationMessage =
-                          selectedJudgment === 'pending'
-                            ? '판단을 선택해야 저장할 수 있습니다.'
-                            : hasSupport || selectedJudgment === 'supported_by_record'
-                              ? undefined
-                              : '어떤 점 때문에 그렇게 판단했는지 이유를 적거나 기록 근거를 선택해주세요.';
-
+                {draftSentences.length > 0 ? (
+                  <div className="scaffold-flag-list">
+                    <h4>내가 표시한 문장 {flaggedSentences.length}개</h4>
+                    {flaggedSentences.length === 0 ? (
+                      <p className="scaffold-flag-list__empty">
+                        아직 표시한 문장이 없습니다. 위 초안에서 다시 봐야 할 문장을 눌러 보세요. 표시할 문장이 없다면
+                        그대로 아래로 진행하면 됩니다.
+                      </p>
+                    ) : (
+                      flaggedSentences.map((item) => {
+                        const judgment =
+                          judgmentDrafts[item.itemId] || item.savedFlag?.judgment || 'differs_from_record';
+                        const note = noteDrafts[item.itemId] ?? item.savedFlag?.note ?? '';
+                        const selectedEvidenceIds =
+                          evidenceDrafts[item.itemId] ?? item.savedFlag?.evidenceIds ?? [];
+                        const dirty = isFlagDirty(item);
+                        const canSave = Boolean(note.trim() || selectedEvidenceIds.length > 0);
                         return (
-                          <ScaffoldReviewCard
-                            key={itemId}
-                            badgeLabel="문장"
-                            title={sentence}
-                            judgmentValue={selectedJudgment}
-                            judgmentOptions={DRAFT_JUDGMENT_OPTIONS}
-                            onJudgmentChange={(value) =>
-                              setJudgmentDrafts((prev) => ({ ...prev, [itemId]: value as ScaffoldReviewJudgment }))
-                            }
-                            noteValue={note}
-                            onNoteChange={(value) => setNoteDrafts((prev) => ({ ...prev, [itemId]: value }))}
-                            notePlaceholder={
-                              selectedJudgment === 'supported_by_record'
-                                ? '판단 이유 (선택)'
-                                : '판단 이유: 원기록의 어느 부분과 어떻게 다른지, 무엇을 확인해야 하는지'
-                            }
-                            saveLabel="저장"
-                            saveDisabled={Boolean(validationMessage)}
-                            validationMessage={validationMessage}
-                            onSave={() =>
-                              void saveReviewItem(itemId, 'draft_sentence', sentence, selectedJudgment)
-                            }
-                            saving={savingItemId === itemId}
-                          >
+                          <div key={item.itemId} className="scaffold-flag-card">
+                            <blockquote>{renderClinicalAnonymizedText(item.sentence)}</blockquote>
+                            <div className="scaffold-flag-card__types" role="group" aria-label="표시한 이유의 종류">
+                              {DRAFT_FLAG_OPTIONS.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  className={judgment === option.value ? 'is-active' : ''}
+                                  onClick={() =>
+                                    setJudgmentDrafts((prev) => ({ ...prev, [item.itemId]: option.value }))
+                                  }
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                            <textarea
+                              value={note}
+                              onChange={(event) =>
+                                setNoteDrafts((prev) => ({ ...prev, [item.itemId]: event.target.value }))
+                              }
+                              rows={3}
+                              placeholder="원기록의 어느 부분과 어떻게 다른지, 또는 무엇을 확인해야 하는지 적어 주세요."
+                            />
                             <ScaffoldEvidenceSelector
                               collapsible
                               choices={evidenceChoices}
@@ -2106,46 +2187,55 @@ export default function ScaffoldSectionPage() {
                               onToggle={(id) =>
                                 setEvidenceDrafts((prev) => ({
                                   ...prev,
-                                  [itemId]: toggleId(prev[itemId] || [], id)
+                                  [item.itemId]: toggleId(
+                                    prev[item.itemId] ?? item.savedFlag?.evidenceIds ?? [],
+                                    id
+                                  )
                                 }))
                               }
                             />
-                            {learningFeedback ? (
-                              <div className="scaffold-learning-feedback" aria-live="polite">
-                                <div className="scaffold-learning-feedback__label">검토 코치</div>
-                                <p>{learningFeedback.summary}</p>
-                                {learningFeedback.selectedEvidence.length > 0 ? (
-                                  <div className="scaffold-learning-feedback__evidence">
-                                    <strong>다시 볼 선택 근거</strong>
-                                    {learningFeedback.selectedEvidence.map((evidence) => (
-                                      <blockquote key={evidence.id}>
-                                        {renderClinicalAnonymizedText(evidence.text)}
-                                      </blockquote>
-                                    ))}
-                                  </div>
-                                ) : null}
-                                <ul>
-                                  {learningFeedback.prompts.map((prompt) => (
-                                    <li key={prompt}>{prompt}</li>
-                                  ))}
-                                </ul>
-                                <small>정답 판정이 아니라, 저장한 판단을 원기록과 다시 대조하기 위한 안내입니다.</small>
-                              </div>
-                            ) : null}
-                          </ScaffoldReviewCard>
+                            <div className="scaffold-flag-card__actions">
+                              <ScaffoldActionButton
+                                variant="primary"
+                                onClick={() => void saveDraftFlag(item)}
+                                disabled={!dirty || !canSave || savingItemId === item.itemId}
+                              >
+                                {savingItemId === item.itemId ? '저장 중...' : dirty ? '저장' : '저장됨'}
+                              </ScaffoldActionButton>
+                              <ScaffoldActionButton
+                                onClick={() => void cancelDraftFlag(item)}
+                                disabled={savingItemId === item.itemId}
+                              >
+                                표시 취소
+                              </ScaffoldActionButton>
+                              {dirty && !canSave ? (
+                                <span className="scaffold-flag-card__hint">이유를 적으면 저장할 수 있습니다.</span>
+                              ) : null}
+                            </div>
+                          </div>
                         );
-                      })}
-                    </div>
+                      })
+                    )}
                   </div>
-                )}
+                ) : null}
 
-                {allDraftJudgmentsSaved && draftSentences.length > 0 ? (
+                {draftSentences.length > 0 ? (
                   <section className="scaffold-post-ai-reflection" aria-labelledby="post-ai-reflection-title">
                     <div>
-                      <div className="scaffold-post-ai-reflection__eyebrow">Step 5</div>
-                      <h3 id="post-ai-reflection-title">AI 검토 후 내 판단 정리</h3>
-                      <p>AI 초안을 보기 전 내 정리(오른쪽)와 비교해 한두 줄로 적어주세요.</p>
+                      <div className="scaffold-post-ai-reflection__eyebrow">정리</div>
+                      <h3 id="post-ai-reflection-title">AI 초안을 읽고 난 뒤</h3>
+                      <p>오른쪽의 내 정리와 비교해 짧게 적어 주세요.</p>
                     </div>
+
+                    <label>
+                      <span>AI 초안에 빠진 내용이 있나요? (선택)</span>
+                      <textarea
+                        value={missingInDraftReflection}
+                        onChange={(event) => setMissingInDraftReflection(event.target.value)}
+                        placeholder="기록에는 있는데 초안에 없는 내용, 이 항목에 꼭 들어가야 한다고 생각하는 내용을 적어 주세요."
+                        rows={3}
+                      />
+                    </label>
 
                     <label>
                       <span>AI를 보고 달라진 점</span>
@@ -2166,7 +2256,6 @@ export default function ScaffoldSectionPage() {
                         rows={3}
                       />
                     </label>
-
                   </section>
                 ) : null}
 
@@ -2181,9 +2270,13 @@ export default function ScaffoldSectionPage() {
                       savingProgressKey === 'draftReviewCompleted'
                     }
                   >
-                    {savingProgressKey === 'draftReviewCompleted' ? '저장 중...' : '저장하고 이 항목 완료'}
+                    {savingProgressKey === 'draftReviewCompleted' ? '저장 중...' : '검토를 마쳤습니다. 이 항목 완료'}
                   </ScaffoldActionButton>
-                  {allDraftJudgmentsSaved && draftSentences.length > 0 && !postAiReflectionComplete ? (
+                  {!allDraftJudgmentsSaved ? (
+                    <p className="scaffold-post-ai-reflection__helper">
+                      표시한 문장 {unsavedFlagCount}개를 저장하거나 표시를 취소해 주세요.
+                    </p>
+                  ) : draftSentences.length > 0 && !postAiReflectionComplete ? (
                     <p className="scaffold-post-ai-reflection__helper">‘AI를 보고 달라진 점’을 적으면 완료할 수 있습니다.</p>
                   ) : null}
                 </div>

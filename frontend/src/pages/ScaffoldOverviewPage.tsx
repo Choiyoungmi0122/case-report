@@ -315,7 +315,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   };
 
   const continueTo = async (nextPhase: ScaffoldV2Phase) => {
-    if (!phaseComplete[currentPhase]) {
+    // 실험용 경로에서는 메모가 없어도 다음 단계로 넘어갈 수 있다.
+    const memoOptional = studyMode && currentPhase === 'case_understanding';
+    if (!memoOptional && !phaseComplete[currentPhase]) {
       const messages: Partial<Record<ScaffoldV2Phase, string>> = {
         case_understanding: '눈에 띈 점을 메모로 하나 이상 남겨주세요.',
         core_message: '증례표상, 보고 가치, 핵심 교육 메시지를 모두 작성해주세요.',
@@ -845,6 +847,53 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             <div className="scaffold-v2__section-progress" aria-hidden="true">
               <span style={{ width: `${totalSections ? Math.round((completedCount / totalSections) * 100) : 0}%` }} />
             </div>
+
+            {studyMode ? (
+              <details className="scaffold-v2__howto" open>
+                <summary>진행 방법과 예시 (시작 전에 읽어 주세요)</summary>
+                <ol className="scaffold-v2__howto-steps">
+                  <li>
+                    <strong>내가 먼저 정리합니다.</strong>
+                    <span>왼쪽 원기록을 보고 이 항목에 쓸 내용과, 기록에 부족하다고 느낀 내용을 적습니다. 이때는 AI 초안이 보이지 않습니다.</span>
+                  </li>
+                  <li>
+                    <strong>AI 초안을 원기록과 비교하며 읽습니다.</strong>
+                    <span>기록과 다르거나 확인이 필요한 문장만 눌러 표시하고 이유를 적습니다. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 둡니다.</span>
+                  </li>
+                  <li>
+                    <strong>읽고 난 뒤를 정리합니다.</strong>
+                    <span>AI 초안에 빠진 내용이 있으면 적고, AI를 보고 달라진 점을 한 줄로 남깁니다.</span>
+                  </li>
+                </ol>
+
+                <div className="scaffold-v2__howto-example">
+                  <div className="scaffold-v2__howto-example-title">예시 (오늘 실습할 환자와 다른 환자입니다)</div>
+                  <div className="scaffold-v2__howto-grid">
+                    <div className="scaffold-v2__howto-box is-record">
+                      <em>원기록</em>
+                      <p>1차: 45세 남자. 3일 전 물건을 들다가 요통 발생. NRS 7. 하지 방사통 없음.</p>
+                      <p>2차 (1주 뒤): NRS 4. 아침에 뻣뻣함 남아 있음.</p>
+                    </div>
+                    <div className="scaffold-v2__howto-box is-ai">
+                      <em>AI가 쓴 초안</em>
+                      <p>
+                        45세 남자가 3일 전 발생한 요통으로 내원하였다.{' '}
+                        <mark>내원 당시 통증은 NRS 5였다.</mark> 1주 뒤 통증은 NRS 4로 감소하였다.
+                      </p>
+                    </div>
+                    <div className="scaffold-v2__howto-box is-mine">
+                      <em>이렇게 표시하고 적습니다</em>
+                      <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름</p>
+                      <p><b>이유</b>: 1차 기록에는 NRS 7로 적혀 있음.</p>
+                      <p><b>초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 초안에 없음.</p>
+                    </div>
+                  </div>
+                  <p className="scaffold-v2__howto-note">
+                    정답을 맞히는 과제가 아닙니다. 표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다.
+                  </p>
+                </div>
+              </details>
+            ) : null}
 
             {studyMode ? (
               <details className="scaffold-v2__care-map" open>

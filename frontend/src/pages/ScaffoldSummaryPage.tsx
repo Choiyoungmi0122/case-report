@@ -39,8 +39,8 @@ const SECTION_LABELS: Record<string, string> = {
 const JUDGMENT_LABELS: Record<string, string> = {
   supported_by_record: '기록 근거 충분',
   differs_from_record: '기록과 다름',
-  needs_additional_confirmation: '추가 확인 필요',
-  needs_instructor_review: '교수 검토 필요',
+  needs_additional_confirmation: '기록만으로 확인하기 어려움',
+  needs_instructor_review: '교수님께 확인',
   uncertain: '판단 어려움',
   available_in_record: '기록에서 확인 가능',
   unavailable: '현재 기록으로 확인할 수 없음',
@@ -296,7 +296,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     <ScaffoldPageFrame>
       <ScaffoldHero
         title="내 학습 기록"
-        description="AI 초안을 보기 전 내 정리, AI 문장에 대한 내 판단과 이유, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."
+        description="AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."
         actions={
           <>
             {!studyMode ? (
@@ -362,9 +362,16 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
           const sufficiencyItems = reviewItems.filter(
             (item) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence'
           );
+          // 학습자가 다시 볼 문장으로 표시한 것만 보여준다.
           const sentenceItems = reviewItems.filter(
-            (item) => item.sectionId === sectionId && item.sourceType === 'draft_sentence'
+            (item) =>
+              item.sectionId === sectionId &&
+              item.sourceType === 'draft_sentence' &&
+              item.judgment !== 'supported_by_record' &&
+              item.judgment !== 'pending'
           );
+          const draftText =
+            (data.sectionDrafts || []).find((draft) => draft.sectionId === sectionId)?.draftText || '';
           const postAi = reflection?.postAiReflection;
 
           return (
@@ -413,16 +420,34 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
                   <strong style={recordHeadingStyle}>② AI 초안과 내 검토</strong>
                   {!progress?.draftRevealed ? (
                     <div style={{ marginTop: 8, color: '#4a5d73' }}>아직 AI 초안을 확인하지 않았습니다.</div>
-                  ) : sentenceItems.length === 0 ? (
-                    <div style={{ marginTop: 8, color: '#4a5d73' }}>문장별 검토 기록이 없습니다.</div>
                   ) : (
-                    <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>AI 초안</span>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: '12px 14px',
+                          borderLeft: '4px solid #3b6fd4',
+                          background: '#eef4ff',
+                          borderRadius: 6,
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {renderClinicalAnonymizedText(draftText) || 'AI 초안이 없습니다.'}
+                      </div>
+                    </div>
+                  )}
+                  {!progress?.draftRevealed ? null : sentenceItems.length === 0 ? (
+                    <div style={{ marginTop: 12, color: '#4a5d73' }}>다시 볼 문장으로 표시한 것이 없습니다.</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginTop: 12 }}>
+                      <span style={recordLabelStyle}>내가 표시한 문장 {sentenceItems.length}개</span>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15, marginTop: 6 }}>
                         <thead>
                           <tr>
-                            <th style={recordThStyle}>AI 초안 문장</th>
-                            <th style={{ ...recordThStyle, width: 130 }}>내 판단</th>
-                            <th style={{ ...recordThStyle, width: '34%' }}>이유와 연결한 기록</th>
+                            <th style={recordThStyle}>표시한 AI 문장</th>
+                            <th style={{ ...recordThStyle, width: 150 }}>종류</th>
+                            <th style={{ ...recordThStyle, width: '38%' }}>이유와 연결한 기록</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -448,6 +473,13 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
                     </div>
                   )}
                 </div>
+
+                {progress?.draftRevealed ? (
+                  <div>
+                    <strong style={recordHeadingStyle}>AI 초안에 빠졌다고 본 내용</strong>
+                    <div style={{ marginTop: 8 }}>{postAi?.missingInDraft || '적은 내용이 없습니다.'}</div>
+                  </div>
+                ) : null}
 
                 <div>
                   <strong style={recordHeadingStyle}>③ AI를 보고 달라진 점</strong>
