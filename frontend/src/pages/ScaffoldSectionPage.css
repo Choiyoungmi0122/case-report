@@ -856,3 +856,11 @@
   color: #7a4e00;
   font-size: 14px;
 }
+
+
+.scaffold-reveal-note {
+  margin: 10px 0 0;
+  color: #7a4300;
+  font-size: 14px;
+  line-height: 1.6;
+}

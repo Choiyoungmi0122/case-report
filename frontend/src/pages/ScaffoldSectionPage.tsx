@@ -1232,6 +1232,19 @@ export default function ScaffoldSectionPage() {
     }
   };
 
+  /** AI 초안을 열기 전에 내 초안 쓰기 칸으로 돌아간다. */
+  const goBackToOwnDraft = () => {
+    setCurrentStep('step1');
+    setError(null);
+    // 화면이 가려져 있어도 동작하도록 requestAnimationFrame 대신 setTimeout을 쓴다.
+    window.setTimeout(() => {
+      const input = document.getElementById('own-draft-input') as HTMLTextAreaElement | null;
+      if (!input) return;
+      input.scrollIntoView({ block: 'center' });
+      input.focus({ preventScroll: true });
+    }, 0);
+  };
+
   const handleRevealAI = async () => {
     if (!caseId || !sectionId) return;
     setSavingProgressKey('draftRevealed');
@@ -2148,8 +2161,9 @@ export default function ScaffoldSectionPage() {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <div style={{ marginTop: 20 }}>
+              {/* Action Buttons */}
+              <div style={{ marginTop: 20, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <ScaffoldActionButton onClick={goBackToOwnDraft}>이전: 내 초안 다시 쓰기</ScaffoldActionButton>
                 <ScaffoldActionButton
                   variant="primary"
                   onClick={() => void handleProceedToStep3()}
@@ -2160,6 +2174,9 @@ export default function ScaffoldSectionPage() {
                     : '내 정리 저장하고 AI 초안 보기'}
                 </ScaffoldActionButton>
               </div>
+              <p className="scaffold-reveal-note">
+                AI 초안을 열면 내 초안은 더 이상 고칠 수 없습니다. 고칠 부분이 있으면 먼저 돌아가 고쳐 주세요.
+              </p>
             </ScaffoldPanel>
           )}
 
