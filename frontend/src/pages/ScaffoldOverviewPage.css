@@ -1813,3 +1813,24 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+
+.scaffold-v2__link-button {
+  display: block;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The intro screen ends with its action bar; keep the last box off it. */
+.scaffold-v2__stage > .scaffold-v2__care-map:last-of-type,
+.scaffold-v2__stage > .scaffold-v2__howto + .scaffold-v2__care-map {
+  margin-bottom: 24px;
+}

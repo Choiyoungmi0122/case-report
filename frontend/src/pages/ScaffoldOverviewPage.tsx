@@ -123,6 +123,25 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   const [data, setData] = useState<ScaffoldStateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // 실험용 경로: 진행 방법을 읽고 시작했는지. 새로고침해도 유지되도록 케이스별로 기억한다.
+  const introStorageKey = `scaffold-intro-done:${caseId || ''}`;
+  const [introDone, setIntroDone] = useState(() => {
+    try {
+      return window.localStorage.getItem(introStorageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const updateIntroDone = (done: boolean) => {
+    setIntroDone(done);
+    try {
+      if (done) window.localStorage.setItem(introStorageKey, '1');
+      else window.localStorage.removeItem(introStorageKey);
+    } catch {
+      /* 저장소를 쓸 수 없으면 이번 화면에서만 기억한다 */
+    }
+    window.scrollTo({ top: 0 });
+  };
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -470,6 +489,98 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     .filter((item) => item.evidenceType !== 'learner_added_scaffold')
     .slice(0, 3);
 
+  // 진행 방법과 CARE 설명. 실험용 경로의 시작 화면에서 먼저 보여주고, 이후 단계에서는 접어 둔다.
+  const renderHowTo = (open: boolean) => (
+    <details className="scaffold-v2__howto" open={open}>
+      <summary>진행 방법과 예시</summary>
+      <ol className="scaffold-v2__howto-steps">
+        <li>
+          <strong>내가 먼저 써 봅니다.</strong>
+          <span>왼쪽 원기록을 보고 그 항목을 두세 문장으로 직접 씁니다. 잘 쓰려고 하지 않아도 됩니다. 이때는 AI 초안이 보이지 않습니다.</span>
+        </li>
+        <li>
+          <strong>AI 초안을 원기록과 비교하며 읽습니다.</strong>
+          <span>기록과 다르거나 확인이 필요한 문장만 눌러 표시하고 이유를 적습니다. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 둡니다.</span>
+        </li>
+        <li>
+          <strong>내 초안과 AI 초안을 비교합니다.</strong>
+          <span>AI 초안에 빠진 내용이 있으면 적고, 두 초안이 무엇이 달랐는지 한 줄로 남깁니다.</span>
+        </li>
+      </ol>
+
+      <div className="scaffold-v2__howto-example">
+        <div className="scaffold-v2__howto-example-title">예시 (오늘 실습할 환자와 다른 환자입니다)</div>
+        <div className="scaffold-v2__howto-grid">
+          <div className="scaffold-v2__howto-box is-record">
+            <em>원기록</em>
+            {CARE_EXAMPLE_RECORD.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+          <div className="scaffold-v2__howto-box is-ai">
+            <em>AI가 쓴 초안</em>
+            <p>
+              45세 남자가 3일 전 발생한 요통으로 내원하였다.{' '}
+              <mark>내원 당시 통증은 NRS 5였다.</mark> 1주 뒤 통증은 NRS 4로 감소하였다.
+            </p>
+          </div>
+          <div className="scaffold-v2__howto-box is-mine">
+            <em>이렇게 표시하고 적습니다</em>
+            <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름</p>
+            <p><b>이유</b>: 1차 기록에는 NRS 7로 적혀 있음.</p>
+            <p><b>초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 초안에 없음.</p>
+          </div>
+        </div>
+        <div className="scaffold-v2__howto-writing">
+          <div className="scaffold-v2__howto-example-title">이 환자라면 이렇게 씁니다</div>
+          <table>
+            <thead>
+              <tr>
+                <th>항목</th>
+                <th>꼭 들어가는 정보</th>
+                <th>작성 예</th>
+              </tr>
+            </thead>
+            <tbody>
+              {CARE_WRITING_EXAMPLES.map((item) => (
+                <tr key={item.sectionId}>
+                  <td>{item.name}</td>
+                  <td>{item.mustHave}</td>
+                  <td>{item.example}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="scaffold-v2__howto-note">
+          정답을 맞히는 과제가 아닙니다. 두세 문장이면 충분하고, 표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다.
+        </p>
+      </div>
+    </details>
+  );
+
+  const renderCareMap = (open: boolean) => (
+    <details className="scaffold-v2__care-map" open={open}>
+      <summary>증례보고는 이렇게 구성됩니다 (CARE 지침)</summary>
+      <p>
+        CARE 지침은 증례보고에 무엇을 적어야 하는지 정리한 국제 보고 기준입니다. 13개 항목으로 이루어져 있고,
+        오늘은 그중 표시된 {studySectionIds.length}개 항목을 연습합니다.
+      </p>
+      <ol>
+        {CARE_OVERVIEW.map((item) => {
+          const isToday = studySectionIds.includes(item.sectionId);
+          return (
+            <li key={item.sectionId} className={isToday ? 'is-today' : ''}>
+              <strong>{item.name}</strong>
+              <span>{item.summary}</span>
+              {isToday ? <em>오늘 연습</em> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+
   return (
     <ScaffoldPageFrame>
       <main className="scaffold-v2">
@@ -528,7 +639,26 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
         {error ? <div className="scaffold-v2__notice is-error" role="alert">{error}</div> : null}
         {feedback ? <div className="scaffold-v2__notice is-success" role="status">{feedback}</div> : null}
 
-        {currentPhase === 'case_understanding' ? (
+        {currentPhase === 'case_understanding' && studyMode && !introDone ? (
+          <section className="scaffold-v2__stage" aria-labelledby="intro-title">
+            <div className="scaffold-v2__stage-heading">
+              <div>
+                <span>시작하기 전에</span>
+                <h2 id="intro-title">오늘 진행 방법</h2>
+                <p>아래 내용을 읽은 뒤 시작해 주세요. 진행하는 동안 언제든 다시 볼 수 있습니다.</p>
+              </div>
+            </div>
+            {renderHowTo(true)}
+            {renderCareMap(true)}
+            <div className="scaffold-v2__stage-actions">
+              <button type="button" className="scaffold-v2__button is-primary" onClick={() => updateIntroDone(true)}>
+                확인했습니다. 기록 읽기 시작
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {currentPhase === 'case_understanding' && (!studyMode || introDone) ? (
           <section className="scaffold-v2__stage" aria-labelledby="case-understanding-title">
             <div className="scaffold-v2__stage-heading">
               <div>
@@ -536,7 +666,14 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 <h2 id="case-understanding-title">기록을 읽고 내 말로 메모하기</h2>
                 <p>{studyMode ? '이 환자를 증례보고로 쓴다면 중요하다고 생각하는 점과 더 확인하고 싶은 점을 짧게 적어 보세요. 메모는 추가하는 즉시 저장되고, 마지막 학습 기록에 함께 실립니다.' : '정답을 고르거나 분류하지 않아도 됩니다. 눈에 띈 점과 더 확인하고 싶은 점을 짧게 남겨보세요.'}</p>
               </div>
-              <strong>{caseNotes.length}개 메모</strong>
+              <strong>
+                {caseNotes.length}개 메모
+                {studyMode ? (
+                  <button type="button" className="scaffold-v2__link-button" onClick={() => updateIntroDone(false)}>
+                    진행 방법 다시 보기
+                  </button>
+                ) : null}
+              </strong>
             </div>
 
             <div className="scaffold-v2__memo-workspace">
@@ -850,96 +987,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <span style={{ width: `${totalSections ? Math.round((completedCount / totalSections) * 100) : 0}%` }} />
             </div>
 
-            {studyMode ? (
-              <details className="scaffold-v2__howto" open>
-                <summary>진행 방법과 예시 (시작 전에 읽어 주세요)</summary>
-                <ol className="scaffold-v2__howto-steps">
-                  <li>
-                    <strong>내가 먼저 써 봅니다.</strong>
-                    <span>왼쪽 원기록을 보고 그 항목을 두세 문장으로 직접 씁니다. 잘 쓰려고 하지 않아도 됩니다. 이때는 AI 초안이 보이지 않습니다.</span>
-                  </li>
-                  <li>
-                    <strong>AI 초안을 원기록과 비교하며 읽습니다.</strong>
-                    <span>기록과 다르거나 확인이 필요한 문장만 눌러 표시하고 이유를 적습니다. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 둡니다.</span>
-                  </li>
-                  <li>
-                    <strong>내 초안과 AI 초안을 비교합니다.</strong>
-                    <span>AI 초안에 빠진 내용이 있으면 적고, 두 초안이 무엇이 달랐는지 한 줄로 남깁니다.</span>
-                  </li>
-                </ol>
-
-                <div className="scaffold-v2__howto-example">
-                  <div className="scaffold-v2__howto-example-title">예시 (오늘 실습할 환자와 다른 환자입니다)</div>
-                  <div className="scaffold-v2__howto-grid">
-                    <div className="scaffold-v2__howto-box is-record">
-                      <em>원기록</em>
-                      {CARE_EXAMPLE_RECORD.map((line) => (
-                        <p key={line}>{line}</p>
-                      ))}
-                    </div>
-                    <div className="scaffold-v2__howto-box is-ai">
-                      <em>AI가 쓴 초안</em>
-                      <p>
-                        45세 남자가 3일 전 발생한 요통으로 내원하였다.{' '}
-                        <mark>내원 당시 통증은 NRS 5였다.</mark> 1주 뒤 통증은 NRS 4로 감소하였다.
-                      </p>
-                    </div>
-                    <div className="scaffold-v2__howto-box is-mine">
-                      <em>이렇게 표시하고 적습니다</em>
-                      <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름</p>
-                      <p><b>이유</b>: 1차 기록에는 NRS 7로 적혀 있음.</p>
-                      <p><b>초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 초안에 없음.</p>
-                    </div>
-                  </div>
-                  <div className="scaffold-v2__howto-writing">
-                    <div className="scaffold-v2__howto-example-title">이 환자라면 이렇게 씁니다</div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>항목</th>
-                          <th>꼭 들어가는 정보</th>
-                          <th>작성 예</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {CARE_WRITING_EXAMPLES.map((item) => (
-                          <tr key={item.sectionId}>
-                            <td>{item.name}</td>
-                            <td>{item.mustHave}</td>
-                            <td>{item.example}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="scaffold-v2__howto-note">
-                    정답을 맞히는 과제가 아닙니다. 두세 문장이면 충분하고, 표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다.
-                  </p>
-                </div>
-              </details>
-            ) : null}
-
-            {studyMode ? (
-              <details className="scaffold-v2__care-map" open>
-                <summary>증례보고는 이렇게 구성됩니다 (CARE 지침)</summary>
-                <p>
-                  CARE 지침은 증례보고에 무엇을 적어야 하는지 정리한 국제 보고 기준입니다. 13개 항목으로 이루어져 있고,
-                  오늘은 그중 표시된 {studySectionIds.length}개 항목을 연습합니다.
-                </p>
-                <ol>
-                  {CARE_OVERVIEW.map((item) => {
-                    const isToday = studySectionIds.includes(item.sectionId);
-                    return (
-                      <li key={item.sectionId} className={isToday ? 'is-today' : ''}>
-                        <strong>{item.name}</strong>
-                        <span>{item.summary}</span>
-                        {isToday ? <em>오늘 연습</em> : null}
-                      </li>
-                    );
-                  })}
-                </ol>
-              </details>
-            ) : null}
+            {/* 시작 화면에서 이미 읽은 내용이다. 여기서는 다시 볼 수 있게 접어 둔다. */}
+            {studyMode ? renderHowTo(false) : null}
+            {studyMode ? renderCareMap(false) : null}
 
             {studyMode ? (
               <div className="scaffold-v2__study-sections">
