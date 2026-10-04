@@ -769,3 +769,90 @@
   color: #7a4300;
   font-weight: 600;
 }
+
+
+/* Step 1: the learner writes a short draft of their own before seeing the AI draft. */
+.scaffold-own-draft label {
+  display: block;
+  margin-bottom: 8px;
+  color: #1c5a3a;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.scaffold-own-draft textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 14px 16px;
+  border: 2px solid #8ecba6;
+  border-radius: 8px;
+  background: #fbfefc;
+  color: #14253d;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1.8;
+  resize: vertical;
+}
+
+.scaffold-own-draft textarea:focus {
+  outline: none;
+  border-color: #2f855a;
+}
+
+.scaffold-optional-block {
+  border: 1px solid #d7e0e8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f8fafc;
+}
+
+.scaffold-optional-block > summary {
+  color: #4a5d73;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scaffold-own-draft-view {
+  padding: 18px 20px;
+  border: 1px solid #b7dfc5;
+  border-left: 5px solid #2f855a;
+  border-radius: 8px;
+  background: #f3faf5;
+}
+
+.scaffold-own-draft-view__badge {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: #2f855a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.scaffold-own-draft-view__text {
+  color: #14253d;
+  font-size: 17px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.scaffold-care-guide__example {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fff3cf;
+  color: #3f3414;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.scaffold-care-guide__example strong {
+  color: #7a4e00;
+  font-size: 14px;
+}

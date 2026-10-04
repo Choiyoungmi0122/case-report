@@ -359,6 +359,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
           const selectedEvidence: any[] = preAi.selectedEvidence || [];
           const keyItems = parseReflectionList(preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo);
           const missingItems = parseReflectionList(preAi.learnerIdentifiedMissingItems);
+          const ownDraft = String(preAi.learnerNotes || '').trim();
           const sufficiencyItems = reviewItems.filter(
             (item) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence'
           );
@@ -379,7 +380,24 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
               <div style={{ display: 'grid', gap: 22, fontSize: 16, lineHeight: 1.75, color: '#243b53' }}>
                 <div>
                   <strong style={recordHeadingStyle}>① AI 초안을 보기 전 내 정리</strong>
-                  {selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0 ? (
+                  {ownDraft ? (
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>내가 쓴 초안</span>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          padding: '12px 14px',
+                          borderLeft: '4px solid #2f855a',
+                          background: '#f3faf5',
+                          borderRadius: 6,
+                          whiteSpace: 'pre-wrap'
+                        }}
+                      >
+                        {ownDraft}
+                      </div>
+                    </div>
+                  ) : null}
+                  {!ownDraft && selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0 ? (
                     <div style={{ marginTop: 8, color: '#4a5d73' }}>기록된 정리 내용이 없습니다.</div>
                   ) : null}
                   {selectedEvidence.length > 0 ? (
@@ -482,7 +500,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
                 ) : null}
 
                 <div>
-                  <strong style={recordHeadingStyle}>③ AI를 보고 달라진 점</strong>
+                  <strong style={recordHeadingStyle}>③ 내 초안과 AI 초안을 비교해 보니</strong>
                   <div style={{ marginTop: 8 }}>{postAi?.changedJudgment || '기록된 내용이 없습니다.'}</div>
                 </div>
 

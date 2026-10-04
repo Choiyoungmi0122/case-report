@@ -562,7 +562,12 @@ function buildScaffoldSummaryChildren(caseData: Case) {
     const selectedEvidence: any[] = preAi.selectedEvidence || [];
     const keyItems: string[] = preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo || [];
     const missingItems: string[] = preAi.learnerIdentifiedMissingItems || [];
-    if (selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0) {
+    const ownDraft = safeText(preAi.learnerNotes);
+    if (ownDraft) {
+      children.push(makeBodyParagraph('내가 쓴 초안'));
+      children.push(...buildParagraphsFromText(ownDraft));
+    }
+    if (!ownDraft && selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0) {
       children.push(
         makeBodyParagraph(
           preAi.noRelevantEvidenceConfirmed
@@ -658,7 +663,7 @@ function buildScaffoldSummaryChildren(caseData: Case) {
       children.push(makeSubHeading('AI 초안에 빠졌다고 본 내용'));
       children.push(makeBodyParagraph(safeText(postAi.missingInDraft) || '적은 내용이 없습니다.'));
     }
-    children.push(makeSubHeading('③ AI를 보고 달라진 점'));
+    children.push(makeSubHeading('③ 내 초안과 AI 초안을 비교해 보니'));
     children.push(makeBodyParagraph(safeText(postAi.changedJudgment) || '기록된 내용이 없습니다.'));
     if (safeText(postAi.unresolvedQuestion)) {
       children.push(makeSubHeading('④ 교수님께 확인하고 싶은 것'));

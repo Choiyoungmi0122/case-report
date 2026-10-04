@@ -18,7 +18,9 @@ import {
   SCAFFOLD_SECTIONS,
   getSectionsByGroup,
   type SectionGroup,
+  CARE_EXAMPLE_RECORD,
   CARE_OVERVIEW,
+  CARE_WRITING_EXAMPLES,
   STUDY_SECTION_IDS
 } from '../utils/scaffoldUi';
 import './ScaffoldOverviewPage.css';
@@ -853,16 +855,16 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 <summary>진행 방법과 예시 (시작 전에 읽어 주세요)</summary>
                 <ol className="scaffold-v2__howto-steps">
                   <li>
-                    <strong>내가 먼저 정리합니다.</strong>
-                    <span>왼쪽 원기록을 보고 이 항목에 쓸 내용과, 기록에 부족하다고 느낀 내용을 적습니다. 이때는 AI 초안이 보이지 않습니다.</span>
+                    <strong>내가 먼저 써 봅니다.</strong>
+                    <span>왼쪽 원기록을 보고 그 항목을 두세 문장으로 직접 씁니다. 잘 쓰려고 하지 않아도 됩니다. 이때는 AI 초안이 보이지 않습니다.</span>
                   </li>
                   <li>
                     <strong>AI 초안을 원기록과 비교하며 읽습니다.</strong>
                     <span>기록과 다르거나 확인이 필요한 문장만 눌러 표시하고 이유를 적습니다. 다시 누르면 표시가 풀립니다. 문제없는 문장은 그대로 둡니다.</span>
                   </li>
                   <li>
-                    <strong>읽고 난 뒤를 정리합니다.</strong>
-                    <span>AI 초안에 빠진 내용이 있으면 적고, AI를 보고 달라진 점을 한 줄로 남깁니다.</span>
+                    <strong>내 초안과 AI 초안을 비교합니다.</strong>
+                    <span>AI 초안에 빠진 내용이 있으면 적고, 두 초안이 무엇이 달랐는지 한 줄로 남깁니다.</span>
                   </li>
                 </ol>
 
@@ -871,8 +873,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                   <div className="scaffold-v2__howto-grid">
                     <div className="scaffold-v2__howto-box is-record">
                       <em>원기록</em>
-                      <p>1차: 45세 남자. 3일 전 물건을 들다가 요통 발생. NRS 7. 하지 방사통 없음.</p>
-                      <p>2차 (1주 뒤): NRS 4. 아침에 뻣뻣함 남아 있음.</p>
+                      {CARE_EXAMPLE_RECORD.map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
                     </div>
                     <div className="scaffold-v2__howto-box is-ai">
                       <em>AI가 쓴 초안</em>
@@ -888,8 +891,29 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                       <p><b>초안에 빠진 내용</b>: 2차의 “아침에 뻣뻣함 남아 있음”이 초안에 없음.</p>
                     </div>
                   </div>
+                  <div className="scaffold-v2__howto-writing">
+                    <div className="scaffold-v2__howto-example-title">이 환자라면 이렇게 씁니다</div>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>항목</th>
+                          <th>꼭 들어가는 정보</th>
+                          <th>작성 예</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {CARE_WRITING_EXAMPLES.map((item) => (
+                          <tr key={item.sectionId}>
+                            <td>{item.name}</td>
+                            <td>{item.mustHave}</td>
+                            <td>{item.example}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                   <p className="scaffold-v2__howto-note">
-                    정답을 맞히는 과제가 아닙니다. 표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다.
+                    정답을 맞히는 과제가 아닙니다. 두세 문장이면 충분하고, 표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다.
                   </p>
                 </div>
               </details>

@@ -1780,3 +1780,36 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.scaffold-v2__howto-writing {
+  margin-top: 16px;
+}
+
+.scaffold-v2__howto-writing table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.scaffold-v2__howto-writing th,
+.scaffold-v2__howto-writing td {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  color: #1f2f3d;
+  text-align: left;
+  vertical-align: top;
+}
+
+.scaffold-v2__howto-writing th {
+  background: #eef2f7;
+  color: #17324d;
+  white-space: nowrap;
+}
+
+.scaffold-v2__howto-writing td:first-child {
+  font-weight: 700;
+  white-space: nowrap;
+}

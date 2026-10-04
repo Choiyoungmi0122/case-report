@@ -240,6 +240,38 @@ export const CARE_OVERVIEW: Array<{ sectionId: string; name: string; summary: st
  * 각 CARE 항목에 무엇을 적는지. CARE 체크리스트의 세부 항목을 풀어 쓴 일반 기준이며
  * 특정 증례의 답을 담지 않는다.
  */
+/**
+ * 작성 예시. 실습 환자와 다른 가상의 요통 환자로 쓴 것이어서 실습의 답을 알려주지 않는다.
+ * 진행 방법 상자의 예시 기록(CARE_EXAMPLE_RECORD)과 내용이 일치해야 한다.
+ */
+export const CARE_EXAMPLE_RECORD = [
+  '1차: 45세 남자, 사무직. 3일 전 물건을 들다가 요통 발생. NRS 7. 하지 방사통 없음. 과거 요통 없음, 복용 약 없음. 침 치료 시작(주 2회).',
+  '2차 (1주 뒤): NRS 4. 아침에 뻣뻣함 남아 있음. 온열 치료 추가. 치료 후 불편한 점 없었다고 함.'
+];
+
+export const CARE_WRITING_EXAMPLES: Array<{ sectionId: string; name: string; mustHave: string; example: string }> = [
+  {
+    sectionId: 'PATIENT_INFORMATION',
+    name: '환자 정보',
+    mustHave: '나이와 성별, 주된 증상, 과거력',
+    example:
+      '45세 남자 사무직 환자가 3일 전 물건을 들다 발생한 요통으로 내원하였다. 과거 요통 병력과 복용 중인 약물은 없었다.'
+  },
+  {
+    sectionId: 'THERAPEUTIC_INTERVENTIONS',
+    name: '치료 개입',
+    mustHave: '치료의 종류, 시행 방법, 치료를 바꾼 내용',
+    example: '침 치료를 주 2회 시행하였고, 2차 방문부터 온열 치료를 추가하였다.'
+  },
+  {
+    sectionId: 'FOLLOW_UP_OUTCOMES',
+    name: '추적 관찰 및 결과',
+    mustHave: '평가한 결과, 남아 있는 증상, 이상반응',
+    example:
+      '통증은 NRS 7에서 1주 뒤 4로 감소하였으나 아침 뻣뻣함은 남아 있었다. 치료 후 불편한 점은 없었다고 하였다.'
+  }
+];
+
 export const CARE_SECTION_GUIDE: Record<string, { goal: string; items: string[] }> = {
   DIAGNOSTIC_ASSESSMENT: {
     goal: '어떤 평가를 거쳐 왜 그 진단에 이르렀는지 보여 줍니다.',
