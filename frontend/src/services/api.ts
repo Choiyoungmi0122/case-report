@@ -713,8 +713,14 @@ export interface ScaffoldMemoSuggestion {
   text: string;
 }
 
+export interface ScaffoldRecordPointer {
+  quotes: Array<{ visitIndex: number; quote: string }>;
+  note?: string;
+}
+
 export interface ScaffoldStateResponse {
   memoSuggestions?: ScaffoldMemoSuggestion[];
+  recordPointers?: Record<string, ScaffoldRecordPointer>;
   caseId: string;
   experiment_code?: string;
   experimentCode?: string;

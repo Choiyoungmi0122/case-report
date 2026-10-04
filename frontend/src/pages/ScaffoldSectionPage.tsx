@@ -2038,6 +2038,42 @@ export default function ScaffoldSectionPage() {
                         </label>
                       ))}
                     </div>
+
+                    {/* 답을 고른 뒤에만 보인다. 판정이 아니라 원기록 구절을 그대로 보여준다. */}
+                    {confirmationQuestionJudgments[question.id] &&
+                    scaffoldData?.recordPointers?.[question.id] ? (
+                      <details
+                        className="scaffold-record-pointer"
+                        onToggle={(event) => {
+                          if (event.currentTarget.open) {
+                            void logScaffoldEvent('evidence_opened', {
+                              kind: 'record_pointer',
+                              questionId: question.id,
+                              judgmentWhenOpened: confirmationQuestionJudgments[question.id]
+                            });
+                          }
+                        }}
+                      >
+                        <summary>기록에서 관련된 부분 보기</summary>
+                        <ul>
+                          {scaffoldData.recordPointers[question.id].quotes.map((item, index) => (
+                            <li key={`${question.id}-${index}`}>
+                              <em>{item.visitIndex}회차</em>
+                              {item.quote}
+                            </li>
+                          ))}
+                        </ul>
+                        {scaffoldData.recordPointers[question.id].note ? (
+                          <p className="scaffold-record-pointer__note">
+                            {scaffoldData.recordPointers[question.id].note}
+                          </p>
+                        ) : null}
+                        <p className="scaffold-record-pointer__hint">
+                          맞고 틀림을 알려주는 것이 아닙니다. 이 구절들을 보고 내 판단을 다시 확인해 보세요. 판단을
+                          바꿔도 됩니다.
+                        </p>
+                      </details>
+                    ) : null}
                   </div>
                 ))}
               </div>

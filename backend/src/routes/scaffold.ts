@@ -1,5 +1,9 @@
 import express, { Request, Response } from 'express';
-import { DEFAULT_STUDY_MEMO_SUGGESTIONS, isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
+import {
+  DEFAULT_STUDY_MEMO_SUGGESTIONS,
+  DEFAULT_STUDY_RECORD_POINTERS,
+  isFixedStudyCaseText
+} from '../study/cases/defaultStudyCase';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
@@ -40,6 +44,34 @@ import {
 import { repairSplitClinicalEvidenceCards } from '../utils/evidenceCardRepair';
 
 const router = express.Router();
+
+/**
+ * Every scaffold write reads the whole scaffoldState, changes one part and writes
+ * it back. Two requests for the same case that overlap (an event log and an
+ * answer, for example) would otherwise overwrite each other and silently drop a
+ * saved answer. Writes are therefore run one at a time per case.
+ */
+const scaffoldWriteQueues = new Map<string, Promise<void>>();
+
+router.use('/:caseId/scaffold', (req: Request, res: Response, next) => {
+  if (req.method === 'GET') return next();
+
+  const caseId = String(req.params.caseId || '');
+  const previous = scaffoldWriteQueues.get(caseId) || Promise.resolve();
+  let release: () => void = () => undefined;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  scaffoldWriteQueues.set(caseId, tail);
+  void tail.then(() => {
+    if (scaffoldWriteQueues.get(caseId) === tail) scaffoldWriteQueues.delete(caseId);
+  });
+
+  res.once('finish', release);
+  res.once('close', release);
+  void previous.then(() => next());
+});
 const caseModel = new CaseModel();
 const runningStudyDraftJobs = new Map<string, Promise<any>>();
 
@@ -725,7 +757,10 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
     scaffoldState: responseScaffoldState,
     researchState: (caseData as any).researchState || null,
     studyConfig: (caseData as any).studyConfig || null,
-    // 고정 실험 사례일 때만 방문별 메모 추천을 내려준다.
+    // 고정 실험 사례일 때만 질문별 원기록 구절과 방문별 메모 추천을 내려준다.
+    recordPointers: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+      ? DEFAULT_STUDY_RECORD_POINTERS
+      : {},
     memoSuggestions: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
       ? DEFAULT_STUDY_MEMO_SUGGESTIONS.map(({ id, visitIndex, type, text }) => ({ id, visitIndex, type, text }))
       : []

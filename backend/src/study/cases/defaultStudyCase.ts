@@ -392,6 +392,78 @@ export const DEFAULT_STUDY_MEMO_SUGGESTIONS: StudyMemoSuggestion[] = [
   }
 ];
 
+export type StudyRecordPointer = {
+  quotes: Array<{ visitIndex: number; quote: string }>;
+  /** 기록에 없는 내용을 알려주는 한 줄. 인용이 아니다. */
+  note?: string;
+};
+
+/**
+ * 정보 충분성 질문(Step 2)마다 '기록에서 관련된 부분'. 학습자가 답을 고른 뒤 펼쳐 볼 수 있다.
+ * 맞다/틀리다를 판정하지 않고 원기록 구절만 그대로 인용한다. 모든 인용은 해당 방문 기록에
+ * 실제로 있는 문장이어야 한다 (추가하거나 고칠 때 원문 파일에서 검색해 확인한다).
+ * 키는 화면의 질문 id(ti_001 …, fo_001 …)와 같다.
+ */
+export const DEFAULT_STUDY_RECORD_POINTERS: Record<string, StudyRecordPointer> = {
+  ti_001: {
+    quotes: [
+      { visitIndex: 1, quote: '황련해독탕 2주 (한신, 보험한약 가루약 5.61g/3포, 1일 3회 식후 30분 복용)' },
+      { visitIndex: 1, quote: '항우울제, 항불안제, 소화제 복용 중이라 함. 다만 약 이름 모르고 잘 챙겨 먹는지도 불분명함.' },
+      { visitIndex: 2, quote: '자하거 약침 2cc (대한약침학회 제조, 2cc 앰플): 풍지 양측 각 0.5cc, 풍부 0.5cc, 견정 양측 각 0.25cc' },
+      { visitIndex: 2, quote: '침치료: 백회, 사신총, 상성, 곡차, 인당, 상중완, 천추, 합곡-후계, 태충, 신맥, 조해, 풍지 (0.20x30mm, 유침 20분)' },
+      { visitIndex: 6, quote: '약봉투 가져옴, 확인됨. 고혈압: 암로디핀 5mg qd (아침).' },
+      { visitIndex: 6, quote: '신규 정신과 (4/8~): 쿠에티아핀 25mg qhs.' }
+    ]
+  },
+  ti_002: {
+    quotes: [
+      { visitIndex: 1, quote: '황련해독탕 2주 (한신, 보험한약 가루약 5.61g/3포, 1일 3회 식후 30분 복용)' },
+      { visitIndex: 2, quote: '자율훈련법 (귀가 후 1일 2회, 회당 10분 시행하도록 교육)' },
+      { visitIndex: 5, quote: '황련해독탕 4/15 2주' },
+      { visitIndex: 6, quote: '황련해독탕 4/15분 복용 후 4/29 종료.' },
+      { visitIndex: 6, quote: '4/15 이후 6주간 침치료 없이 지냄.' },
+      { visitIndex: 6, quote: '4/8 이후 계속 복용 중, 기존 약도 딸이 챙겨서 유지.' }
+    ]
+  },
+  ti_003: {
+    quotes: [
+      { visitIndex: 4, quote: '황련해독탕 3/11분 다 복용함. 속 불편감, 설사 없었다고 함.' },
+      { visitIndex: 4, quote: '도네페질 복용 시간 아침으로 바꿨다고 함.' },
+      { visitIndex: 5, quote: '안와부 다크서클 호소하여 약침 부위 추가' },
+      { visitIndex: 6, quote: '이상반응: 4/15 약침 후 안와부 멍 약하게 있었다가 1주 내 사라짐.' },
+      { visitIndex: 6, quote: '약침은 이번엔 안 함.' },
+      { visitIndex: 6, quote: '다크서클 아직 있다고 하여 태양 추가.' }
+    ]
+  },
+  fo_001: {
+    quotes: [
+      { visitIndex: 1, quote: 'PHQ-9 18점, ISI 17점, 화병증상척도 46점 (cut-off 30)' },
+      { visitIndex: 4, quote: '3/28부터 분노 조절 계속 안 됨.' },
+      { visitIndex: 5, quote: 'PHQ-9 17점 (9번 문항 0점, 죽고 싶은 생각은 없다고 함), ISI 16점, 화병증상척도 38점' },
+      { visitIndex: 6, quote: 'PHQ-9 9점 (9번 문항 0점), ISI 8점, 화병증상척도 24점' },
+      { visitIndex: 6, quote: 'K-MMSE 22/30점' },
+      { visitIndex: 6, quote: '잠도 잘 잔다. (새벽 각성 주 1~2회)' }
+    ],
+    note: '2~4회차 기록에는 PHQ-9, ISI, 화병증상척도 점수가 없습니다.'
+  },
+  fo_002: {
+    quotes: [
+      { visitIndex: 5, quote: '4주 후 재진 (5/13 예약)' },
+      { visitIndex: 6, quote: '5/13 예약이었으나 딸 사정으로 내원 못 함.' },
+      { visitIndex: 6, quote: '4/15 이후 6주간 침치료 없이 지냄. 그 사이 악화 없었다고 함. (딸 진술)' },
+      { visitIndex: 6, quote: '4주 후 f/u, 이후 월 1회 유지하며 경과 관찰.' }
+    ]
+  },
+  fo_003: {
+    quotes: [
+      { visitIndex: 4, quote: '치매 관련 문제로 보임 설명 (딸에게)' },
+      { visitIndex: 5, quote: '중등도 이상 우울증 설명 -> 치료 6개월~1년 과정 설명' },
+      { visitIndex: 6, quote: '잠 잘 오는 것, 입맛 오는 것은 좋은 신호라 설명 -> 내원 간격 연장.' },
+      { visitIndex: 6, quote: '정신과, 신경과 f/u은 지속하도록 안내.' }
+    ]
+  }
+};
+
 /**
  * True when the visits are exactly the fixed virtual-patient case. That record is
  * synthetic and carries no real identifiers, so the pipeline skips de-identification
