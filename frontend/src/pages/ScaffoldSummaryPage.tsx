@@ -2,12 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldActionButton from '../components/scaffold/ScaffoldActionButton';
 import ScaffoldBulletList from '../components/scaffold/ScaffoldBulletList';
-import ScaffoldEmptyState from '../components/scaffold/ScaffoldEmptyState';
 import ScaffoldHero from '../components/scaffold/ScaffoldHero';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
-import ScaffoldStatusTable from '../components/scaffold/ScaffoldStatusTable';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import { getCompletedScaffoldSectionCount } from '../utils/scaffoldUi';
@@ -22,6 +20,56 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.remove();
   window.URL.revokeObjectURL(objectUrl);
 }
+
+const SECTION_LABELS: Record<string, string> = {
+  TITLE: '제목',
+  ABSTRACT: '초록',
+  INTRODUCTION: '서론',
+  PATIENT_INFORMATION: '환자 정보',
+  CLINICAL_FINDINGS: '임상 소견',
+  TIMELINE: '경과 기록',
+  DIAGNOSTIC_ASSESSMENT: '진단 평가',
+  THERAPEUTIC_INTERVENTIONS: '치료 개입',
+  FOLLOW_UP_OUTCOMES: '추적 관찰 및 결과',
+  DISCUSSION_CONCLUSION: '고찰',
+  PATIENT_PERSPECTIVE: '환자 관점',
+  INFORMED_CONSENT: '환자 동의'
+};
+
+const JUDGMENT_LABELS: Record<string, string> = {
+  supported_by_record: '기록 근거 충분',
+  differs_from_record: '기록과 다름',
+  needs_additional_confirmation: '추가 확인 필요',
+  needs_instructor_review: '교수 검토 필요',
+  uncertain: '판단 어려움',
+  available_in_record: '기록에서 확인 가능',
+  unavailable: '현재 기록으로 확인할 수 없음',
+  pending: '판단 보류'
+};
+
+function sectionName(sectionId: string) {
+  return SECTION_LABELS[sectionId] || sectionId;
+}
+
+function judgmentName(judgment: string) {
+  return JUDGMENT_LABELS[judgment] || judgment || '-';
+}
+
+const recordHeadingStyle = { display: 'block', color: '#17324d', fontSize: 17 } as const;
+const recordLabelStyle = { color: '#32647f', fontSize: 14, fontWeight: 700 } as const;
+const recordThStyle = {
+  textAlign: 'left',
+  padding: '10px 12px',
+  border: '1px solid #d7e0e8',
+  background: '#f3f6fa',
+  color: '#17324d'
+} as const;
+const recordTdStyle = {
+  padding: '10px 12px',
+  border: '1px solid #d7e0e8',
+  verticalAlign: 'top',
+  lineHeight: 1.65
+} as const;
 
 function uniqueStrings(items: string[]) {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
@@ -149,23 +197,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     return map;
   }, [data]);
 
-  const additionalItems = useMemo(
-    () => (data?.scaffoldState.reviewItems || []).filter((item) => item.judgment === 'needs_additional_confirmation'),
-    [data]
-  );
-
-  const instructorItems = useMemo(
-    () => (data?.scaffoldState.reviewItems || []).filter((item) => item.judgment === 'needs_instructor_review'),
-    [data]
-  );
-
-  const unsupportedItems = useMemo(
-    () =>
-      (data?.scaffoldState.reviewItems || []).filter(
-        (item) => item.judgment === 'unavailable' || item.sourceType === 'unsupported_claim'
-      ),
-    [data]
-  );
+  const reviewItems = useMemo(() => data?.scaffoldState.reviewItems || [], [data]);
 
   const unresolvedSections = useMemo(
     () =>
@@ -181,50 +213,51 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     [data, progressBySection]
   );
 
-  const statusRows = useMemo(
+  // 실제로 작업한 CARE 항목만 보여준다. 열어보지 않은 항목까지 나열하면
+  // 학습자와 교수자가 읽어야 할 내용이 빈 칸에 묻힌다.
+  const workedSections = useMemo(
     () =>
-      (data?.sectionStates || []).map((sectionState) => {
+      (data?.sectionStates || []).filter((sectionState) => {
         const progress = progressBySection.get(sectionState.sectionId);
-        return {
-          id: sectionState.sectionId,
-          cells: [
-            sectionState.sectionId,
-            sectionState.status,
-            progress?.recordReviewCompleted ? '완료' : '미완료',
-            progress?.missingInfoReviewCompleted ? '완료' : '미완료',
-            progress?.draftReviewCompleted ? '완료' : '미완료'
-          ]
-        };
+        return (
+          Boolean(progress?.recordReviewCompleted || progress?.draftRevealed) ||
+          snapshotBySection.has(sectionState.sectionId) ||
+          reviewItems.some((item) => item.sectionId === sectionState.sectionId)
+        );
       }),
-    [data, progressBySection]
+    [data, progressBySection, snapshotBySection, reviewItems]
   );
 
-  const additionalListItems = useMemo(
-    () =>
-      additionalItems.map((item) => ({
+  const instructorListItems = useMemo(() => {
+    const fromJudgments = reviewItems
+      .filter((item) => item.judgment === 'needs_instructor_review')
+      .map((item) => ({
         id: item.id,
-        text: `[${item.sectionId}] ${item.sourceText}${item.note ? ` - ${item.note}` : ''}`
-      })),
-    [additionalItems]
+        text: `[${sectionName(item.sectionId)}] ${item.sourceText}${item.note ? ` - ${item.note}` : ''}`
+      }));
+    const fromReflections = (data?.scaffoldState.sectionReflections || [])
+      .filter((item) => item.postAiReflection?.unresolvedQuestion)
+      .map((item) => ({
+        id: `reflection-${item.sectionId}`,
+        text: `[${sectionName(item.sectionId)}] ${item.postAiReflection?.unresolvedQuestion}`
+      }));
+    return [...fromJudgments, ...fromReflections];
+  }, [data, reviewItems]);
+
+  const confirmationListItems = useMemo(
+    () =>
+      reviewItems
+        .filter(
+          (item) => item.judgment === 'needs_additional_confirmation' || item.judgment === 'differs_from_record'
+        )
+        .map((item) => ({
+          id: item.id,
+          text: `[${sectionName(item.sectionId)}] ${item.sourceText}${item.note ? ` - ${item.note}` : ''}`
+        })),
+    [reviewItems]
   );
 
-  const instructorListItems = useMemo(
-    () =>
-      instructorItems.map((item) => ({
-        id: item.id,
-        text: `[${item.sectionId}] ${item.sourceText}${item.note ? ` - ${item.note}` : ''}`
-      })),
-    [instructorItems]
-  );
-
-  const unsupportedListItems = useMemo(
-    () =>
-      unsupportedItems.map((item) => ({
-        id: item.id,
-        text: `[${item.sectionId}] ${item.sourceText}${item.note ? ` - ${item.note}` : ''}`
-      })),
-    [unsupportedItems]
-  );
+  const caseNotes = data?.scaffoldState.caseMap?.caseNotes || [];
 
   const handleExport = async () => {
     if (!caseId) return;
@@ -241,235 +274,202 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
       const result = await caseApi.exportDocx(caseId, 'scaffold_review', 'one_paragraph' as ExportLayout);
       downloadBlob(result.blob, result.fileName);
     } catch (nextError: any) {
-      setError(nextError.message || 'Scaffold Word export에 실패했습니다.');
+      setError(nextError.message || 'Word 내보내기에 실패했습니다.');
     } finally {
       setIsExporting(false);
     }
   };
 
   if (loading) {
-    return <div style={{ padding: 24 }}>Scaffold 요약을 불러오는 중입니다...</div>;
+    return <div style={{ padding: 24 }}>학습 기록을 불러오는 중입니다...</div>;
   }
 
   if (!data || error) {
-    return <div style={{ padding: 24, color: '#b42318' }}>{error || 'Scaffold 요약을 찾을 수 없습니다.'}</div>;
+    return <div style={{ padding: 24, color: '#b42318' }}>{error || '학습 기록을 찾을 수 없습니다.'}</div>;
   }
+
+  const evidenceTextById = new Map<string, string>(
+    (data.evidenceCards || []).map((card: any) => [String(card.id), String(card.sourceText || card.normalizedText || '')])
+  );
 
   return (
     <ScaffoldPageFrame>
       <ScaffoldHero
-        title="Scaffold 최종 요약"
-        description="학습자가 먼저 정리한 내용과 AI 초안 검토 결과를 연구 목적에 맞게 한 번에 확인할 수 있습니다."
+        title="내 학습 기록"
+        description="AI 초안을 보기 전 내 정리, AI 문장에 대한 내 판단과 이유, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."
         actions={
           <>
             {!studyMode ? (
               <ScaffoldActionButton onClick={() => navigate('/')}>모드 선택</ScaffoldActionButton>
             ) : null}
-            <ScaffoldActionButton onClick={() => navigate(studyMode ? '/study/scaffold' : '/scaffold')}>
-              {studyMode ? 'Study Scaffold 홈' : 'Scaffold 홈'}
-            </ScaffoldActionButton>
             <ScaffoldActionButton
               onClick={() => navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}`)}
             >
-              섹션 개요
+              CARE 항목으로 돌아가기
             </ScaffoldActionButton>
             <ScaffoldActionButton variant="primary" onClick={() => void handleExport()} disabled={isExporting}>
-              {isExporting ? '내보내는 중...' : 'Scaffold Word export'}
+              {isExporting ? '내보내는 중...' : 'Word로 내보내기'}
             </ScaffoldActionButton>
           </>
         }
       />
 
-      <ScaffoldPanel compact title="케이스 요약">
+      <ScaffoldPanel compact title="요약">
         <ScaffoldStatGrid
           items={[
             { label: '실험번호', value: data.experiment_code || data.experimentCode || '-' },
-            { label: '케이스 제목', value: data.title || '제목 없음' },
-            { label: '방문 수', value: String(data.visits?.length ?? 0) },
-            { label: '분석 섹션 수', value: String((data.sectionStates || []).length) },
+            { label: '방문 기록', value: `${data.visits?.length ?? 0}회` },
+            { label: '작업한 CARE 항목', value: `${workedSections.length}개` },
             {
-              label: '완료 섹션 수',
-              value: String(getCompletedScaffoldSectionCount(data)),
+              label: '완료한 항목',
+              value: `${getCompletedScaffoldSectionCount(data)}개`,
               tone: 'success'
             }
           ]}
         />
       </ScaffoldPanel>
 
-      <ScaffoldPanel compact title="CARE 섹션 진행 상태">
-        {(statusRows || []).length === 0 ? (
-          <ScaffoldEmptyState message="표시할 섹션 상태가 없습니다." />
-        ) : (
-          <ScaffoldStatusTable
-            headers={['CARE 섹션', '현재 상태', '기록 검토', '부족 정보 검토', 'AI 초안 검토']}
-            rows={statusRows}
+      {caseNotes.length > 0 ? (
+        <ScaffoldPanel compact title="기록을 읽으며 남긴 메모">
+          <ScaffoldBulletList
+            items={caseNotes.map((note) => ({
+              id: note.id,
+              text: `[${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}] ${note.text}`
+            }))}
+            emptyMessage="메모가 없습니다."
           />
-        )}
-      </ScaffoldPanel>
+        </ScaffoldPanel>
+      ) : null}
 
-      <ScaffoldPanel
-        compact
-        title="초기 판단 내용"
-        description="가능하면 현재 값이 아니라 AI 공개 직전 snapshot을 우선 표시합니다."
-      >
-        {(data.sectionStates || []).length === 0 ? (
-          <ScaffoldEmptyState message="정리된 초기 판단이 없습니다." />
-        ) : (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {(data.sectionStates || []).map((sectionState) => {
-              const reflection = reflectionBySection.get(sectionState.sectionId);
-              const snapshot = snapshotBySection.get(sectionState.sectionId);
+      {workedSections.length === 0 ? (
+        <ScaffoldPanel compact title="CARE 항목별 기록">
+          <div style={{ color: '#4a5d73', fontSize: 16, lineHeight: 1.7 }}>
+            아직 작업한 CARE 항목이 없습니다. CARE 항목을 하나 골라 시작해 보세요.
+          </div>
+        </ScaffoldPanel>
+      ) : (
+        workedSections.map((sectionState) => {
+          const sectionId = sectionState.sectionId;
+          const snapshot = snapshotBySection.get(sectionId);
+          const reflection = reflectionBySection.get(sectionId);
+          const progress = progressBySection.get(sectionId);
+          const preAi: any = snapshot || reflection || {};
+          const selectedEvidence: any[] = preAi.selectedEvidence || [];
+          const keyItems = parseReflectionList(preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo);
+          const missingItems = parseReflectionList(preAi.learnerIdentifiedMissingItems);
+          const sufficiencyItems = reviewItems.filter(
+            (item) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence'
+          );
+          const sentenceItems = reviewItems.filter(
+            (item) => item.sectionId === sectionId && item.sourceType === 'draft_sentence'
+          );
+          const postAi = reflection?.postAiReflection;
 
-              return (
-                <div
-                  key={sectionState.sectionId}
-                  style={{ border: '1px solid #d7e0e8', borderRadius: 8, padding: 16, background: '#fcfdff' }}
-                >
-                  <strong style={{ color: '#17324d' }}>{sectionState.sectionId}</strong>
-                  <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-                    <div>
-                      <strong>중요 정보</strong>
+          return (
+            <ScaffoldPanel key={sectionId} compact title={sectionName(sectionId)}>
+              <div style={{ display: 'grid', gap: 22, fontSize: 16, lineHeight: 1.75, color: '#243b53' }}>
+                <div>
+                  <strong style={recordHeadingStyle}>① AI 초안을 보기 전 내 정리</strong>
+                  {selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0 ? (
+                    <div style={{ marginTop: 8, color: '#4a5d73' }}>기록된 정리 내용이 없습니다.</div>
+                  ) : null}
+                  {selectedEvidence.length > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>기록에서 고른 근거</span>
                       {renderList(
-                        parseReflectionList(
-                          snapshot?.learnerKeyInformationItems ||
-                            reflection?.learnerKeyInformationItems ||
-                            reflection?.learnerIdentifiedKeyInfo
+                        selectedEvidence.map((item) =>
+                          renderClinicalAnonymizedText(item.label || evidenceTextById.get(String(item.id)) || item.id)
                         ),
-                        '기록된 내용이 없습니다.'
+                        ''
                       )}
                     </div>
-                    <div>
-                      <strong>부족 정보</strong>
+                  ) : null}
+                  {keyItems.length > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>이 항목에 쓸 내용</span>
+                      {renderList(keyItems, '')}
+                    </div>
+                  ) : null}
+                  {missingItems.length > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>기록에 부족하다고 본 내용</span>
+                      {renderList(missingItems, '')}
+                    </div>
+                  ) : null}
+                  {sufficiencyItems.length > 0 ? (
+                    <div style={{ marginTop: 10 }}>
+                      <span style={recordLabelStyle}>정보가 충분한지에 대한 판단</span>
                       {renderList(
-                        parseReflectionList(
-                          snapshot?.learnerIdentifiedMissingItems || reflection?.learnerIdentifiedMissingItems
-                        ),
-                        '기록된 내용이 없습니다.'
+                        sufficiencyItems.map((item) => `${item.sourceText} → ${judgmentName(item.judgment)}`),
+                        ''
                       )}
                     </div>
-                    <div>
-                      <strong>추가 확인 필요</strong>
-                      {renderList(
-                        parseReflectionList(
-                          snapshot?.additionalConfirmationItems || reflection?.additionalConfirmationItems
-                        ),
-                        '기록된 내용이 없습니다.'
-                      )}
+                  ) : null}
+                </div>
+
+                <div>
+                  <strong style={recordHeadingStyle}>② AI 초안과 내 검토</strong>
+                  {!progress?.draftRevealed ? (
+                    <div style={{ marginTop: 8, color: '#4a5d73' }}>아직 AI 초안을 확인하지 않았습니다.</div>
+                  ) : sentenceItems.length === 0 ? (
+                    <div style={{ marginTop: 8, color: '#4a5d73' }}>문장별 검토 기록이 없습니다.</div>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 15 }}>
+                        <thead>
+                          <tr>
+                            <th style={recordThStyle}>AI 초안 문장</th>
+                            <th style={{ ...recordThStyle, width: 130 }}>내 판단</th>
+                            <th style={{ ...recordThStyle, width: '34%' }}>이유와 연결한 기록</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sentenceItems.map((item) => (
+                            <tr key={item.id}>
+                              <td style={recordTdStyle}>{renderClinicalAnonymizedText(item.sourceText)}</td>
+                              <td style={{ ...recordTdStyle, fontWeight: 700 }}>{judgmentName(item.judgment)}</td>
+                              <td style={recordTdStyle}>
+                                {item.note ? <div>{item.note}</div> : null}
+                                {(item.evidenceIds || []).map((id) =>
+                                  evidenceTextById.get(String(id)) ? (
+                                    <div key={id} style={{ color: '#52606d', marginTop: 4 }}>
+                                      [기록] {renderClinicalAnonymizedText(evidenceTextById.get(String(id)))}
+                                    </div>
+                                  ) : null
+                                )}
+                                {!item.note && (item.evidenceIds || []).length === 0 ? '-' : null}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div>
-                      <strong>교수 검토 필요</strong>
-                      {renderList(
-                        parseReflectionList(snapshot?.teacherReviewItems || reflection?.teacherReviewItems),
-                        '기록된 내용이 없습니다.'
-                      )}
-                    </div>
-                    <div>
-                      <strong>메모</strong>
-                      <div style={{ marginTop: 8, color: '#4a5d73', lineHeight: 1.7 }}>
-                        {snapshot?.learnerNotes || reflection?.learnerNotes || '메모가 없습니다.'}
-                      </div>
-                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <strong style={recordHeadingStyle}>③ AI를 보고 달라진 점</strong>
+                  <div style={{ marginTop: 8 }}>{postAi?.changedJudgment || '기록된 내용이 없습니다.'}</div>
+                </div>
+
+                {postAi?.unresolvedQuestion ? (
+                  <div>
+                    <strong style={recordHeadingStyle}>④ 교수님께 확인하고 싶은 것</strong>
+                    <div style={{ marginTop: 8 }}>{postAi.unresolvedQuestion}</div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </ScaffoldPanel>
-
-      <ScaffoldPanel compact title="AI 초안">
-        {(data.sectionDrafts || []).length === 0 ? (
-          <ScaffoldEmptyState message="생성된 섹션 초안이 없습니다." />
-        ) : (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {(data.sectionDrafts || []).map((draft) => (
-              <div
-                key={draft.sectionId}
-                style={{ border: '1px solid #d7e0e8', borderRadius: 8, padding: 16, background: '#fff' }}
-              >
-                <strong style={{ color: '#17324d' }}>{draft.sectionId}</strong>
-                <div style={{ marginTop: 10, whiteSpace: 'pre-wrap', lineHeight: 1.8, color: '#4a5d73' }}>
-                  {renderClinicalAnonymizedText(draft.draftText) || '초안 없음'}
-                </div>
+                ) : null}
               </div>
-            ))}
-          </div>
-        )}
+            </ScaffoldPanel>
+          );
+        })
+      )}
+
+      <ScaffoldPanel compact title="모아 보기: 교수님께 확인할 것">
+        <ScaffoldBulletList items={instructorListItems} emptyMessage="표시한 항목이 없습니다." />
       </ScaffoldPanel>
 
-      <ScaffoldPanel
-        compact
-        title="AI 검토 후 회고"
-        description="AI 공개 전 판단과 비교해 달라진 점과 다음 작성에 적용할 내용을 보여줍니다."
-      >
-        {(data.sectionStates || []).some(
-          (sectionState) => reflectionBySection.get(sectionState.sectionId)?.postAiReflection
-        ) ? (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {(data.sectionStates || []).map((sectionState) => {
-              const postAiReflection = reflectionBySection.get(sectionState.sectionId)?.postAiReflection;
-              if (!postAiReflection) return null;
-
-              return (
-                <div
-                  key={sectionState.sectionId}
-                  style={{ borderLeft: '3px solid #2f855a', paddingLeft: 14 }}
-                >
-                  <strong style={{ color: '#17324d' }}>{sectionState.sectionId}</strong>
-                  <div style={{ display: 'grid', gap: 10, marginTop: 10, color: '#4a5d73', lineHeight: 1.7 }}>
-                    <div><strong>달라진 판단</strong><div>{postAiReflection.changedJudgment}</div></div>
-                    <div><strong>남은 확인사항</strong><div>{postAiReflection.unresolvedQuestion}</div></div>
-                    <div><strong>다음 적용점</strong><div>{postAiReflection.transferPlan}</div></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <ScaffoldEmptyState message="저장된 AI 검토 후 회고가 없습니다." />
-        )}
-      </ScaffoldPanel>
-
-      <ScaffoldPanel compact title="추가 확인이 필요한 내용">
-        <ScaffoldBulletList
-          items={additionalListItems}
-          emptyMessage="현재 추가 확인이 필요한 내용이 없습니다."
-        />
-      </ScaffoldPanel>
-
-      <ScaffoldPanel compact title="교수 검토가 필요한 내용">
-        <ScaffoldBulletList
-          items={instructorListItems}
-          emptyMessage="현재 교수 검토가 필요한 내용이 없습니다."
-        />
-      </ScaffoldPanel>
-
-      <ScaffoldPanel compact title="근거가 부족한 내용">
-        <ScaffoldBulletList
-          items={unsupportedListItems}
-          emptyMessage="현재 근거가 부족한 항목이 없습니다."
-        />
-      </ScaffoldPanel>
-
-      <ScaffoldPanel compact title="미완료 섹션">
-        {unresolvedSections.length === 0 ? (
-          <ScaffoldEmptyState message="모든 섹션이 현재 기준으로 검토 완료 상태입니다." />
-        ) : (
-          <div style={{ display: 'grid', gap: 16 }}>
-            {unresolvedSections.map((sectionState) => (
-              <div
-                key={sectionState.sectionId}
-                style={{ border: '1px solid #d7e0e8', borderRadius: 8, padding: 16, background: '#fff' }}
-              >
-                <strong style={{ color: '#17324d' }}>{sectionState.sectionId}</strong>
-                <div style={{ marginTop: 8, color: '#4a5d73', lineHeight: 1.7 }}>
-                  {sectionState.rationaleText}
-                </div>
-                {renderList(sectionState.missingInfoBullets || [], '아직 정리되지 않은 부족 정보가 없습니다.')}
-              </div>
-            ))}
-          </div>
-        )}
+      <ScaffoldPanel compact title="모아 보기: 기록과 다르거나 추가 확인이 필요한 것">
+        <ScaffoldBulletList items={confirmationListItems} emptyMessage="표시한 항목이 없습니다." />
       </ScaffoldPanel>
     </ScaffoldPageFrame>
   );

@@ -29,7 +29,7 @@ export default function ScaffoldHero({
               color: '#4b5563',
               fontWeight: 600,
               marginBottom: 12,
-              fontSize: 12
+              fontSize: 14
             }}
           >
             {badgeText}

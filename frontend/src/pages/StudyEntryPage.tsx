@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CaseMode } from '../services/api';
 import {
   getStoredParticipantCode,
+  resetResearchSession,
   setResearchParticipantCode
 } from '../utils/research';
 
@@ -90,6 +91,11 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
     const codeToStore = isScaffold ? normalizedScaffoldCode : trimmedCode;
     setError(null);
     setParticipantCode(codeToStore);
+    // 같은 기기에서 다음 참여자가 시작하면 이전 참여자의 sessionId를 물려받지 않도록
+    // 코드가 바뀔 때 세션을 새로 만든다. 같은 코드로 다시 들어오면 기존 세션을 유지한다.
+    if (getStoredParticipantCode(mode) !== codeToStore) {
+      resetResearchSession(mode);
+    }
     setResearchParticipantCode(mode, codeToStore);
     navigateToInput(codeToStore);
   };

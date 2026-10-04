@@ -13,7 +13,7 @@ const baseStyle: CSSProperties = {
   borderRadius: 6,
   padding: '10px 14px',
   fontWeight: 600,
-  fontSize: 14,
+  fontSize: 16,
   cursor: 'pointer'
 };
 

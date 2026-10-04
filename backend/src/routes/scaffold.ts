@@ -62,6 +62,7 @@ const VALID_INFORMATION_STATUS_JUDGMENTS = new Set<InformationStatusJudgment>([
 const VALID_DRAFT_JUDGMENTS = new Set<DraftJudgment>([
   'pending',
   'supported_by_record',
+  'differs_from_record',
   'needs_additional_confirmation',
   'needs_instructor_review',
   'uncertain'
@@ -435,11 +436,8 @@ export function normalizeV2CaseMap(value: any): ScaffoldV2CaseMap | undefined {
 
 function isPostAiReflectionComplete(value: any) {
   const reflection = normalizePostAiReflection(value);
-  return Boolean(
-    reflection?.changedJudgment &&
-      reflection.unresolvedQuestion &&
-      reflection.transferPlan
-  );
+  // Only the first item is required; the other two are optional notes.
+  return Boolean(reflection?.changedJudgment);
 }
 
 function normalizeScaffoldState(raw: any): ScaffoldState {
@@ -919,7 +917,9 @@ function hasSectionEvent(
 function splitDraftSentencesForReview(text: string) {
   return String(text || '')
     .split(/\n+/)
-    .flatMap((line) => line.split(/(?<=[.!?])\s+|(?<=[다요])\s+/))
+    // Must match splitScaffoldDraftSentences in the frontend: the completion gate
+    // compares these sentences with the ones the learner reviewed on screen.
+    .flatMap((line) => line.split(/(?<=[.!?])\s+/))
     .map((part) => part.trim())
     .filter(Boolean);
 }
@@ -929,7 +929,9 @@ function isCompleteDraftSentenceReviewItem(item: ScaffoldReviewItem) {
     item.sourceType === 'draft_sentence' &&
       item.judgment &&
       item.judgment !== 'pending' &&
-      (String(item.note || '').trim() || (item.evidenceIds || []).length > 0)
+      (item.judgment === 'supported_by_record' ||
+        String(item.note || '').trim() ||
+        (item.evidenceIds || []).length > 0)
   );
 }
 
@@ -1106,6 +1108,13 @@ export function buildLearningFeedback(
       prompts: [
         '문장의 시점, 수치, 주체가 원기록과 모두 일치하나요?',
         '기록에 없는 인과관계나 확정적 해석이 덧붙지 않았나요?'
+      ]
+    },
+    differs_from_record: {
+      summary: '원기록과 다르다고 판단한 문장입니다. 어느 부분이 어떻게 다른지 원기록의 방문과 표현으로 짚어보세요.',
+      prompts: [
+        '다른 부분은 사실(수치, 시점, 주체)인가요, 해석(인과, 정도)인가요?',
+        '원기록에 맞게 고친다면 문장을 어떻게 쓰겠습니까?'
       ]
     },
     needs_additional_confirmation: {
@@ -1613,7 +1622,7 @@ router.put('/:caseId/scaffold/review-items/:itemId', async (req: Request, res: R
         });
       }
 
-      if (!note && evidenceIds.length === 0) {
+      if (judgment !== 'supported_by_record' && !note && evidenceIds.length === 0) {
         return res.status(400).json({
           error: 'A draft sentence review requires either a note or concrete SOAP evidence.'
         });
@@ -1769,15 +1778,19 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
       }
     }
 
-    if (studyMode && req.body?.draftRevealed === true) {
-      const gate = evaluateStudyRevealGate(caseData, scaffoldState, sectionId);
-      if (!gate.canReveal) {
-        return res.status(409).json({
-          error: 'Study scaffold reveal requirements are not complete.',
-          revealGate: gate
-        });
+    if (req.body?.draftRevealed === true) {
+      if (studyMode) {
+        const gate = evaluateStudyRevealGate(caseData, scaffoldState, sectionId);
+        if (!gate.canReveal) {
+          return res.status(409).json({
+            error: 'Study scaffold reveal requirements are not complete.',
+            revealGate: gate
+          });
+        }
       }
 
+      // The pre-reveal snapshot is saved for every scaffold case, not only study
+      // mode, so the learner's own judgment is preserved before the AI draft is shown.
       const snapshotExists = (scaffoldState.preRevealSnapshots || []).some(
         (item) => item.sectionId === sectionId
       );
@@ -1813,7 +1826,9 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
         (caseData as any).scaffoldState = scaffoldState;
       }
 
-      await ensureStudyScaffoldDraftAfterSnapshot(caseData.id, sectionId);
+      if (studyMode) {
+        await ensureStudyScaffoldDraftAfterSnapshot(caseData.id, sectionId);
+      }
     }
     if (req.body?.draftReviewCompleted === true) {
       const gate = evaluateStudyCompletionGate(caseData, scaffoldState, sectionId);

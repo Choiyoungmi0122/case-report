@@ -17,7 +17,9 @@ import {
   SECTION_GROUP_DESCRIPTIONS,
   SCAFFOLD_SECTIONS,
   getSectionsByGroup,
-  type SectionGroup
+  type SectionGroup,
+  CARE_OVERVIEW,
+  STUDY_SECTION_IDS
 } from '../utils/scaffoldUi';
 import './ScaffoldOverviewPage.css';
 
@@ -209,19 +211,27 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   const observationNotes = caseNotes.filter((note) => note.type === 'observation');
   const questionNotes = caseNotes.filter((note) => note.type === 'question');
 
+  // 실험용 경로에서는 정해진 몇 개 항목만 다룬다.
+  const studySectionIds = useMemo(
+    () =>
+      STUDY_SECTION_IDS.filter((id) => (data?.sectionStates || []).some((state) => state.sectionId === id)),
+    [data]
+  );
+
   const completedCount = useMemo(
     () =>
       (data?.scaffoldState.sectionProgress || []).filter(
         (progress) =>
+          (!studyMode || studySectionIds.includes(progress.sectionId)) &&
           progress.recordReviewCompleted &&
           progress.missingInfoReviewCompleted &&
           progress.draftRevealed &&
           progress.draftReviewCompleted
       ).length,
-    [data]
+    [data, studyMode, studySectionIds]
   );
 
-  const totalSections = data?.sectionStates?.length || 0;
+  const totalSections = studyMode ? studySectionIds.length : data?.sectionStates?.length || 0;
   const validClaims = claims.filter(
     (claim) => claim.text.trim() && claim.evidenceIds.length > 0 && claim.targetSectionIds.length > 0
   );
@@ -399,7 +409,15 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   if (loading) return <div className="scaffold-v2-loading">Scaffold v2를 불러오는 중입니다...</div>;
   if (!data) return <div className="scaffold-v2-error">{error || '데이터를 찾을 수 없습니다.'}</div>;
 
-  const currentPhaseIndex = PHASES.findIndex((phase) => phase.id === currentPhase);
+  // 실험용 경로에서는 '기록 읽기 -> CARE 섹션 작성' 두 단계만 보여준다.
+  // 핵심 메시지, 주장·근거 연결, 주장 중심 전체 검토는 일반 학습 경로에만 둔다.
+  const visiblePhases = studyMode
+    ? PHASES.filter((phase) => phase.id === 'case_understanding' || phase.id === 'section_drafting')
+    : PHASES;
+  const currentPhaseIndex = Math.max(
+    0,
+    visiblePhases.findIndex((phase) => phase.id === currentPhase)
+  );
   const visits = data.visits || [];
   const aiComparisonCandidates = evidenceItems
     .filter((item) => item.evidenceType !== 'learner_added_scaffold')
@@ -412,7 +430,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <div>
             <div className="scaffold-v2__kicker">Scaffold v2</div>
             <h1>{data.title || '증례보고 작성'}</h1>
-            <p>전체 증례의 근거와 핵심 메시지를 먼저 구성한 뒤 CARE 원고로 전환합니다.</p>
+            <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '전체 증례의 근거와 핵심 메시지를 먼저 구성한 뒤 CARE 원고로 전환합니다.'}</p>
           </div>
           <div className="scaffold-v2__case-meta">
             <span>실험번호</span>
@@ -420,8 +438,12 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           </div>
         </header>
 
-        <nav className="scaffold-v2__phases" aria-label="Scaffold v2 진행 단계">
-          {PHASES.map((phase, index) => {
+        <nav
+          className="scaffold-v2__phases"
+          aria-label="Scaffold v2 진행 단계"
+          style={{ gridTemplateColumns: `repeat(${visiblePhases.length}, minmax(0, 1fr))` }}
+        >
+          {visiblePhases.map((phase, index) => {
             const isCurrent = phase.id === currentPhase;
             const isDone = phaseComplete[phase.id];
             return (
@@ -433,22 +455,26 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 onClick={() => void changePhase(phase.id)}
                 disabled={saving}
               >
-                <span className="scaffold-v2__phase-number">{isDone && !isCurrent ? '완료' : phase.number}</span>
+                <span className="scaffold-v2__phase-number">{isDone && !isCurrent ? '완료' : studyMode ? index + 1 : phase.number}</span>
                 <span>
                   <strong>{phase.label}</strong>
                   <small>{phase.shortDescription}</small>
                 </span>
-                {index < PHASES.length - 1 ? <span className="scaffold-v2__phase-line" aria-hidden="true" /> : null}
+                {index < visiblePhases.length - 1 ? <span className="scaffold-v2__phase-line" aria-hidden="true" /> : null}
               </button>
             );
           })}
         </nav>
 
-        <div className="scaffold-v2__metrics" aria-label="증례 작업 현황">
+        <div
+          className="scaffold-v2__metrics"
+          aria-label="증례 작업 현황"
+          style={studyMode ? { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' } : undefined}
+        >
           <div><strong>{visits.length}</strong><span>방문 기록</span></div>
           <div><strong>{evidenceItems.length}</strong><span>AI 추출 문장</span></div>
           <div><strong>{caseNotes.length}</strong><span>증례 메모</span></div>
-          <div><strong>{validClaims.length}</strong><span>연결된 주장</span></div>
+          {studyMode ? null : <div><strong>{validClaims.length}</strong><span>연결된 주장</span></div>}
           <div><strong>{completedCount}/{totalSections}</strong><span>완료 섹션</span></div>
         </div>
 
@@ -474,7 +500,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 </div>
                 <div className="scaffold-v2__visit-list">
                   {visits.map((visit, index) => (
-                    <details key={`${visit.date}-${index}`} open={index === 0}>
+                    <details key={`${visit.date}-${index}`} open>
                       <summary>
                         <span>{visit.type} #{index + 1}</span>
                         <time>{visit.date || '날짜 미상'}</time>
@@ -566,8 +592,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>
                 {saving ? '저장 중...' : '메모 저장'}
               </button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo('core_message')} disabled={saving}>
-                다음: 핵심 메시지 작성
+              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo(studyMode ? 'section_drafting' : 'core_message')} disabled={saving}>
+                {studyMode ? '다음: CARE 항목 작성' : '다음: 핵심 메시지 작성'}
               </button>
             </div>
           </section>
@@ -726,9 +752,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <section className="scaffold-v2__stage" aria-labelledby="section-drafting-title">
             <div className="scaffold-v2__stage-heading">
               <div>
-                <span>4단계</span>
-                <h2 id="section-drafting-title">CARE 섹션별 원고 작성</h2>
-                <p>앞에서 만든 증례지도에 따라 각 섹션을 작성하고 AI 초안과 자신의 판단을 비교합니다.</p>
+                <span>{studyMode ? '2단계' : '4단계'}</span>
+                <h2 id="section-drafting-title">{studyMode ? 'CARE 항목별로 정리하고 AI 초안과 비교하기' : 'CARE 섹션별 원고 작성'}</h2>
+                <p>{studyMode ? '위에서부터 차례로 진행하세요. 내 생각을 먼저 적은 뒤 AI 초안을 확인합니다. 시간 안에 모두 하지 않아도 됩니다.' : '앞에서 만든 증례지도에 따라 각 섹션을 작성하고 AI 초안과 자신의 판단을 비교합니다.'}</p>
               </div>
               <strong>{completedCount} / {totalSections} 완료</strong>
             </div>
@@ -737,7 +763,56 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <span style={{ width: `${totalSections ? Math.round((completedCount / totalSections) * 100) : 0}%` }} />
             </div>
 
-            <div className="scaffold-v2__section-groups">
+            {studyMode ? (
+              <details className="scaffold-v2__care-map" open>
+                <summary>증례보고는 이렇게 구성됩니다 (CARE 지침)</summary>
+                <p>
+                  CARE 지침은 증례보고에 무엇을 적어야 하는지 정리한 국제 보고 기준입니다. 13개 항목으로 이루어져 있고,
+                  오늘은 그중 표시된 {studySectionIds.length}개 항목을 연습합니다.
+                </p>
+                <ol>
+                  {CARE_OVERVIEW.map((item) => {
+                    const isToday = studySectionIds.includes(item.sectionId);
+                    return (
+                      <li key={item.sectionId} className={isToday ? 'is-today' : ''}>
+                        <strong>{item.name}</strong>
+                        <span>{item.summary}</span>
+                        {isToday ? <em>오늘 연습</em> : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </details>
+            ) : null}
+
+            {studyMode ? (
+              <div className="scaffold-v2__study-sections">
+                {studySectionIds.map((studySectionId, index) => {
+                  const progress = data.scaffoldState.sectionProgress.find((item) => item.sectionId === studySectionId);
+                  const status = getStudentStatus(progress);
+                  const displayName =
+                    (['record_facts', 'clinical_process', 'additional_authoring'] as SectionGroup[])
+                      .flatMap((groupId) => getSectionsByGroup(groupId))
+                      .find((section) => section.sectionId === studySectionId)?.displayName || studySectionId;
+                  return (
+                    <div key={studySectionId} className="scaffold-v2__study-section">
+                      <span className="scaffold-v2__study-section-number">{index + 1}</span>
+                      <strong>{displayName}</strong>
+                      <span className={`scaffold-v2__status is-${status}`}>{getStatusLabel(status)}</span>
+                      <button
+                        type="button"
+                        className={`scaffold-v2__button ${status === 'completed' ? 'is-secondary' : 'is-primary'}`}
+                        onClick={() => navigate(`/study/scaffold/cases/${caseId}/sections/${studySectionId}`)}
+                      >
+                        {getSectionButtonLabel(status)}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="scaffold-v2__section-groups" style={studyMode ? { display: 'none' } : undefined}>
               {(['record_facts', 'clinical_process', 'additional_authoring'] as SectionGroup[]).map((groupId) => {
                 const sections = getSectionsByGroup(groupId).filter((section) => (data.sectionStates || []).some((state) => state.sectionId === section.sectionId));
                 if (sections.length === 0) return null;
@@ -756,7 +831,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                           <div key={section.sectionId} className="scaffold-v2__section-row">
                             <div>
                               <strong>{section.displayName}</strong>
-                              <span>{linkedClaimCount > 0 ? `연결된 주장 ${linkedClaimCount}개` : '연결된 주장 없음'}</span>
+                              {studyMode ? null : <span>{linkedClaimCount > 0 ? `연결된 주장 ${linkedClaimCount}개` : '연결된 주장 없음'}</span>}
                             </div>
                             <span className={`scaffold-v2__status is-${status}`}>{getStatusLabel(status)}</span>
                             <button type="button" className="scaffold-v2__button is-secondary" onClick={() => navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/sections/${section.sectionId}`)}>{getSectionButtonLabel(status)}</button>
@@ -770,8 +845,17 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             </div>
 
             <div className="scaffold-v2__stage-actions">
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('claim_evidence')} disabled={saving}>이전: 주장·근거 연결</button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void changePhase('final_review')} disabled={saving}>전체 검토 보기</button>
+              {studyMode ? (
+                <>
+                  <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 기록 읽기</button>
+                  <button type="button" className="scaffold-v2__button is-primary" onClick={() => navigate(`/study/scaffold/cases/${caseId}/summary`)}>내 학습 기록 보기</button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('claim_evidence')} disabled={saving}>이전: 주장·근거 연결</button>
+                  <button type="button" className="scaffold-v2__button is-primary" onClick={() => void changePhase('final_review')} disabled={saving}>전체 검토 보기</button>
+                </>
+              )}
             </div>
           </section>
         ) : null}
@@ -812,7 +896,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
         ) : null}
 
         <footer className="scaffold-v2__footer">
-          <span>현재 단계 {currentPhaseIndex + 1} / {PHASES.length}</span>
+          <span>현재 단계 {currentPhaseIndex + 1} / {visiblePhases.length}</span>
           <span>마지막 저장 {data.scaffoldState.caseMap?.updatedAt ? new Date(data.scaffoldState.caseMap.updatedAt).toLocaleString('ko-KR') : '저장 전'}</span>
         </footer>
       </main>

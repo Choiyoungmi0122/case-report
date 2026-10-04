@@ -22,7 +22,9 @@ import {
   DRAFT_JUDGMENT_OPTIONS,
   splitScaffoldDraftSentences,
   getSectionConfig,
-  type ScaffoldType
+  type ScaffoldType,
+  CARE_SECTION_GUIDE,
+  STUDY_SECTION_IDS
 } from '../utils/scaffoldUi';
 import './ScaffoldSectionPage.css';
 
@@ -366,6 +368,8 @@ function fromInformationStatusJudgment(value: string): string {
 function isCompleteDraftSentenceReview(item?: ScaffoldReviewItem) {
   if (!item || item.sourceType !== 'draft_sentence') return false;
   if (!item.judgment || item.judgment === 'pending') return false;
+  // '기록 근거 충분'은 이유 없이도 저장된다 (서버의 완료 조건과 같아야 한다).
+  if (item.judgment === 'supported_by_record') return true;
   return Boolean(String(item.note || '').trim() || (item.evidenceIds || []).length > 0);
 }
 
@@ -563,10 +567,11 @@ export default function ScaffoldSectionPage() {
     [scaffoldData, sectionId]
   );
 
-  const sectionOrder = useMemo(
-    () => (scaffoldData?.sectionStates || []).map((item) => item.sectionId),
-    [scaffoldData]
-  );
+  const sectionOrder = useMemo(() => {
+    const all = (scaffoldData?.sectionStates || []).map((item) => item.sectionId);
+    // 실험용 경로에서는 정해진 항목만, 정해진 순서로 이동한다.
+    return studyMode ? STUDY_SECTION_IDS.filter((id) => all.includes(id as any)) as typeof all : all;
+  }, [scaffoldData, studyMode]);
 
   const sectionIndex = useMemo(
     () => (sectionId ? sectionOrder.findIndex((item) => item === sectionId) : -1),
@@ -574,6 +579,17 @@ export default function ScaffoldSectionPage() {
   );
 
   const nextSectionId = sectionIndex >= 0 ? sectionOrder[sectionIndex + 1] : undefined;
+
+  // CARE가 이 항목에 요구하는 내용. 안내가 준비된 항목이 아니면 기존 설명으로 대신한다.
+  const sectionGuide = useMemo(() => {
+    if (!sectionId) return undefined;
+    const guide = CARE_SECTION_GUIDE[sectionId];
+    if (guide) return guide;
+    const config = getSectionConfig(sectionId);
+    return config?.description && config.requirements?.length
+      ? { goal: config.description, items: config.requirements }
+      : undefined;
+  }, [sectionId]);
 
   // Get scaffoldType for this section
   const scaffoldConfig = useMemo(
@@ -777,11 +793,8 @@ export default function ScaffoldSectionPage() {
   }).length;
 
   const allDraftJudgmentsSaved = draftSentences.length === 0 || draftJudgmentCount >= draftSentences.length;
-  const postAiReflectionComplete = Boolean(
-    changedJudgmentReflection.trim() &&
-      unresolvedQuestionReflection.trim() &&
-      transferPlanReflection.trim()
-  );
+  // 회고는 첫 항목만 필수다. 나머지는 적고 싶을 때만 적는다.
+  const postAiReflectionComplete = Boolean(changedJudgmentReflection.trim());
 
   const sectionTitle = sectionId || '섹션';
   const visits = useMemo(() => detail?.caseSummary?.visits || [], [detail]);
@@ -1144,6 +1157,8 @@ export default function ScaffoldSectionPage() {
       });
       patchScaffoldState(nextState.scaffoldState);
       setCurrentStep('step3');
+      // 정리 내용은 오른쪽 패널에 이미 보이므로 확인 단계를 따로 두지 않고 바로 공개한다.
+      await handleRevealAI();
     } catch (err: any) {
       setError(err.message || '정리 내용을 저장하지 못했습니다.');
     } finally {
@@ -1217,7 +1232,7 @@ export default function ScaffoldSectionPage() {
         return;
       }
 
-      if (!nextNote.trim() && nextEvidenceIds.length === 0) {
+      if (nextJudgment !== 'supported_by_record' && !nextNote.trim() && nextEvidenceIds.length === 0) {
         setError('판단 이유를 입력하거나 SOAP 근거를 선택해주세요.');
         return;
       }
@@ -1252,7 +1267,7 @@ export default function ScaffoldSectionPage() {
   const handleCompleteSection = async () => {
     if (!caseId || !sectionId) return;
     if (!postAiReflectionComplete && draftSentences.length > 0) {
-      setError('AI 검토 후 회고 세 항목을 모두 작성해주세요. 변화가 없다면 “변화 없음”으로 적을 수 있습니다.');
+      setError('AI를 보고 달라진 점을 적어주세요. 달라진 것이 없다면 “변화 없음”으로 적을 수 있습니다.');
       return;
     }
     setSavingProgressKey('draftReviewCompleted');
@@ -1328,7 +1343,7 @@ export default function ScaffoldSectionPage() {
         }
       />
       {scaffoldData?.experiment_code || scaffoldData?.experimentCode ? (
-        <div style={{ margin: '10px 0 18px 0', color: '#5a6c81', fontSize: 13, fontWeight: 600 }}>
+        <div style={{ margin: '10px 0 18px 0', color: '#5a6c81', fontSize: 15, fontWeight: 600 }}>
           실험번호: {scaffoldData.experiment_code || scaffoldData.experimentCode}
         </div>
       ) : null}
@@ -1345,7 +1360,7 @@ export default function ScaffoldSectionPage() {
           </p>
         </div>
 
-        <div className="scaffold-pane__body" style={{ display: 'grid', gap: 8, alignContent: 'start' }}>
+        <div className="scaffold-pane__body" style={{ display: 'grid', gap: 8, alignContent: 'start', gridAutoRows: 'max-content' }}>
           {visits.map((visit: any, index: number) => {
             const isExpanded = expandedVisits.has(index);
             const visitDate = visit.date
@@ -1390,14 +1405,14 @@ export default function ScaffoldSectionPage() {
                         color: '#000000',
                         fontWeight: 700,
                         marginBottom: 4,
-                        fontSize: 15
+                        fontSize: 16
                       }}
                     >
                       {visit.type} #{index + 1}
                     </div>
-                    <div style={{ color: '#333333', fontSize: 13 }}>{visitDate}</div>
+                    <div style={{ color: '#333333', fontSize: 15 }}>{visitDate}</div>
                   </div>
-                  <div style={{ color: '#5a6c81', fontSize: 14, flexShrink: 0 }}>
+                  <div style={{ color: '#5a6c81', fontSize: 16, flexShrink: 0 }}>
                     {isExpanded ? '▼' : '▶'}
                   </div>
                 </button>
@@ -1410,7 +1425,7 @@ export default function ScaffoldSectionPage() {
                       background: '#ffffff',
                       // 방문 카드마다 별도 스크롤을 만들지 않는다. 스크롤은
                       // 왼쪽 패널 하나만 담당한다.
-                      fontSize: 14,
+                      fontSize: 16,
                       lineHeight: 1.8,
                       color: '#000000',
                       whiteSpace: 'pre-wrap',
@@ -1435,7 +1450,7 @@ export default function ScaffoldSectionPage() {
                         border: '1px solid #5a9eca',
                         background: '#e8f3ff',
                         cursor: 'pointer',
-                        fontSize: 12,
+                        fontSize: 14,
                         color: '#244a86',
                         fontWeight: 500
                       }}
@@ -1449,7 +1464,7 @@ export default function ScaffoldSectionPage() {
           })}
 
           {visits.length === 0 && (
-            <div style={{ padding: 12, borderRadius: 6, background: '#f8fafc', color: '#5a6c81', fontSize: 12 }}>
+            <div style={{ padding: 12, borderRadius: 6, background: '#f8fafc', color: '#5a6c81', fontSize: 14 }}>
               진료 기록이 없습니다.
             </div>
           )}
@@ -1498,29 +1513,29 @@ export default function ScaffoldSectionPage() {
                   color: '#7a4e00'
                 }}
               >
-                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>
                   💡 의료 기록 외 정보 필요
                 </div>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+                <p style={{ margin: 0, fontSize: 15, lineHeight: 1.6 }}>
                   이 항목은 의료 기록에 직접 나타나지 않는 정보가 필요합니다. 좌측 기록을 참고하되, 의학적 지식, 학습 포인트, 임상적 의의 등을 바탕으로 작성해주세요.
                 </p>
               </div>
 
               {/* Direct Draft Input */}
               <div>
-                <h3 style={{ margin: '0 0 12px 0', color: '#17324d', fontSize: 14, fontWeight: 600 }}>
+                <h3 style={{ margin: '0 0 12px 0', color: '#17324d', fontSize: 16, fontWeight: 600 }}>
                   {scaffoldConfig?.displayName || sectionTitle} 작성
                 </h3>
-                <p style={{ margin: '0 0 12px 0', color: '#5a6c81', fontSize: 13, lineHeight: 1.6 }}>
+                <p style={{ margin: '0 0 12px 0', color: '#5a6c81', fontSize: 15, lineHeight: 1.6 }}>
                   {scaffoldConfig?.description}
                 </p>
 
                 {scaffoldConfig?.requirements && scaffoldConfig.requirements.length > 0 && (
                   <div style={{ marginBottom: 16, padding: 12, borderRadius: 6, background: '#f8fafc', borderLeft: '3px solid #5a9eca' }}>
-                    <div style={{ fontWeight: 600, color: '#17324d', marginBottom: 8, fontSize: 12 }}>
+                    <div style={{ fontWeight: 600, color: '#17324d', marginBottom: 8, fontSize: 14 }}>
                       필수 항목:
                     </div>
-                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#5a6c81', lineHeight: 1.8 }}>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: '#5a6c81', lineHeight: 1.8 }}>
                       {scaffoldConfig.requirements.map((req) => (
                         <li key={req}>{req}</li>
                       ))}
@@ -1539,7 +1554,7 @@ export default function ScaffoldSectionPage() {
                     borderRadius: 6,
                     border: '1px solid #d7e0e8',
                     fontFamily: 'system-ui, -apple-system, sans-serif',
-                    fontSize: 14,
+                    fontSize: 16,
                     color: '#17324d',
                     lineHeight: 1.6,
                     resize: 'vertical'
@@ -1565,6 +1580,19 @@ export default function ScaffoldSectionPage() {
             </div>
           ) : (
             <>
+              {sectionGuide ? (
+                <div className="scaffold-care-guide">
+                  <div className="scaffold-care-guide__badge">CARE 기준</div>
+                  <h3>‘{scaffoldConfig?.displayName || sectionTitle}’에 들어가는 내용</h3>
+                  <p>{sectionGuide.goal}</p>
+                  <ul>
+                    {sectionGuide.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               {/* STEP 1: Evidence Selection */}
           {(currentStep === 'step1' || !sectionProgress.draftRevealed) && (
             <ScaffoldPanel
@@ -1574,7 +1602,7 @@ export default function ScaffoldSectionPage() {
               <div style={{ display: 'grid', gap: 20 }}>
                 {evidenceChoices.length > 0 && (
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 13, fontWeight: 600 }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 15, fontWeight: 600 }}>
                       SOAP 구체 근거 선택
                     </h4>
                     {mappedEvidenceIds.length > 0 ? (
@@ -1586,7 +1614,7 @@ export default function ScaffoldSectionPage() {
                           borderRadius: 6,
                           background: '#eff6f2',
                           color: '#256247',
-                          fontSize: 12,
+                          fontSize: 14,
                           lineHeight: 1.5
                         }}
                       >
@@ -1611,7 +1639,7 @@ export default function ScaffoldSectionPage() {
                 {/* Selected Evidence Items */}
                 {selectedEvidenceItems.length > 0 && (
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 13, fontWeight: 600 }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 15, fontWeight: 600 }}>
                       선택한 SOAP 근거
                     </h4>
                     <div style={{ display: 'grid', gap: 8 }}>
@@ -1623,14 +1651,14 @@ export default function ScaffoldSectionPage() {
                             borderRadius: 6,
                             background: '#e8f3ff',
                             border: '1px solid #5a9eca',
-                            fontSize: 12,
+                            fontSize: 14,
                             color: '#244a86'
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 600, marginBottom: 4 }}>{item.label}</div>
-                              <div style={{ color: '#5a7a9e', fontSize: 11, lineHeight: 1.5 }}>
+                              <div style={{ color: '#5a7a9e', fontSize: 13, lineHeight: 1.5 }}>
                                 {item.sourceText.substring(0, 80)}...
                               </div>
                             </div>
@@ -1657,7 +1685,7 @@ export default function ScaffoldSectionPage() {
 
                 {/* Key Information */}
                 <div>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 13, fontWeight: 600 }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 15, fontWeight: 600 }}>
                     작성에 사용할 정보
                   </h4>
                   <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -1672,7 +1700,7 @@ export default function ScaffoldSectionPage() {
                           borderRadius: 6,
                           background: '#f0f5fb',
                           border: '1px solid #d7e0e8',
-                          fontSize: 13,
+                          fontSize: 15,
                           color: '#17324d'
                         }}
                       >
@@ -1711,7 +1739,7 @@ export default function ScaffoldSectionPage() {
                         padding: '10px 12px',
                         borderRadius: 6,
                         border: '1px solid #c8d2dd',
-                        fontSize: 13,
+                        fontSize: 15,
                         fontFamily: 'inherit'
                       }}
                     />
@@ -1724,7 +1752,7 @@ export default function ScaffoldSectionPage() {
                         border: '1px solid #d7e0e8',
                         background: '#fcfdff',
                         cursor: 'pointer',
-                        fontSize: 13,
+                        fontSize: 15,
                         color: '#17324d',
                         fontWeight: 500
                       }}
@@ -1736,7 +1764,7 @@ export default function ScaffoldSectionPage() {
 
                 {/* Missing Information */}
                 <div>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 13, fontWeight: 600 }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#17324d', fontSize: 15, fontWeight: 600 }}>
                     작성하면서 부족하다고 느낀 정보
                   </h4>
                   <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -1751,7 +1779,7 @@ export default function ScaffoldSectionPage() {
                           borderRadius: 6,
                           background: '#fff5f0',
                           border: '1px solid #e8c8c0',
-                          fontSize: 13,
+                          fontSize: 15,
                           color: '#17324d'
                         }}
                       >
@@ -1790,7 +1818,7 @@ export default function ScaffoldSectionPage() {
                         padding: '10px 12px',
                         borderRadius: 6,
                         border: '1px solid #c8d2dd',
-                        fontSize: 13,
+                        fontSize: 15,
                         fontFamily: 'inherit'
                       }}
                     />
@@ -1803,7 +1831,7 @@ export default function ScaffoldSectionPage() {
                         border: '1px solid #d7e0e8',
                         background: '#fcfdff',
                         cursor: 'pointer',
-                        fontSize: 13,
+                        fontSize: 15,
                         color: '#17324d',
                         fontWeight: 500
                       }}
@@ -1821,10 +1849,10 @@ export default function ScaffoldSectionPage() {
                     background: '#f8fafc'
                   }}
                 >
-                  <div style={{ color: '#17324d', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                  <div style={{ color: '#17324d', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
                     Step 1 완료 기준
                   </div>
-                  <div style={{ color: '#52606d', fontSize: 12, lineHeight: 1.6, marginBottom: 10 }}>
+                  <div style={{ color: '#52606d', fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
                     SOAP 근거를 선택하거나, 작성에 사용할 정보를 직접 입력하세요. 둘 다 어렵다면 아래 항목을 확인하세요.
                   </div>
                   <label
@@ -1833,7 +1861,7 @@ export default function ScaffoldSectionPage() {
                       alignItems: 'center',
                       gap: 8,
                       color: '#17324d',
-                      fontSize: 13,
+                      fontSize: 15,
                       cursor: 'pointer'
                     }}
                   >
@@ -1890,7 +1918,7 @@ export default function ScaffoldSectionPage() {
                     <div style={{ marginBottom: 12 }}>
                       <div
                         style={{
-                          fontSize: 13,
+                          fontSize: 15,
                           fontWeight: 600,
                           color: '#17324d',
                           marginBottom: 4
@@ -1899,7 +1927,7 @@ export default function ScaffoldSectionPage() {
                         {question.question}
                       </div>
                       {question.description && (
-                        <div style={{ fontSize: 12, color: '#5a6c81', lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 14, color: '#5a6c81', lineHeight: 1.5 }}>
                           {question.description}
                         </div>
                       )}
@@ -1913,7 +1941,7 @@ export default function ScaffoldSectionPage() {
                             display: 'flex',
                             alignItems: 'center',
                             gap: 8,
-                            fontSize: 13,
+                            fontSize: 15,
                             cursor: 'pointer',
                             color: '#17324d'
                           }}
@@ -1946,15 +1974,15 @@ export default function ScaffoldSectionPage() {
                   border: '1px solid #d7e0e8'
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#17324d', marginBottom: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#17324d', marginBottom: 12 }}>
                   AI 초안을 보기 전에 다음을 확인해주세요
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#17324d' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
                     <span>{step1Complete ? '✓' : '○'}</span>
                     <span>정보 선택 및 정리</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#17324d' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
                     <span>{step2Complete ? '✓' : '○'}</span>
                     <span>정보 충분성 확인</span>
                   </div>
@@ -1968,7 +1996,9 @@ export default function ScaffoldSectionPage() {
                   onClick={() => void handleProceedToStep3()}
                   disabled={!step1Complete || !step2Complete || savingProgressKey === 'preRevealSummary'}
                 >
-                  {savingProgressKey === 'preRevealSummary' ? '저장 중...' : '다음: 정리 내용 검토'}
+                  {savingProgressKey === 'preRevealSummary' || savingProgressKey === 'draftRevealed'
+                    ? 'AI 초안 준비 중...'
+                    : '내 정리 저장하고 AI 초안 보기'}
                 </ScaffoldActionButton>
               </div>
             </ScaffoldPanel>
@@ -2002,26 +2032,12 @@ export default function ScaffoldSectionPage() {
                     원기록 ↔ AI ↔ 내 판단 비교의 목적이다. */}
 
                 {/* AI Draft */}
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 8,
-                    border: '1px solid #d7e0e8',
-                    background: '#fcfdff'
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#17324d', marginBottom: 12 }}>
-                    AI 초안
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.8,
-                      color: '#17324d',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word'
-                    }}
-                  >
+                <div className="scaffold-ai-draft">
+                  <div className="scaffold-ai-draft__badge">AI가 쓴 초안</div>
+                  <p className="scaffold-ai-draft__hint">
+                    아래 문장은 AI가 기록을 바탕으로 쓴 것입니다. 왼쪽 원기록, 오른쪽 내 정리와 비교해 보세요.
+                  </p>
+                  <div className="scaffold-ai-draft__text">
                     {renderClinicalAnonymizedText(
                       detail?.currentDraft || sectionDraftEntry?.draftText
                     ) || '초안이 없습니다.'}
@@ -2033,7 +2049,7 @@ export default function ScaffoldSectionPage() {
                   <div>
                     <div
                       style={{
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: 600,
                         color: '#17324d',
                         marginBottom: 12
@@ -2054,9 +2070,9 @@ export default function ScaffoldSectionPage() {
                         const validationMessage =
                           selectedJudgment === 'pending'
                             ? '판단을 선택해야 저장할 수 있습니다.'
-                            : hasSupport
+                            : hasSupport || selectedJudgment === 'supported_by_record'
                               ? undefined
-                              : '판단 이유를 입력하거나 SOAP 근거를 선택해야 저장할 수 있습니다.';
+                              : '어떤 점 때문에 그렇게 판단했는지 이유를 적거나 기록 근거를 선택해주세요.';
 
                         return (
                           <ScaffoldReviewCard
@@ -2070,7 +2086,11 @@ export default function ScaffoldSectionPage() {
                             }
                             noteValue={note}
                             onNoteChange={(value) => setNoteDrafts((prev) => ({ ...prev, [itemId]: value }))}
-                            notePlaceholder="판단 사유"
+                            notePlaceholder={
+                              selectedJudgment === 'supported_by_record'
+                                ? '판단 이유 (선택)'
+                                : '판단 이유: 원기록의 어느 부분과 어떻게 다른지, 무엇을 확인해야 하는지'
+                            }
                             saveLabel="저장"
                             saveDisabled={Boolean(validationMessage)}
                             validationMessage={validationMessage}
@@ -2080,6 +2100,7 @@ export default function ScaffoldSectionPage() {
                             saving={savingItemId === itemId}
                           >
                             <ScaffoldEvidenceSelector
+                              collapsible
                               choices={evidenceChoices}
                               selectedIds={selectedEvidenceIds}
                               onToggle={(id) =>
@@ -2123,38 +2144,29 @@ export default function ScaffoldSectionPage() {
                     <div>
                       <div className="scaffold-post-ai-reflection__eyebrow">Step 5</div>
                       <h3 id="post-ai-reflection-title">AI 검토 후 내 판단 정리</h3>
-                      <p>AI 초안을 본 뒤 무엇이 달라졌는지 적어야 이번 검토가 다음 작성 경험으로 이어집니다.</p>
+                      <p>AI 초안을 보기 전 내 정리(오른쪽)와 비교해 한두 줄로 적어주세요.</p>
                     </div>
 
                     <label>
-                      <span>AI를 보기 전과 비교해 달라진 판단</span>
+                      <span>AI를 보고 달라진 점</span>
                       <textarea
                         value={changedJudgmentReflection}
                         onChange={(event) => setChangedJudgmentReflection(event.target.value)}
-                        placeholder="달라진 판단과 그 이유를 적으세요. 변화가 없다면 그 이유를 적으세요."
+                        placeholder="예: AI 문장을 보고 내가 놓친 내용을 알았다 / 내 정리와 달라서 AI 문장을 믿지 않았다 / 변화 없음"
                         rows={3}
                       />
                     </label>
 
                     <label>
-                      <span>아직 확인이 필요한 내용</span>
+                      <span>교수님께 확인하고 싶은 것 (선택)</span>
                       <textarea
                         value={unresolvedQuestionReflection}
                         onChange={(event) => setUnresolvedQuestionReflection(event.target.value)}
-                        placeholder="추가 기록, 검사 또는 교수자 확인이 필요한 내용을 적으세요. 없다면 ‘없음’으로 적으세요."
+                        placeholder="기록만으로 판단하기 어려워 물어보고 싶은 내용이 있다면 적어주세요."
                         rows={3}
                       />
                     </label>
 
-                    <label>
-                      <span>다음 증례보고 작성에 적용할 점</span>
-                      <textarea
-                        value={transferPlanReflection}
-                        onChange={(event) => setTransferPlanReflection(event.target.value)}
-                        placeholder="다음에는 원기록을 어떻게 탐색하고 AI 초안을 어떻게 검토할지 적으세요."
-                        rows={3}
-                      />
-                    </label>
                   </section>
                 ) : null}
 
@@ -2169,10 +2181,10 @@ export default function ScaffoldSectionPage() {
                       savingProgressKey === 'draftReviewCompleted'
                     }
                   >
-                    {savingProgressKey === 'draftReviewCompleted' ? '저장 중...' : '회고 저장 후 이 항목 완료'}
+                    {savingProgressKey === 'draftReviewCompleted' ? '저장 중...' : '저장하고 이 항목 완료'}
                   </ScaffoldActionButton>
                   {allDraftJudgmentsSaved && draftSentences.length > 0 && !postAiReflectionComplete ? (
-                    <p className="scaffold-post-ai-reflection__helper">회고 세 항목을 모두 작성하면 완료할 수 있습니다.</p>
+                    <p className="scaffold-post-ai-reflection__helper">‘AI를 보고 달라진 점’을 적으면 완료할 수 있습니다.</p>
                   ) : null}
                 </div>
               </div>

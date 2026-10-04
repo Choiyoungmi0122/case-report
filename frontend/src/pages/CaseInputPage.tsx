@@ -57,6 +57,7 @@ type VisitsEditorProps = {
   onDraftTitleChange: (value: string) => void;
   onParticipantCodeChange: (value: string) => void;
   onOpenDrafts: () => void;
+  onLoadStudyCase: () => void;
   onAddVisit: () => void;
   onUpdateVisit: (index: number, field: keyof Visit, value: string) => void;
   onRemoveVisit: (index: number) => void;
@@ -103,6 +104,7 @@ type InputTabContentProps = {
   onDraftTitleChange: (value: string) => void;
   onParticipantCodeChange: (value: string) => void;
   onOpenDrafts: () => void;
+  onLoadStudyCase: () => void;
   onAddVisit: () => void;
   onUpdateVisit: (index: number, field: keyof Visit, value: string) => void;
   onRemoveVisit: (index: number) => void;
@@ -252,6 +254,7 @@ function VisitsEditor({
   onDraftTitleChange,
   onParticipantCodeChange,
   onOpenDrafts,
+  onLoadStudyCase,
   onAddVisit,
   onUpdateVisit,
   onRemoveVisit
@@ -261,6 +264,11 @@ function VisitsEditor({
       <div className="visits-header">
         <h2>방문 기록</h2>
         <div className="visits-header-buttons">
+          {researchMode ? (
+            <button onClick={onLoadStudyCase} className="btn-load-draft">
+              실험 사례 불러오기
+            </button>
+          ) : null}
           <button
             onClick={onOpenDrafts}
             className="btn-load-draft"
@@ -522,6 +530,7 @@ function InputTabContent({
   onDraftTitleChange,
   onParticipantCodeChange,
   onOpenDrafts,
+  onLoadStudyCase,
   onAddVisit,
   onUpdateVisit,
   onRemoveVisit,
@@ -548,6 +557,7 @@ function InputTabContent({
         onDraftTitleChange={onDraftTitleChange}
         onParticipantCodeChange={onParticipantCodeChange}
         onOpenDrafts={onOpenDrafts}
+        onLoadStudyCase={onLoadStudyCase}
         onAddVisit={onAddVisit}
         onUpdateVisit={onUpdateVisit}
         onRemoveVisit={onRemoveVisit}
@@ -872,6 +882,28 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
     window.alert('임시 저장한 케이스를 불러왔습니다.');
   };
 
+  /** 실험용 고정 사례의 방문 기록(날짜 포함)을 입력 칸에 채운다. */
+  const handleLoadStudyCase = async () => {
+    if (hasTextInput && !window.confirm('현재 입력 내용을 지우고 실험 사례를 불러올까요?')) {
+      return;
+    }
+
+    setError(null);
+    try {
+      const template = await caseApi.getStudyCaseTemplate();
+      setVisits(
+        template.visits.map((visit, index) => ({
+          type: (index === 0 ? '초진' : '재진') as '초진' | '재진',
+          date: visit.date,
+          soapText: visit.soapText || ''
+        }))
+      );
+      setCurrentDraftCaseId(null);
+    } catch (nextError: any) {
+      setError(nextError.message || '실험 사례를 불러오지 못했습니다.');
+    }
+  };
+
   const handleCaseClick = (caseItem: Case) => {
     if (!isProcessedCase(caseItem)) {
       handleLoadDraft(caseItem);
@@ -1172,6 +1204,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
               setShowLoadDraftModal(true);
               void loadDraftCases();
             }}
+            onLoadStudyCase={() => void handleLoadStudyCase()}
             onAddVisit={addVisit}
             onUpdateVisit={updateVisit}
             onRemoveVisit={removeVisit}

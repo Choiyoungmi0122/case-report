@@ -49,7 +49,7 @@ export default function ScaffoldQuestionCard({
           display: 'inline-flex',
           padding: '4px 10px',
           borderRadius: 999,
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           marginBottom: 8,
           ...badgeStyle

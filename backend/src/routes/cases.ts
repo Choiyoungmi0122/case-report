@@ -2108,6 +2108,24 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// 실험용 입력 화면의 '실험 사례 불러오기'가 사용한다. 모든 참여자가 같은 날짜와
+// 본문으로 시작하도록 고정 사례의 방문 기록만 내려준다.
+router.get('/study/template', (req: Request, res: Response) => {
+  const template = getStudyCaseTemplate(
+    typeof req.query.studyCaseId === 'string' ? req.query.studyCaseId : undefined
+  );
+  res.json({
+    studyCaseId: template.id,
+    version: template.version,
+    title: template.title,
+    visits: template.visits.map((visit) => ({
+      type: visit.type,
+      date: visit.date,
+      soapText: visit.soapText
+    }))
+  });
+});
+
 router.post('/study/start', async (req: Request, res: Response) => {
   try {
     const mode = req.body?.mode === 'scaffold' ? 'scaffold' : 'write';
@@ -3236,7 +3254,7 @@ router.post('/:id/common-questions/answer', async (req: Request, res: Response) 
           currentDraft: draftEntry.draftText || '',
           evidenceCards: getRelevantEvidence(evidenceCards, sectionId),
           qnaHistory: await deidentifyQnaForOutbound(mergedQnaHistory, outboundContext),
-          pendingItems: draftEntry.openIssues || state.missingInfoBullets || [],
+          pendingItems: draftEntry.openIssues?.length ? draftEntry.openIssues : state.missingInfoBullets || [],
           question: await deidentifyOutboundField(question, outboundContext),
           answer: await deidentifyOutboundField(answer, outboundContext)
         });

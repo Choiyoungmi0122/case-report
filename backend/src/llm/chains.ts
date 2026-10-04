@@ -39,6 +39,7 @@ import {
 } from '../questions/questionTemplates';
 import { DeidentifiedEMR, deidentifyEMR } from '../deid';
 import { deidentifyCaseEMRs } from '../deid';
+import { isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
 import {
   DeidentifiedVisitRecord,
   PendingTermConfirmation,
@@ -154,6 +155,20 @@ function clampConfidence(value: number | undefined): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(3))));
 }
 
+// Chain1's evidenceType is a per-card content judgement, so it is a steadier
+// signal than the free-form tags array and guarantees a card reaches the
+// section its own type names.
+const EVIDENCE_TYPE_SECTION: Record<string, CareSection> = {
+  patient_information: 'PATIENT_INFORMATION',
+  clinical_finding: 'CLINICAL_FINDINGS',
+  timeline: 'TIMELINE',
+  diagnostic_assessment: 'DIAGNOSTIC_ASSESSMENT',
+  therapeutic_intervention: 'THERAPEUTIC_INTERVENTIONS',
+  treatment: 'THERAPEUTIC_INTERVENTIONS',
+  follow_up_outcome: 'FOLLOW_UP_OUTCOMES',
+  patient_perspective: 'PATIENT_PERSPECTIVE'
+};
+
 function inferEvidenceType(sectionHints: CareSection[]): string {
   if (sectionHints.includes('THERAPEUTIC_INTERVENTIONS')) return 'treatment';
   if (sectionHints.includes('FOLLOW_UP_OUTCOMES')) return 'follow_up_outcome';
@@ -241,42 +256,68 @@ function splitDraftSentences(text: string): string[] {
     .filter((sentence) => sentence.length > 0);
 }
 
+function characterBigrams(text: string): Set<string> {
+  const normalized = normalizeForGrounding(text);
+  const bigrams = new Set<string>();
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    bigrams.add(normalized.slice(index, index + 2));
+  }
+  return bigrams;
+}
+
+// A draft sentence usually merges several evidence cards, so support is judged
+// against the pooled evidence (how much of the sentence is covered at all),
+// while links go to the individual cards that overlap it most.
+const UNSUPPORTED_COVERAGE_THRESHOLD = 0.4;
+const EVIDENCE_LINK_THRESHOLD = 0.4;
+
 function buildDraftTraceability(params: {
   draftText: string;
   evidenceCards: EvidenceCard[];
   preferredEvidenceIds?: string[];
+  supplementalTexts?: string[];
 }) {
   const sentences = splitDraftSentences(params.draftText);
   const preferredIds = new Set(params.preferredEvidenceIds || []);
-  const scopedEvidence =
-    preferredIds.size > 0
-      ? params.evidenceCards.filter((card) => preferredIds.has(card.id))
-      : params.evidenceCards;
+  const cardBigrams = params.evidenceCards.map((card) => ({
+    id: card.id,
+    bigrams: new Set([...characterBigrams(card.sourceText || ''), ...characterBigrams(card.normalizedText || '')])
+  }));
+  const pooledBigrams = new Set<string>();
+  for (const card of cardBigrams) card.bigrams.forEach((bigram) => pooledBigrams.add(bigram));
+  for (const text of params.supplementalTexts || []) {
+    characterBigrams(text).forEach((bigram) => pooledBigrams.add(bigram));
+  }
 
-  const evidenceLinks = sentences.map((sentence) => {
-    const ranked = scopedEvidence
-      .map((card) => ({
-        id: card.id,
-        score: Math.max(
-          textSimilarity(sentence, card.normalizedText || ''),
-          textSimilarity(sentence, card.sourceText || '')
-        )
-      }))
-      .filter((item) => item.score >= 0.24)
-      .sort((a, b) => b.score - a.score)
+  const analysed = sentences.map((sentence) => {
+    const sentenceBigrams = characterBigrams(sentence);
+    const covered = Array.from(sentenceBigrams).filter((bigram) => pooledBigrams.has(bigram)).length;
+    const coverage = covered / Math.max(sentenceBigrams.size, 1);
+    const ranked = cardBigrams
+      .map((card) => {
+        const overlap = Array.from(card.bigrams).filter((bigram) => sentenceBigrams.has(bigram)).length;
+        return {
+          id: card.id,
+          score: overlap / Math.max(Math.min(card.bigrams.size, sentenceBigrams.size), 1)
+        };
+      })
+      .filter((item) => item.score >= EVIDENCE_LINK_THRESHOLD)
+      .sort(
+        (a, b) =>
+          Number(preferredIds.has(b.id)) - Number(preferredIds.has(a.id)) || b.score - a.score
+      )
       .slice(0, 3)
       .map((item) => item.id);
 
-    return {
-      sentence,
-      evidenceCardIds: uniqueStrings(ranked)
-    };
+    return { sentence, coverage, evidenceCardIds: uniqueStrings(ranked) };
   });
 
-  const unsupportedClaims = evidenceLinks
-    .filter((link) => link.sentence.length >= 12 && link.evidenceCardIds.length === 0)
-    .map((link) => ({
-      sentence: link.sentence,
+  const evidenceLinks = analysed.map(({ sentence, evidenceCardIds }) => ({ sentence, evidenceCardIds }));
+
+  const unsupportedClaims = analysed
+    .filter((item) => item.sentence.length >= 12 && item.coverage < UNSUPPORTED_COVERAGE_THRESHOLD)
+    .map((item) => ({
+      sentence: item.sentence,
       reason: '이 문장을 뒷받침할 만큼 유사한 기록 근거를 찾지 못했습니다.'
     }));
 
@@ -287,6 +328,7 @@ export function buildSectionDraftTraceability(params: {
   draftText: string;
   evidenceCards: EvidenceCard[];
   preferredEvidenceIds?: string[];
+  supplementalTexts?: string[];
 }) {
   return buildDraftTraceability(params);
 }
@@ -594,12 +636,23 @@ export async function preprocessVisitsForChain1(
     llmResolver?: NormalizerLlmResolver;
   } = {}
 ): Promise<PreprocessedChain1Input> {
-  const deidentifiedOnly = await deidentifyCaseEMRs(
-    visits.map((visit) => ({
-      text: visit.text || '',
-      emrId: `visit_${visit.index}`
-    }))
-  );
+  // The fixed virtual-patient study case has no real identifiers; running the
+  // detector on it only produces false positives that corrupt the evidence text.
+  const deidentifiedOnly: DeidentifiedEMR[] = isFixedStudyCaseText(visits.map((visit) => visit.text || ''))
+    ? visits.map((visit) => ({
+        emrId: `visit_${visit.index}`,
+        originalTextStoredLocalOnly: true,
+        deidentifiedText: visit.text || '',
+        phiSpans: [],
+        replacementMap: [],
+        riskLevel: 'LOW'
+      }))
+    : await deidentifyCaseEMRs(
+        visits.map((visit) => ({
+          text: visit.text || '',
+          emrId: `visit_${visit.index}`
+        }))
+      );
   const deidentifiedResults = visits.map((visit, index) => ({
     visit,
     deidentifiedEMR: deidentifiedOnly[index]
@@ -693,7 +746,7 @@ async function prepareVisitsForChain1(
   );
 }
 
-function selectPromptClauses(clauses: PreparedClause[], maxClauses = 12): PreparedClause[] {
+function selectPromptClauses(clauses: PreparedClause[], maxClauses = 40): PreparedClause[] {
   if (clauses.length <= maxClauses) return clauses;
 
   const selected = new Map<number, PreparedClause>();
@@ -787,7 +840,12 @@ function buildTaggedEvidenceSummary(evidenceCards: EvidenceCard[]): string {
     const items =
       relevant.length > 0
         ? relevant
-            .map((card) => `- (${card.id}) ${card.normalizedText || card.sourceText || ''}`)
+            .map(
+              (card) =>
+                `- (${card.id}) [visit ${card.visitIndex}] ${
+                  card.normalizedText || card.sourceText || ''
+                }`
+            )
             .join('\n')
         : '- (none)';
 
@@ -804,8 +862,14 @@ function buildSectionAssessmentSummary(
       const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
       return hints.includes(sectionId);
     });
-    return `[${sectionId}] evidenceCount=${relevant.length}`;
-  }).join('\n');
+    const items =
+      relevant.length > 0
+        ? relevant
+            .map((card) => `- [visit ${card.visitIndex}] ${card.normalizedText || card.sourceText || ''}`)
+            .join('\n')
+        : '- (none)';
+    return `[${sectionId}] evidenceCount=${relevant.length}\n${items}`;
+  }).join('\n\n');
 }
 
 function getEvidenceForSection(evidenceCards: EvidenceCard[], sectionId: CareSection): EvidenceCard[] {
@@ -827,7 +891,7 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
     return {
       sectionId,
       status: 'IMPOSSIBLE',
-      rationaleText: 'This section typically requires author-provided context beyond EMR evidence alone.'
+      rationaleText: '이 섹션은 EMR 근거만으로는 작성하기 어렵고 저자가 제공하는 맥락이 필요합니다.'
     };
   }
 
@@ -837,8 +901,8 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
       status: count > 0 ? 'INCOMPLETE' : 'IMPOSSIBLE',
       rationaleText:
         count > 0
-          ? 'Some case-specific evidence is available, but interpretation and discussion still need additional author input.'
-          : 'No discussion-ready evidence was identified yet from the current EMR alone.'
+          ? '증례 관련 근거는 일부 있으나 해석과 고찰에는 저자의 추가 입력이 필요합니다.'
+          : '현재 EMR만으로는 고찰에 사용할 근거가 확인되지 않았습니다.'
     };
   }
 
@@ -848,8 +912,8 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
       status: hasMeaningfulText(relevant, 8) ? 'INCOMPLETE' : 'IMPOSSIBLE',
       rationaleText:
         hasMeaningfulText(relevant, 8)
-          ? 'Patient-reported expressions are partially present, but a fuller patient perspective still needs direct wording or context.'
-          : 'Direct patient perspective content was not clearly documented in the current EMR.'
+          ? '환자가 표현한 내용이 일부 있으나 환자 관점을 충분히 기술하려면 직접적인 표현이나 맥락이 더 필요합니다.'
+          : '현재 EMR에는 환자가 직접 표현한 관점이 명확히 기록되어 있지 않습니다.'
     };
   }
 
@@ -859,10 +923,10 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
       status: count >= 2 ? 'READY' : count === 1 ? 'INCOMPLETE' : 'IMPOSSIBLE',
       rationaleText:
         count >= 2
-          ? 'Multiple time-ordered evidence items are available, so a timeline draft can be assembled.'
+          ? '시점이 드러나는 근거가 여러 개 있어 타임라인 초안을 구성할 수 있습니다.'
           : count === 1
-            ? 'Some temporal evidence exists, but the longitudinal sequence is still thin.'
-            : 'No usable time-ordered evidence was found for a timeline draft.'
+            ? '시점 관련 근거가 일부 있으나 경과 전체를 구성하기에는 부족합니다.'
+            : '타임라인 초안에 사용할 시점 근거를 찾지 못했습니다.'
     };
   }
 
@@ -872,10 +936,10 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
       status: count >= 2 ? 'READY' : count === 1 ? 'INCOMPLETE' : 'IMPOSSIBLE',
       rationaleText:
         count >= 2
-          ? 'Enough treatment or follow-up evidence is present to draft this section from EMR alone.'
+          ? '치료 또는 경과 근거가 충분하여 EMR만으로 초안을 작성할 수 있습니다.'
           : count === 1
-            ? 'Some relevant evidence exists, but treatment or outcome detail is still limited.'
-            : 'No clearly grounded treatment or follow-up evidence was identified for this section.'
+            ? '관련 근거가 일부 있으나 치료 또는 결과에 대한 세부 내용이 제한적입니다.'
+            : '이 섹션에 사용할 치료 또는 경과 근거가 확인되지 않았습니다.'
     };
   }
 
@@ -884,8 +948,8 @@ function buildHeuristicAssessment(sectionId: CareSection, evidenceCards: Evidenc
     status: count >= 1 ? 'READY' : 'IMPOSSIBLE',
     rationaleText:
       count >= 1
-        ? 'Relevant grounded evidence is available to produce an initial draft for this section.'
-        : 'Not enough evidence was identified to draft this section yet.'
+        ? '이 섹션의 초안을 작성할 수 있는 근거가 있습니다.'
+        : '이 섹션의 초안을 작성할 근거가 아직 충분하지 않습니다.'
   };
 }
 
@@ -1378,8 +1442,10 @@ export async function runEvidenceSplit(
     const sourceText = matchedClause?.sourceText || card.sourceText || card.normalizedText || '';
     const localNormalization = await normalizeTextWithTerms(sourceText);
     const terms = localNormalization.terms.length > 0 ? localNormalization.terms : matchedClause?.terms || [];
+    const typeSection = EVIDENCE_TYPE_SECTION[String(card.evidenceType || '').toLowerCase()];
+    const modelTags = uniqueSections([...(typeSection ? [typeSection] : []), ...(card.tags || [])]);
     const sectionHints = uniqueSections([
-      ...(card.tags || []),
+      ...modelTags,
       ...(card.sectionHints || []),
       ...(matchedClause?.sectionHints || []),
       ...buildSectionHintsFromTerms(terms)
@@ -1403,7 +1469,7 @@ export async function runEvidenceSplit(
       evidenceType: card.evidenceType && card.evidenceType !== 'other'
         ? card.evidenceType
         : inferEvidenceType(sectionHints),
-      tags: uniqueSections(card.tags || sectionHints),
+      tags: modelTags.length > 0 ? modelTags : sectionHints,
       sectionHints,
       terms,
       sourceRef: card.sourceRef,
@@ -1537,7 +1603,12 @@ runtimeMeta?: ChainRuntimeMeta): Promise<{ commonQuestions: CommonQuestionSet[];
     commonQuestions: sanitized.commonQuestions,
     sectionQuestions: sanitized.sectionQuestions
   });
-  const fallbackCommonQuestions = synthesizeCommonQuestionsFromMissing(params.commonMissing);
+  // The template fallback only fills categories the model left uncovered;
+  // otherwise it re-asks the same thing in different words.
+  const coveredCategories = new Set(merged.commonQuestions.map((item) => item.category).filter(Boolean));
+  const fallbackCommonQuestions = synthesizeCommonQuestionsFromMissing(params.commonMissing).filter(
+    (item) => !coveredCategories.has(item.category)
+  );
   const finalCommonQuestions = mergeCommonQuestionsWithOverlaps({
     commonQuestions: [...merged.commonQuestions, ...fallbackCommonQuestions],
     sectionQuestions: merged.sectionQuestions
@@ -1589,7 +1660,9 @@ runtimeMeta?: ChainRuntimeMeta): Promise<Chain6SectionUpdateOutput> {
 
   const traceability = buildDraftTraceability({
     draftText: result.updatedDraftText || params.currentDraft || '',
-    evidenceCards: params.evidenceCards
+    evidenceCards: params.evidenceCards,
+    // User answers are legitimate support for an updated draft.
+    supplementalTexts: [params.answer, ...params.qnaHistory.map((item) => item.answer)]
   });
 
   return {
@@ -1682,8 +1755,21 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
     String(result.fullTextBySection.KEYWORDS || '').trim() ||
     keywordSuggestions.join(', ');
 
+  // The model sometimes skips sections it left empty; an empty section is
+  // MISSING by definition, so that much can be filled in without guessing.
+  const careChecklistEvaluation = { ...result.careChecklistEvaluation };
+  for (const sectionId of CareSectionEnum.options as CareSection[]) {
+    if (careChecklistEvaluation[sectionId]) continue;
+    if (String(result.fullTextBySection[sectionId] || '').trim()) continue;
+    careChecklistEvaluation[sectionId] = {
+      status: 'MISSING',
+      rationale: '해당 섹션 본문이 작성되지 않았습니다.'
+    };
+  }
+
   return {
     ...result,
+    careChecklistEvaluation,
     fullTextBySection: {
       ...result.fullTextBySection,
       KEYWORDS: normalizedKeywordLine

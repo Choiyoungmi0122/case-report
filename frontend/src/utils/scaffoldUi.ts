@@ -178,6 +178,7 @@ export const DRAFT_JUDGMENT_OPTIONS: Array<{
 }> = [
   { value: 'pending', label: '판단 선택' },
   { value: 'supported_by_record', label: '기록 근거 충분' },
+  { value: 'differs_from_record', label: '기록과 다름' },
   { value: 'needs_additional_confirmation', label: '추가 확인 필요' },
   { value: 'needs_instructor_review', label: '교수 검토 필요' },
   { value: 'uncertain', label: '판단 어려움' }
@@ -207,6 +208,66 @@ export function buildScaffoldItemId(
 ) {
   return `${sectionId}-${sourceType}-${index}-${sanitizeScaffoldKey(sourceText) || 'item'}`;
 }
+
+/**
+ * 실험용 경로에서 다루는 CARE 항목. 한 세션에 12개를 모두 할 수 없으므로
+ * 이 사례에서 판단할 거리가 많은 항목만, CARE 지침의 순서대로 둔다.
+ * 항목을 바꾸려면 이 배열만 고치면 된다.
+ */
+export const STUDY_SECTION_IDS = ['DIAGNOSTIC_ASSESSMENT', 'THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
+
+/**
+ * CARE 지침(Riley 등, 2017)의 13개 항목을 한 줄씩 풀어 쓴 것.
+ * CARE를 처음 보는 학습자에게 증례보고의 전체 구성을 보여주는 데 쓴다.
+ */
+export const CARE_OVERVIEW: Array<{ sectionId: string; name: string; summary: string }> = [
+  { sectionId: 'TITLE', name: '제목', summary: '진단 또는 중재와 함께 “증례보고”임을 밝힌다' },
+  { sectionId: 'KEYWORDS', name: '핵심 단어', summary: '증례를 대표하는 단어 2~5개' },
+  { sectionId: 'ABSTRACT', name: '초록', summary: '증례의 새로운 점, 주요 증상과 소견, 진단과 치료, 결과, 교훈을 요약한다' },
+  { sectionId: 'INTRODUCTION', name: '서론', summary: '이 증례가 왜 보고할 만한지 문헌과 함께 설명한다' },
+  { sectionId: 'PATIENT_INFORMATION', name: '환자 정보', summary: '나이와 성별, 주된 증상, 과거력·가족력·심리사회적 배경' },
+  { sectionId: 'CLINICAL_FINDINGS', name: '임상 소견', summary: '진찰에서 확인한 중요한 소견' },
+  { sectionId: 'TIMELINE', name: '경과 기록(타임라인)', summary: '중요한 사건을 시간 순서대로 정리한다' },
+  { sectionId: 'DIAGNOSTIC_ASSESSMENT', name: '진단 평가', summary: '진단 방법, 진단의 어려움, 진단 추론, 예후 관련 특성' },
+  { sectionId: 'THERAPEUTIC_INTERVENTIONS', name: '치료 개입', summary: '치료의 종류, 시행 방법, 치료를 바꾼 내용과 이유' },
+  { sectionId: 'FOLLOW_UP_OUTCOMES', name: '추적 관찰 및 결과', summary: '평가한 결과, 추적 검사, 치료 순응과 내약성, 이상반응' },
+  { sectionId: 'DISCUSSION_CONCLUSION', name: '고찰', summary: '이 증례의 강점과 한계, 문헌과의 비교, 결론의 근거, 교훈' },
+  { sectionId: 'PATIENT_PERSPECTIVE', name: '환자 관점', summary: '환자가 치료 과정에서 느끼고 경험한 것' },
+  { sectionId: 'INFORMED_CONSENT', name: '환자 동의', summary: '환자가 보고에 동의했는지' }
+];
+
+/**
+ * 각 CARE 항목에 무엇을 적는지. CARE 체크리스트의 세부 항목을 풀어 쓴 일반 기준이며
+ * 특정 증례의 답을 담지 않는다.
+ */
+export const CARE_SECTION_GUIDE: Record<string, { goal: string; items: string[] }> = {
+  DIAGNOSTIC_ASSESSMENT: {
+    goal: '어떤 평가를 거쳐 왜 그 진단에 이르렀는지 보여 줍니다.',
+    items: [
+      '진단에 쓴 방법 (진찰, 검사, 영상, 설문과 척도)',
+      '진단하면서 어려웠던 점',
+      '진단 추론과 함께 고려한 다른 진단',
+      '예후와 관련된 특성 (해당하는 경우)'
+    ]
+  },
+  THERAPEUTIC_INTERVENTIONS: {
+    goal: '무엇을 어떻게 시행했는지 다른 사람이 따라 할 수 있을 만큼 적습니다.',
+    items: [
+      '치료의 종류 (약물, 한약, 침, 상담, 자가 관리 등)',
+      '시행 방법 (용량, 강도, 기간, 빈도)',
+      '치료를 바꾼 내용과 그 이유'
+    ]
+  },
+  FOLLOW_UP_OUTCOMES: {
+    goal: '치료 뒤의 경과와 결과를 시간 순서대로 보여 줍니다.',
+    items: [
+      '임상의와 환자가 평가한 결과',
+      '중요한 추적 검사 결과 (좋아진 것과 그렇지 않은 것 모두)',
+      '환자가 치료를 잘 따랐는지, 견딜 만했는지와 그것을 어떻게 확인했는지',
+      '이상반응과 예상하지 못한 일'
+    ]
+  }
+};
 
 export function splitScaffoldDraftSentences(text: string) {
   return String(text || '')

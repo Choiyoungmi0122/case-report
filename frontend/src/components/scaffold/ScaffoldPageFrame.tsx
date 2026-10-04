@@ -9,7 +9,7 @@ export default function ScaffoldPageFrame({ children }: ScaffoldPageFrameProps) 
     <div style={{ padding: 24, background: '#f3f4f6', minHeight: '100vh' }}>
       <div
         style={{
-          maxWidth: 1200,
+          maxWidth: 1560,
           margin: '0 auto',
           display: 'flex',
           flexDirection: 'column',

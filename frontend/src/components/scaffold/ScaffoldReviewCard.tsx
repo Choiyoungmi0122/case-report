@@ -46,10 +46,11 @@ export default function ScaffoldReviewCard({
   return (
     <div
       style={{
-        border: '1px solid #d7e0e8',
+        border: '1px solid #c9d8f5',
+        borderLeft: '5px solid #3b6fd4',
         borderRadius: 8,
-        padding: 16,
-        background: '#fcfdff'
+        padding: 18,
+        background: '#ffffff'
       }}
     >
       <div
@@ -59,14 +60,14 @@ export default function ScaffoldReviewCard({
           borderRadius: 999,
           background: '#eff4ff',
           color: '#244a86',
-          fontSize: 12,
+          fontSize: 14,
           fontWeight: 700,
           marginBottom: 8
         }}
       >
         {badgeLabel}
       </div>
-      <div style={{ fontWeight: 700, color: '#17324d', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontWeight: 700, color: '#17324d', marginBottom: 12, fontSize: 17, lineHeight: 1.7 }}>{title}</div>
       {helperText ? (
         <div style={{ color: '#52606d', lineHeight: 1.6, marginBottom: 12 }}>{helperText}</div>
       ) : null}
@@ -95,7 +96,7 @@ export default function ScaffoldReviewCard({
         />
 
         {validationMessage ? (
-          <div style={{ color: '#9f3412', fontSize: 12, lineHeight: 1.5 }}>
+          <div style={{ color: '#9f3412', fontSize: 14, lineHeight: 1.5 }}>
             {validationMessage}
           </div>
         ) : null}

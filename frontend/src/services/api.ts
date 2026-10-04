@@ -158,6 +158,7 @@ export type InformationStatusJudgment =
 export type DraftJudgment =
   | 'pending'
   | 'supported_by_record'
+  | 'differs_from_record'
   | 'needs_additional_confirmation'
   | 'needs_instructor_review'
   | 'uncertain';
@@ -1061,6 +1062,16 @@ export interface ManuscriptReviewDocument {
 }
 
 export const caseApi = {
+  getStudyCaseTemplate: async () => {
+    const response = await api.get<{
+      studyCaseId: string;
+      version: string;
+      title: string;
+      visits: Visit[];
+    }>('/cases/study/template');
+    return response.data;
+  },
+
   startStudySession: async (data: StartStudySessionRequest) => {
     const response = await api.post<StartStudySessionResponse>('/cases/study/start', data);
     return response.data;

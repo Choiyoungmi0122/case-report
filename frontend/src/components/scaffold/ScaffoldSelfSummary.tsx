@@ -38,7 +38,7 @@ export default function ScaffoldSelfSummary({
   }
 
   return (
-    <div>
+    <div className={`scaffold-summary${frozen ? ' is-frozen' : ''}`}>
       {frozen && frozenNote ? <p className="scaffold-summary__frozen">{frozenNote}</p> : null}
       {filled.map((group) => (
         <section className="scaffold-summary__group" key={group.key}>

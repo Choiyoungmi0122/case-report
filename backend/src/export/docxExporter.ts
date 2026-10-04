@@ -427,182 +427,252 @@ function buildBulletParagraph(text: string) {
   });
 }
 
+const SCAFFOLD_SECTION_LABELS_KO: Record<string, string> = {
+  TITLE: '제목',
+  ABSTRACT: '초록',
+  INTRODUCTION: '서론',
+  PATIENT_INFORMATION: '환자 정보',
+  CLINICAL_FINDINGS: '임상 소견',
+  TIMELINE: '경과 기록',
+  DIAGNOSTIC_ASSESSMENT: '진단 평가',
+  THERAPEUTIC_INTERVENTIONS: '치료 개입',
+  FOLLOW_UP_OUTCOMES: '추적 관찰 및 결과',
+  DISCUSSION_CONCLUSION: '고찰',
+  PATIENT_PERSPECTIVE: '환자 관점',
+  INFORMED_CONSENT: '환자 동의'
+};
+
+const SCAFFOLD_JUDGMENT_LABELS_KO: Record<string, string> = {
+  supported_by_record: '기록 근거 충분',
+  differs_from_record: '기록과 다름',
+  needs_additional_confirmation: '추가 확인 필요',
+  needs_instructor_review: '교수 검토 필요',
+  uncertain: '판단 어려움',
+  available_in_record: '기록에서 확인 가능',
+  unavailable: '현재 기록으로 확인할 수 없음',
+  pending: '판단 보류'
+};
+
+function scaffoldSectionLabelKo(sectionId: string) {
+  return SCAFFOLD_SECTION_LABELS_KO[sectionId] || sectionLabel(sectionId);
+}
+
+function scaffoldJudgmentLabelKo(judgment: string) {
+  return SCAFFOLD_JUDGMENT_LABELS_KO[judgment] || judgment || '-';
+}
+
+function makeSubHeading(text: string) {
+  return new Paragraph({
+    spacing: { before: 200, after: 100, line: 320 },
+    children: [makeTextRun(text, { bold: true })]
+  });
+}
+
+function makeCommentBox(label: string) {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: tableBorders(),
+    rows: [
+      new TableRow({ children: [makeHeaderCell(label)] }),
+      new TableRow({ children: [makeBodyCell(' '), ] }),
+      new TableRow({ children: [makeBodyCell(' '), ] })
+    ]
+  });
+}
+
+/**
+ * Learner-facing record, organised per CARE section the learner actually worked
+ * on: what they wrote before the AI draft, the AI sentences next to their own
+ * judgment and reason, what changed, and what to ask the instructor. Sections
+ * the learner never opened are left out so an instructor can read it top-down.
+ */
 function buildScaffoldSummaryChildren(caseData: Case) {
-  const scaffoldState: any = caseData.scaffoldState || {
-    reviewItems: [],
-    sectionProgress: [],
-    instructorReviewItems: [],
-    additionalConfirmationItems: []
-  };
+  const scaffoldState: any = caseData.scaffoldState || {};
   const sectionStates: any[] = caseData.sectionStates || [];
   const sectionDrafts: any[] = caseData.sectionDrafts || [];
   const evidenceCards: any[] = caseData.evidenceCards || [];
-  const progressBySection = new Map<string, any>(
-    (scaffoldState.sectionProgress || []).map((item: any) => [item.sectionId, item])
-  );
-  const reflectionBySection = new Map<string, any>(
-    (scaffoldState.sectionReflections || []).map((item: any) => [item.sectionId, item])
-  );
   const reviewItems: any[] = scaffoldState.reviewItems || [];
-  const additionalItems = reviewItems.filter((item) => item.judgment === 'needs_additional_confirmation');
-  const instructorItems = reviewItems.filter((item) => item.judgment === 'needs_instructor_review');
-  const unsupportedItems = reviewItems.filter(
-    (item) => item.judgment === 'unsupported' || item.sourceType === 'unsupported_claim'
+  const snapshots: any[] = scaffoldState.preRevealSnapshots || [];
+  const reflections: any[] = scaffoldState.sectionReflections || [];
+  const progressItems: any[] = scaffoldState.sectionProgress || [];
+  const caseNotes: any[] = scaffoldState.caseMap?.caseNotes || [];
+  const evidenceTextById = new Map<string, string>(
+    evidenceCards.map((card: any) => [String(card.id), safeText(card.sourceText || card.normalizedText || '')])
   );
+  const reviewItemById = new Map<string, any>(reviewItems.map((item: any) => [item.id, item]));
+
+  const orderedSectionIds: string[] = sectionStates.map((item: any) => item.sectionId);
+  const workedSectionIds = orderedSectionIds.filter((sectionId) => {
+    const progress = progressItems.find((item: any) => item.sectionId === sectionId);
+    return (
+      Boolean(progress?.recordReviewCompleted || progress?.draftRevealed) ||
+      snapshots.some((item: any) => item.sectionId === sectionId) ||
+      reviewItems.some((item: any) => item.sectionId === sectionId)
+    );
+  });
+  const completedCount = progressItems.filter((item: any) => item.draftReviewCompleted).length;
 
   const children: Array<Paragraph | Table> = [
     new Paragraph({
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
       spacing: { after: 240, line: 360 },
-      children: [makeTextRun('증례보고 작성 Scaffold 검토 결과', { bold: true, size: TITLE_FONT_SIZE })]
+      children: [makeTextRun('증례보고 작성 학습 기록', { bold: true, size: TITLE_FONT_SIZE })]
     }),
     makeBodyParagraph(
-      '본 문서는 증례보고 작성 교육 및 교수자 피드백을 위한 검토 자료입니다. AI 생성 내용은 최종 원고가 아니며, 기록 근거와 전문가 검토가 필요합니다.'
+      '학습자가 AI 초안을 보기 전에 정리한 내용, AI 초안의 각 문장에 대한 판단과 이유, AI를 본 뒤 달라진 점을 CARE 항목별로 모은 기록입니다. AI 초안은 최종 원고가 아닙니다.'
     ),
-    makeSectionHeading('케이스 기본 정보'),
-    makeBodyParagraph(`제목: ${safeText(caseData.title || '제목 없음')}`),
-    makeBodyParagraph(`방문 수: ${(caseData.visits || []).length}`),
-    makeBodyParagraph(`분석된 CARE 섹션 수: ${sectionStates.length}`),
-    makeBodyParagraph(
-      `검토 완료 섹션 수: ${
-        (scaffoldState.sectionProgress || []).filter(
-          (item: any) =>
-            item.recordReviewCompleted &&
-            item.missingInfoReviewCompleted &&
-            item.draftRevealed &&
-            item.draftReviewCompleted
-        ).length
-      }`
-    ),
-    makeSectionHeading('CARE 섹션별 상태')
+    makeBodyParagraph(`실험번호: ${safeText((caseData as any).experiment_code || '-')}`),
+    makeBodyParagraph(`방문 기록: ${(caseData.visits || []).length}회`),
+    makeBodyParagraph(`작업한 CARE 항목: ${workedSectionIds.length}개 (완료 ${completedCount}개)`)
   ];
 
-  children.push(
-    new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: tableBorders(),
-      rows: [
-        new TableRow({
-          children: [
-            makeHeaderCell('CARE 섹션'),
-            makeHeaderCell('기존 상태'),
-            makeHeaderCell('기록 검토'),
-            makeHeaderCell('누락 정보 검토'),
-            makeHeaderCell('AI 초안 검토')
-          ]
-        }),
-        ...sectionStates.map(
-          (sectionState: any) =>
-            new TableRow({
-              children: [
-                makeBodyCell(sectionLabel(sectionState.sectionId)),
-                makeBodyCell(sectionState.status || '-'),
-                makeBodyCell(progressBySection.get(sectionState.sectionId)?.recordReviewCompleted ? '완료' : '미완료'),
-                makeBodyCell(progressBySection.get(sectionState.sectionId)?.missingInfoReviewCompleted ? '완료' : '미완료'),
-                makeBodyCell(progressBySection.get(sectionState.sectionId)?.draftReviewCompleted ? '완료' : '미완료')
-              ]
-            })
-        )
-      ]
-    })
-  );
-
-  children.push(makeSectionHeading('기록에서 확인된 핵심 정보'));
-  for (const sectionState of sectionStates) {
-    children.push(makeBodyParagraph(`${sectionLabel(sectionState.sectionId)}`));
-    const evidence = evidenceCards.filter((card) => (card.tags || []).includes(sectionState.sectionId)).slice(0, 3);
-    if (evidence.length === 0) {
-      children.push(buildBulletParagraph('핵심 근거가 아직 정리되지 않았습니다.'));
-      continue;
-    }
-    evidence.forEach((card) => {
-      children.push(buildBulletParagraph(safeText(card.normalizedText || card.sourceText || '-')));
+  if (caseNotes.length > 0) {
+    children.push(makeSectionHeading('기록을 읽으며 남긴 메모'));
+    caseNotes.forEach((note: any) => {
+      const label = note.type === 'question' ? '더 확인할 점' : '눈에 띈 점';
+      children.push(buildBulletParagraph(`[${label}] ${safeText(note.text)}`));
     });
   }
 
-  children.push(makeSectionHeading('User reflections'));
-  for (const sectionState of sectionStates) {
-    const reflection = reflectionBySection.get(sectionState.sectionId) || {};
-    children.push(makeBodyParagraph(sectionLabel(sectionState.sectionId)));
+  if (workedSectionIds.length === 0) {
+    children.push(makeSectionHeading('CARE 항목별 기록'));
+    children.push(makeBodyParagraph('아직 작업한 CARE 항목이 없습니다.'));
+    return children;
+  }
 
-    const keyInfoItems = reflection.learnerIdentifiedKeyInfo || [];
-    const missingItems = reflection.learnerIdentifiedMissingItems || [];
+  const instructorQuestions: string[] = [];
+  const confirmationItems: string[] = [];
 
-    if (keyInfoItems.length === 0 && missingItems.length === 0 && !reflection.learnerNotes) {
-      children.push(buildBulletParagraph('No learner reflection recorded.'));
-      continue;
+  for (const sectionId of workedSectionIds) {
+    const label = scaffoldSectionLabelKo(sectionId);
+    const snapshot = snapshots.find((item: any) => item.sectionId === sectionId);
+    const reflection = reflections.find((item: any) => item.sectionId === sectionId) || {};
+    const progress = progressItems.find((item: any) => item.sectionId === sectionId) || {};
+    const draft = sectionDrafts.find((item: any) => item.sectionId === sectionId);
+    const preAi = snapshot || reflection;
+
+    children.push(makeSectionHeading(label));
+
+    // 1. Before the AI draft
+    children.push(makeSubHeading('① AI 초안을 보기 전 내 정리'));
+    const selectedEvidence: any[] = preAi.selectedEvidence || [];
+    const keyItems: string[] = preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo || [];
+    const missingItems: string[] = preAi.learnerIdentifiedMissingItems || [];
+    if (selectedEvidence.length === 0 && keyItems.length === 0 && missingItems.length === 0) {
+      children.push(
+        makeBodyParagraph(
+          preAi.noRelevantEvidenceConfirmed
+            ? '기록에서 이 항목에 쓸 근거를 찾지 못했다고 표시했습니다.'
+            : '기록된 정리 내용이 없습니다.'
+        )
+      );
     }
-
-    if (keyInfoItems.length > 0) {
-      children.push(buildBulletParagraph(`Key information: ${keyInfoItems.join('; ')}`));
+    if (selectedEvidence.length > 0) {
+      children.push(makeBodyParagraph('기록에서 고른 근거'));
+      selectedEvidence.forEach((item: any) => {
+        children.push(buildBulletParagraph(safeText(item.label || evidenceTextById.get(String(item.id)) || item.id)));
+      });
+    }
+    if (keyItems.length > 0) {
+      children.push(makeBodyParagraph('이 항목에 쓸 내용'));
+      keyItems.forEach((item) => children.push(buildBulletParagraph(safeText(item))));
     }
     if (missingItems.length > 0) {
-      children.push(buildBulletParagraph(`Missing information: ${missingItems.join('; ')}`));
+      children.push(makeBodyParagraph('기록에 부족하다고 본 내용'));
+      missingItems.forEach((item) => children.push(buildBulletParagraph(safeText(item))));
     }
-    if (reflection.learnerNotes) {
-      children.push(buildBulletParagraph(`Learner notes: ${safeText(reflection.learnerNotes)}`));
-    }
-  }
-
-  children.push(makeSectionHeading('추가 확인 필요 항목'));
-  if (additionalItems.length === 0) {
-    children.push(makeBodyParagraph('표시된 추가 확인 필요 항목이 없습니다.'));
-  } else {
-    additionalItems.forEach((item) => {
-      children.push(
-        buildBulletParagraph(
-          `[${sectionLabel(item.sectionId)}] ${safeText(item.sourceText)}${item.note ? ` - ${safeText(item.note)}` : ''}`
-        )
-      );
-    });
-  }
-
-  children.push(makeSectionHeading('교수자 검토 필요 항목'));
-  if (instructorItems.length === 0) {
-    children.push(makeBodyParagraph('표시된 교수자 검토 필요 항목이 없습니다.'));
-  } else {
-    instructorItems.forEach((item) => {
-      children.push(
-        buildBulletParagraph(
-          `[${sectionLabel(item.sectionId)}] ${safeText(item.sourceText)}${item.note ? ` - ${safeText(item.note)}` : ''}`
-        )
-      );
-    });
-  }
-
-  children.push(makeSectionHeading('근거 부족 또는 불일치'));
-  if (unsupportedItems.length === 0) {
-    children.push(makeBodyParagraph('표시된 근거 부족 항목이 없습니다.'));
-  } else {
-    unsupportedItems.forEach((item) => {
-      children.push(
-        buildBulletParagraph(
-          `[${sectionLabel(item.sectionId)}] ${safeText(item.sourceText)}${item.note ? ` - ${safeText(item.note)}` : ''}`
-        )
-      );
-    });
-  }
-
-  children.push(makeSectionHeading('섹션별 AI 초안'));
-  for (const draft of sectionDrafts) {
-    children.push(makeBodyParagraph(sectionLabel(draft.sectionId)));
-    children.push(...buildParagraphsFromText(draft.draftText || '초안이 없습니다.'));
-  }
-
-  children.push(makeSectionHeading('AI Review 의견'));
-  sectionStates.forEach((sectionState: any) => {
-    children.push(
-      buildBulletParagraph(
-        `[${sectionLabel(sectionState.sectionId)}] ${safeText(sectionState.rationaleText || '검토 의견이 아직 없습니다.')}`
-      )
+    const sufficiencyJudgments: any[] = (snapshot?.reviewItemJudgments || []).filter(
+      (item: any) => item.sourceType !== 'draft_sentence'
     );
-  });
+    if (sufficiencyJudgments.length > 0) {
+      children.push(makeBodyParagraph('정보가 충분한지에 대한 판단'));
+      sufficiencyJudgments.forEach((item: any) => {
+        const question = safeText(reviewItemById.get(item.itemId)?.sourceText || '');
+        if (!question) return;
+        children.push(buildBulletParagraph(`${question} → ${scaffoldJudgmentLabelKo(item.judgment)}`));
+        if (item.judgment === 'needs_instructor_review') instructorQuestions.push(`[${label}] ${question}`);
+        if (item.judgment === 'needs_additional_confirmation') confirmationItems.push(`[${label}] ${question}`);
+      });
+    }
 
-  children.push(makeSectionHeading('최종 검토 안내'));
+    // 2. AI draft and the learner's review of each sentence
+    children.push(makeSubHeading('② AI 초안과 내 검토'));
+    if (!progress.draftRevealed) {
+      children.push(makeBodyParagraph('아직 AI 초안을 확인하지 않았습니다.'));
+    } else {
+      const sentenceItems = reviewItems.filter(
+        (item: any) => item.sectionId === sectionId && item.sourceType === 'draft_sentence'
+      );
+      if (sentenceItems.length === 0) {
+        children.push(...buildParagraphsFromText(safeText(draft?.draftText) || 'AI 초안이 없습니다.'));
+        children.push(makeBodyParagraph('문장별 검토 기록이 없습니다.'));
+      } else {
+        children.push(
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: tableBorders(),
+            rows: [
+              new TableRow({
+                children: [makeHeaderCell('AI 초안 문장'), makeHeaderCell('내 판단'), makeHeaderCell('이유와 연결한 기록')]
+              }),
+              ...sentenceItems.map((item: any) => {
+                const linked = (item.evidenceIds || [])
+                  .map((id: string) => evidenceTextById.get(String(id)))
+                  .filter(Boolean)
+                  .map((text: string) => `[기록] ${text}`);
+                const reason = [safeText(item.note), ...linked].filter(Boolean).join('\n') || '-';
+                if (item.judgment === 'needs_instructor_review') {
+                  instructorQuestions.push(`[${label}] ${safeText(item.sourceText)}${item.note ? ` - ${safeText(item.note)}` : ''}`);
+                }
+                if (item.judgment === 'needs_additional_confirmation' || item.judgment === 'differs_from_record') {
+                  confirmationItems.push(`[${label}] ${safeText(item.sourceText)}${item.note ? ` - ${safeText(item.note)}` : ''}`);
+                }
+                return new TableRow({
+                  children: [
+                    makeBodyCell(safeText(item.sourceText)),
+                    makeBodyCell(scaffoldJudgmentLabelKo(item.judgment)),
+                    makeBodyCell(reason)
+                  ]
+                });
+              })
+            ]
+          })
+        );
+      }
+    }
+
+    // 3. What changed after seeing the AI draft
+    const postAi = reflection.postAiReflection || {};
+    children.push(makeSubHeading('③ AI를 보고 달라진 점'));
+    children.push(makeBodyParagraph(safeText(postAi.changedJudgment) || '기록된 내용이 없습니다.'));
+    if (safeText(postAi.unresolvedQuestion)) {
+      children.push(makeSubHeading('④ 교수님께 확인하고 싶은 것'));
+      children.push(makeBodyParagraph(safeText(postAi.unresolvedQuestion)));
+      instructorQuestions.push(`[${label}] ${safeText(postAi.unresolvedQuestion)}`);
+    }
+
+    children.push(makeBodyParagraph(' '));
+    children.push(makeCommentBox(`교수 코멘트 (${label})`));
+  }
+
+  children.push(makeSectionHeading('모아 보기: 교수님께 확인할 것'));
+  if (instructorQuestions.length === 0) {
+    children.push(makeBodyParagraph('표시한 항목이 없습니다.'));
+  } else {
+    instructorQuestions.forEach((item) => children.push(buildBulletParagraph(item)));
+  }
+
+  children.push(makeSectionHeading('모아 보기: 기록과 다르거나 추가 확인이 필요한 것'));
+  if (confirmationItems.length === 0) {
+    children.push(makeBodyParagraph('표시한 항목이 없습니다.'));
+  } else {
+    confirmationItems.forEach((item) => children.push(buildBulletParagraph(item)));
+  }
+
   children.push(
     makeBodyParagraph(
-      '이 결과는 교육용 검토 자료입니다. 추가 확인 필요 항목과 교수자 검토 필요 항목은 최종 사실처럼 단정하지 말고, 기록과 전문가 판단을 바탕으로 다시 확인해야 합니다.'
+      '이 기록은 교육용 자료입니다. AI 초안의 문장은 원기록과 전문가 판단으로 다시 확인한 뒤에 사용해야 합니다.'
     )
   );
 
