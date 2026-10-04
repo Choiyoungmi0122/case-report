@@ -553,7 +553,13 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               </section>
             </div>
 
-            <section className="scaffold-v2__memo-check" aria-labelledby="memo-check-title">
+            {/* 실험용 경로에서는 숨긴다: 메모 내용과 무관하게 앞의 추출 문장 3개만 보여주어
+                학습자가 비교의 의미를 알 수 없다. AI와의 비교는 CARE 항목 화면에서 한다. */}
+            <section
+              className="scaffold-v2__memo-check"
+              aria-labelledby="memo-check-title"
+              style={studyMode ? { display: 'none' } : undefined}
+            >
               <div>
                 <span>선택 학습</span>
                 <h3 id="memo-check-title">내 메모를 AI 추출 기록과 비교</h3>
