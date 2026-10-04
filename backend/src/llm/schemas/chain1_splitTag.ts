@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CareSectionCoerced, CareSectionHintList } from './common';
+import { CareSection, CareSectionHintList, coerceCareSection } from './common';
 import { TermNormalizationResultSchema } from '../../rag/types';
 
 const IgnoredChain1TermsSchema = z
@@ -14,7 +14,16 @@ export const EvidenceCardSchema = z.object({
   sourceText: z.string().default(''),
   normalizedText: z.string().default(''),
   evidenceType: z.string().default('other'),
-  tags: z.array(CareSectionCoerced).default([]),
+  // A tag outside the CARE enum (e.g. an invented section name) is dropped
+  // instead of failing the whole extraction; evidenceType still routes the card.
+  tags: z
+    .array(z.unknown())
+    .default([])
+    .transform((items) =>
+      items
+        .map((item) => coerceCareSection(item))
+        .filter((item): item is CareSection => Boolean(item))
+    ),
   // Advisory only: an unrecognised hint is dropped rather than failing the
   // whole extraction (which previously surfaced as a 500 on process).
   sectionHints: CareSectionHintList,

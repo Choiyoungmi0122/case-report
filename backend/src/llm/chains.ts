@@ -216,6 +216,12 @@ export function splitIntoClauses(text: string): Array<{ text: string; start: num
     }
     if (!'.!?'.includes(character)) continue;
     if (character === '.' && isSingleLetterClinicalAbbreviation(text, index)) continue;
+    // Decimal numbers ("5.61g", "0.5cc") and list numbering ("1. 불면") are not
+    // sentence ends; splitting there cut dosages in half.
+    if (character === '.' && /\d/.test(text[index - 1] || '')) {
+      if (/\d/.test(text[index + 1] || '')) continue;
+      if (/^\d+$/.test(text.slice(clauseStart, index).trim())) continue;
+    }
 
     let end = index + 1;
     while (end < text.length && '.!?'.includes(text[end])) end += 1;
@@ -705,6 +711,28 @@ export async function preprocessVisitsForChain1(
   };
 }
 
+const CLAUSE_NORMALIZATION_CONCURRENCY = 6;
+const CHAIN1_VISIT_CONCURRENCY = 8;
+const CHAIN1_CLAUSES_PER_CALL = 20;
+
+async function mapInOrderWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 async function prepareVisitsForChain1(
   visits: DeidentifiedVisitInput[],
   options: {
@@ -712,26 +740,40 @@ async function prepareVisitsForChain1(
     llmResolver?: NormalizerLlmResolver;
   } = {}
 ): Promise<PreparedVisit[]> {
+  // The semantic matcher builds its terminology index lazily on first use;
+  // warm it once so concurrent clauses do not each trigger that build.
+  const firstClause = splitIntoClauses(visits[0]?.text || '')[0];
+  if (firstClause && options.semanticMatcher) {
+    await normalizeTextWithTerms(firstClause.text, {
+      semanticMatcher: options.semanticMatcher,
+      llmResolver: options.llmResolver
+    }).catch(() => undefined);
+  }
+
   return Promise.all(
     visits.map(async (visit) => {
       const rawClauses = splitIntoClauses(visit.text || '');
-      const clauses: PreparedClause[] = [];
-
-      for (const clause of rawClauses) {
-        const normalized = await normalizeTextWithTerms(clause.text, {
-          semanticMatcher: options.semanticMatcher,
-          llmResolver: options.llmResolver
-        });
-        clauses.push({
-          sourceText: clause.text,
-          normalizedText: normalized.normalizedText || clause.text,
-          terms: normalized.terms,
-          sectionHints: normalized.sectionHints,
-          start: clause.start,
-          end: clause.end,
-          score: scoreClause(clause.text, normalized.terms)
-        });
-      }
+      // Each clause needs its own embedding / resolver round trips, so waiting
+      // for them one by one made preprocessing the slowest stage.
+      const clauses: PreparedClause[] = await mapInOrderWithConcurrency(
+        rawClauses,
+        CLAUSE_NORMALIZATION_CONCURRENCY,
+        async (clause) => {
+          const normalized = await normalizeTextWithTerms(clause.text, {
+            semanticMatcher: options.semanticMatcher,
+            llmResolver: options.llmResolver
+          });
+          return {
+            sourceText: clause.text,
+            normalizedText: normalized.normalizedText || clause.text,
+            terms: normalized.terms,
+            sectionHints: normalized.sectionHints,
+            start: clause.start,
+            end: clause.end,
+            score: scoreClause(clause.text, normalized.terms)
+          };
+        }
+      );
 
       const normalizedText = clauses.map((clause) => clause.normalizedText).join(' ');
 
@@ -1409,7 +1451,60 @@ function isGroundedInVisitText(snippet: string, visitText: string): boolean {
   return textSimilarity(snippet, visitText) >= 0.45;
 }
 
+/**
+ * CHAIN1 output grows with the record, and generation time grows with output,
+ * so one call for the whole case was the second slowest stage. Visits are
+ * independent for extraction, so each visit gets its own call and they run
+ * concurrently.
+ */
 export async function runEvidenceSplit(
+  preparedVisits: PreparedVisit[],
+  runtimeMeta?: ChainRuntimeMeta
+): Promise<EvidenceCard[]> {
+  const needsSplit =
+    preparedVisits.length > 1 ||
+    preparedVisits.some((visit) => visit.clauses.length > CHAIN1_CLAUSES_PER_CALL);
+  if (!needsSplit) {
+    return runEvidenceSplitForVisits(preparedVisits, runtimeMeta);
+  }
+
+  // A long visit is further split into clause chunks: it keeps each call's
+  // output short, and no clause has to be dropped to fit a prompt cap.
+  const visitChunks = preparedVisits.flatMap((visit) => {
+    const chunks: PreparedVisit[] = [];
+    for (let start = 0; start < visit.clauses.length; start += CHAIN1_CLAUSES_PER_CALL) {
+      chunks.push({ ...visit, clauses: visit.clauses.slice(start, start + CHAIN1_CLAUSES_PER_CALL) });
+    }
+    return chunks.length > 0 ? chunks : [visit];
+  });
+
+  const usages: Array<LLMUsageMetrics | null> = [];
+  const cardsByVisit = await mapInOrderWithConcurrency(
+    visitChunks,
+    CHAIN1_VISIT_CONCURRENCY,
+    (visit) =>
+      runEvidenceSplitForVisits([visit], {
+        onUsage: (usage) => {
+          usages.push(usage);
+        }
+      })
+  );
+
+  const reported = usages.filter((usage): usage is LLMUsageMetrics => Boolean(usage));
+  runtimeMeta?.onUsage?.(
+    reported.length > 0
+      ? {
+          promptTokens: reported.reduce((sum, usage) => sum + (usage.promptTokens || 0), 0),
+          completionTokens: reported.reduce((sum, usage) => sum + (usage.completionTokens || 0), 0),
+          totalTokens: reported.reduce((sum, usage) => sum + (usage.totalTokens || 0), 0)
+        }
+      : null
+  );
+
+  return cardsByVisit.flat();
+}
+
+async function runEvidenceSplitForVisits(
   preparedVisits: PreparedVisit[],
   runtimeMeta?: ChainRuntimeMeta
 ): Promise<EvidenceCard[]> {
@@ -1443,7 +1538,7 @@ export async function runEvidenceSplit(
     const localNormalization = await normalizeTextWithTerms(sourceText);
     const terms = localNormalization.terms.length > 0 ? localNormalization.terms : matchedClause?.terms || [];
     const typeSection = EVIDENCE_TYPE_SECTION[String(card.evidenceType || '').toLowerCase()];
-    const modelTags = uniqueSections([...(typeSection ? [typeSection] : []), ...(card.tags || [])]);
+    const modelTags = uniqueSections([...(typeSection ? [typeSection] : []), ...((card.tags || []) as string[])]);
     const sectionHints = uniqueSections([
       ...modelTags,
       ...(card.sectionHints || []),
