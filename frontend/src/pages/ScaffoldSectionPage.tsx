@@ -4,6 +4,7 @@ import ScaffoldActionButton from '../components/scaffold/ScaffoldActionButton';
 import ScaffoldEvidenceSelector from '../components/scaffold/ScaffoldEvidenceSelector';
 import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldProgressHeader from '../components/scaffold/ScaffoldProgressHeader';
+import SessionTimer from '../components/scaffold/SessionTimer';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
   caseApi,
@@ -450,6 +451,7 @@ export default function ScaffoldSectionPage() {
   const [expandedVisits, setExpandedVisits] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
 
   const toggleVisitExpanded = (index: number) => {
+    logUiAction('record_visit_toggled', { visit: index + 1, expanded: !expandedVisits.has(index) });
     setExpandedVisits((prev) => {
       const next = new Set(prev);
       if (next.has(index)) {
@@ -981,6 +983,68 @@ export default function ScaffoldSectionPage() {
     }
   };
 
+  /** 화면에서의 세부 행동을 남긴다. 종류는 metadata.kind로 구분한다. */
+  const logUiAction = (kind: string, metadata: Record<string, unknown> = {}) => {
+    void logScaffoldEvent('ui_action', { kind, step: currentStep, draftRevealed: sectionProgress.draftRevealed, ...metadata });
+  };
+
+  // 입력 칸에 머문 시간. 칸에 들어갈 때 시작하고 나올 때 길이와 함께 남긴다.
+  const fieldEditRef = useRef<Record<string, { startedAt: number; initial: string }>>({});
+  const beginFieldEdit = (field: string, value: string) => {
+    fieldEditRef.current[field] = { startedAt: Date.now(), initial: value };
+  };
+  const endFieldEdit = (field: string, value: string) => {
+    const started = fieldEditRef.current[field];
+    if (!started) return;
+    delete fieldEditRef.current[field];
+    logUiAction('field_edit', {
+      field,
+      durationSeconds: Math.round((Date.now() - started.startedAt) / 100) / 10,
+      length: value.trim().length,
+      changed: value !== started.initial
+    });
+  };
+
+  // 멈춤: 키보드, 마우스, 스크롤 입력이 20초 넘게 없다가 다시 움직였을 때 그 길이를 남긴다.
+  // 어디서 오래 머물렀는지 보기 위한 것이다.
+  const pauseContextRef = useRef({ step: currentStep, revealed: false });
+  pauseContextRef.current = { step: currentStep, revealed: Boolean(sectionProgress.draftRevealed) };
+  useEffect(() => {
+    if (!studyMode || !caseId || !sectionId) return undefined;
+    const PAUSE_THRESHOLD_MS = 20000;
+    let lastActivity = Date.now();
+    const onActivity = () => {
+      const now = Date.now();
+      const gap = now - lastActivity;
+      lastActivity = now;
+      if (gap >= PAUSE_THRESHOLD_MS) {
+        void caseApi
+          .logScaffoldEvent(caseId, {
+            eventType: 'ui_action',
+            sectionId,
+            metadata: {
+              kind: 'pause',
+              durationSeconds: Math.round(gap / 100) / 10,
+              step: pauseContextRef.current.step,
+              draftRevealed: pauseContextRef.current.revealed
+            }
+          })
+          .catch(() => undefined);
+      }
+    };
+    const options = { capture: true, passive: true } as const;
+    window.addEventListener('keydown', onActivity, options);
+    window.addEventListener('pointerdown', onActivity, options);
+    window.addEventListener('scroll', onActivity, options);
+    window.addEventListener('wheel', onActivity, options);
+    return () => {
+      window.removeEventListener('keydown', onActivity, options);
+      window.removeEventListener('pointerdown', onActivity, options);
+      window.removeEventListener('scroll', onActivity, options);
+      window.removeEventListener('wheel', onActivity, options);
+    };
+  }, [studyMode, caseId, sectionId]);
+
   // 섹션의 목적/요구사항을 실제로 본 시점을 기록한다. reveal gate가
   // purposeViewed를 요구하므로, 이 이벤트가 없으면 gate가 절대 열리지 않는다.
   useEffect(() => {
@@ -1236,6 +1300,7 @@ export default function ScaffoldSectionPage() {
 
   /** AI 초안을 열기 전에 내 초안 쓰기 칸으로 돌아간다. */
   const goBackToOwnDraft = () => {
+    logUiAction('back_to_own_draft');
     setCurrentStep('step1');
     setError(null);
     // 화면이 가려져 있어도 동작하도록 requestAnimationFrame 대신 setTimeout을 쓴다.
@@ -1299,7 +1364,11 @@ export default function ScaffoldSectionPage() {
   /** 문장을 누르면 표시하고, 표시된 문장을 다시 누르면 표시를 푼다. */
   const toggleDraftFlag = (itemId: string) => {
     const existing = flaggedSentences.find((item) => item.itemId === itemId);
+    const sentenceIndex = draftSentences.findIndex(
+      (sentence, index) => buildScaffoldItemId(sectionId || '', 'draft_sentence', sentence, index) === itemId
+    );
     if (!existing) {
+      logUiAction('sentence_flag_opened', { sentenceIndex: sentenceIndex + 1 });
       setOpenFlagIds((prev) => ({ ...prev, [itemId]: true }));
       setError(null);
       return;
@@ -1310,6 +1379,10 @@ export default function ScaffoldSectionPage() {
     if (hasWrittenReason && !window.confirm('이 문장의 표시를 풀까요? 적어 둔 이유도 함께 지워집니다.')) {
       return;
     }
+    logUiAction('sentence_flag_cancelled', {
+      sentenceIndex: sentenceIndex + 1,
+      wasSaved: Boolean(existing.savedFlag)
+    });
     void cancelDraftFlag(existing);
   };
 
@@ -1459,6 +1532,7 @@ export default function ScaffoldSectionPage() {
           navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/sections/${nextId}`)
         }
       />
+      {studyMode ? <SessionTimer startedAt={scaffoldData?.scaffoldState.startedAt} /> : null}
       {scaffoldData?.experiment_code || scaffoldData?.experimentCode ? (
         <div style={{ margin: '10px 0 18px 0', color: '#5a6c81', fontSize: 15, fontWeight: 600 }}>
           실험번호: {scaffoldData.experiment_code || scaffoldData.experimentCode}
@@ -1729,12 +1803,19 @@ export default function ScaffoldSectionPage() {
                     id="own-draft-input"
                     value={authoringNotes}
                     onChange={(event) => setAuthoringNotes(event.target.value)}
+                    onFocus={() => beginFieldEdit('own_draft', authoringNotes)}
+                    onBlur={() => endFieldEdit('own_draft', authoringNotes)}
                     rows={5}
                     placeholder="기록에 있는 내용만으로 두세 문장을 써 보세요. 나중에 AI가 쓴 초안과 나란히 비교합니다."
                   />
                 </div>
 
-                <details className="scaffold-optional-block">
+                <details
+                  className="scaffold-optional-block"
+                  onToggle={(event) => {
+                    if (event.currentTarget.open) logUiAction('evidence_picker_opened');
+                  }}
+                >
                   <summary>기록 근거 고르기와 핵심 정보 적기 (선택)</summary>
                   <div style={{ display: 'grid', gap: 20, marginTop: 14 }}>
                 {evidenceChoices.length > 0 && (
@@ -2284,7 +2365,10 @@ export default function ScaffoldSectionPage() {
                                   type="button"
                                   className={judgment === option.value ? 'is-active' : ''}
                                   onClick={() =>
-                                    setJudgmentDrafts((prev) => ({ ...prev, [item.itemId]: option.value }))
+                                    {
+                                      logUiAction('sentence_flag_kind_selected', { judgment: option.value });
+                                      setJudgmentDrafts((prev) => ({ ...prev, [item.itemId]: option.value }));
+                                    }
                                   }
                                 >
                                   {option.label}
@@ -2359,6 +2443,8 @@ export default function ScaffoldSectionPage() {
                       <textarea
                         value={missingInDraftReflection}
                         onChange={(event) => setMissingInDraftReflection(event.target.value)}
+                        onFocus={() => beginFieldEdit('missing_in_draft', missingInDraftReflection)}
+                        onBlur={() => endFieldEdit('missing_in_draft', missingInDraftReflection)}
                         placeholder="기록에는 있는데 AI 초안에 없는 내용, 이 항목에 꼭 들어가야 한다고 생각하는 내용을 적어 주세요."
                         rows={3}
                       />
@@ -2369,6 +2455,8 @@ export default function ScaffoldSectionPage() {
                       <textarea
                         value={changedJudgmentReflection}
                         onChange={(event) => setChangedJudgmentReflection(event.target.value)}
+                        onFocus={() => beginFieldEdit('comparison_note', changedJudgmentReflection)}
+                        onBlur={() => endFieldEdit('comparison_note', changedJudgmentReflection)}
                         placeholder="내 초안에 더하고 싶은 내용, AI 초안에서 그대로 쓰면 안 되겠다고 생각한 내용을 적어 주세요. 예: 용량과 기간을 내 초안에 쓰지 않았다는 것을 알았다 / 큰 차이가 없었다"
                         rows={3}
                       />

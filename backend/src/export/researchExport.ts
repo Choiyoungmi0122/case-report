@@ -391,6 +391,37 @@ async function sanitizeSectionInteractions(sectionInteractions: SectionQnaHistor
   );
 }
 
+/**
+ * The same events as `interactionEvents`, with the time since the session
+ * started and the gap since the previous event, so a researcher can see where a
+ * participant slowed down without doing date arithmetic. Derived only; nothing
+ * new is stored.
+ */
+function buildEventTimeline(scaffoldState: any) {
+  const events: any[] = scaffoldState?.interactionEvents || [];
+  const startMs = new Date(scaffoldState?.startedAt || events[0]?.timestamp || '').getTime();
+  let previousMs = Number.NaN;
+
+  return events.map((event) => {
+    const currentMs = new Date(event?.timestamp || '').getTime();
+    const row = {
+      sequenceIndex: event?.sequenceIndex,
+      elapsedSeconds:
+        Number.isNaN(startMs) || Number.isNaN(currentMs) ? null : Math.round((currentMs - startMs) / 100) / 10,
+      gapSeconds:
+        Number.isNaN(previousMs) || Number.isNaN(currentMs)
+          ? null
+          : Math.round((currentMs - previousMs) / 100) / 10,
+      eventType: event?.eventType,
+      kind: event?.metadata?.kind || null,
+      sectionId: event?.sectionId || null,
+      metadata: event?.metadata || null
+    };
+    if (!Number.isNaN(currentMs)) previousMs = currentMs;
+    return row;
+  });
+}
+
 async function sanitizeScaffoldData(scaffoldState: any, sectionDrafts: any[], sanitizer: ResearchSanitizer) {
   if (!scaffoldState) return undefined;
   return {
@@ -462,6 +493,7 @@ async function sanitizeScaffoldData(scaffoldState: any, sectionDrafts: any[], sa
         })
       : undefined,
     interactionEvents: scaffoldState.interactionEvents || [],
+    eventTimeline: buildEventTimeline(scaffoldState),
     sections: buildScaffoldSections(scaffoldState, sectionDrafts || [])
   };
 }

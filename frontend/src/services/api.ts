@@ -366,6 +366,7 @@ export type ScaffoldInteractionEventType =
   | 'section_completed'
   | 'final_summary_viewed'
   | 'export_requested'
+  | 'ui_action'
   | 'session_completed';
 
 export interface ScaffoldInteractionEvent {

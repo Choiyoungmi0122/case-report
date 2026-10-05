@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
+import SessionTimer from '../components/scaffold/SessionTimer';
 import {
   caseApi,
   type ScaffoldStateResponse,
@@ -134,6 +135,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   });
   const updateIntroDone = (done: boolean) => {
     setIntroDone(done);
+    void logEvent('ui_action', { kind: done ? 'intro_confirmed' : 'intro_reopened' });
     try {
       if (done) window.localStorage.setItem(introStorageKey, '1');
       else window.localStorage.removeItem(introStorageKey);
@@ -272,7 +274,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   };
 
   const logEvent = async (
-    eventType: 'case_map_saved' | 'workflow_phase_changed' | 'claim_map_saved',
+    eventType: 'case_map_saved' | 'workflow_phase_changed' | 'claim_map_saved' | 'ui_action',
     metadata?: Record<string, unknown>
   ) => {
     if (!caseId) return;
@@ -408,6 +410,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     setNoteFeedbackRevealedAt(undefined);
     setError(null);
     void persistCaseMap(currentPhase, '추천 메모를 내 메모에 추가했습니다.', nextNotes);
+    void logEvent('ui_action', { kind: 'memo_suggestion_added', suggestionId: suggestion.id });
   };
 
   const visitListRef = useRef<HTMLDivElement | null>(null);
@@ -415,6 +418,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     const container = visitListRef.current;
     const target = container?.querySelector<HTMLDetailsElement>(`[data-visit-index="${index}"]`);
     if (!container || !target) return;
+    void logEvent('ui_action', { kind: 'visit_jump', visit: index + 1 });
     target.open = true;
     // 목록 안에서의 실제 위치 차이만큼 옮긴다. 부드러운 스크롤은 창이 가려져 있으면 멈추므로 쓰지 않는다.
     container.scrollTop += target.getBoundingClientRect().top - container.getBoundingClientRect().top;
@@ -583,6 +587,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
 
   return (
     <ScaffoldPageFrame>
+      {studyMode ? <SessionTimer startedAt={data.scaffoldState.startedAt} /> : null}
       <main className="scaffold-v2">
         <header className="scaffold-v2__header">
           <div>
@@ -701,7 +706,14 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                           <time>{visit.date || '날짜 미상'}</time>
                         </summary>
                         {suggestions.length > 0 ? (
-                          <details className="scaffold-v2__memo-suggest">
+                          <details
+                            className="scaffold-v2__memo-suggest"
+                            onToggle={(event) => {
+                              if (event.currentTarget.open) {
+                                void logEvent('ui_action', { kind: 'memo_suggestion_opened', visit: index + 1 });
+                              }
+                            }}
+                          >
                             <summary>AI 메모 추천 {suggestions.length}개</summary>
                             <p>기록을 읽고 내 생각을 먼저 적은 뒤 참고하세요. 살펴볼 만한 곳을 알려줄 뿐 정답은 아닙니다.</p>
                             <ul>

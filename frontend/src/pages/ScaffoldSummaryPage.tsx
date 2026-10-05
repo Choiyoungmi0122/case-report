@@ -4,6 +4,7 @@ import ScaffoldActionButton from '../components/scaffold/ScaffoldActionButton';
 import ScaffoldBulletList from '../components/scaffold/ScaffoldBulletList';
 import ScaffoldHero from '../components/scaffold/ScaffoldHero';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
+import SessionTimer from '../components/scaffold/SessionTimer';
 import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
@@ -295,6 +296,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
 
   return (
     <ScaffoldPageFrame>
+      {studyMode ? <SessionTimer startedAt={data.scaffoldState.startedAt} /> : null}
       <ScaffoldHero
         title="내 학습 기록"
         description="AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."

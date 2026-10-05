@@ -297,7 +297,8 @@ const VALID_EVENT_TYPES = new Set<ScaffoldInteractionEventType>([
   'draft_review_completed',
   'section_completed',
   'final_summary_viewed',
-  'export_requested'
+  'export_requested',
+  'ui_action'
 ]);
 
 function emptyScaffoldState(): ScaffoldState {

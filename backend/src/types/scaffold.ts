@@ -237,7 +237,9 @@ export type ScaffoldInteractionEventType =
   | 'section_completed'
   // Summary
   | 'final_summary_viewed'
-  | 'export_requested';
+  | 'export_requested'
+  // 화면에서의 세부 행동(멈춤, 문장 표시, 초안 편집 등). 종류는 metadata.kind에 둔다.
+  | 'ui_action';
 
 export interface ScaffoldInteractionEvent {
   eventId?: string;
