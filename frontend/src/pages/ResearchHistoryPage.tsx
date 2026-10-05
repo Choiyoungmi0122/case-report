@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { caseApi, ResearchHistoryResponse } from '../services/api';
+import ScaffoldSessionRecord from '../components/research/ScaffoldSessionRecord';
 
 function asArray<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -403,7 +404,17 @@ export default function ResearchHistoryPage() {
               </section>
             </details>
 
-            {sections.length ? (
+            {mode === 'scaffold' ? (
+              <>
+                <ScaffoldSessionRecord exportData={exportData} experimentCode={history.experimentCode} />
+                <details style={styles.sectionCard}>
+                  <summary style={styles.sectionTitle}>원자료 (전체 항목, 이전 형식)</summary>
+                  {sections.map((section: any) => (
+                    <SectionHistory key={section.sectionId} section={section} exportData={exportData} />
+                  ))}
+                </details>
+              </>
+            ) : sections.length ? (
               sections.map((section: any) => (
                 <SectionHistory key={section.sectionId} section={section} exportData={exportData} />
               ))

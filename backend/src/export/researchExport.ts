@@ -1,6 +1,7 @@
 import { CareSection, CaseMode, ResearchState } from '../types';
 import { getVersionMetadata } from '../config/researchMetadata';
 import { deidentifyEMR, createDeidReplacementContext } from '../deid';
+import { isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
 import { KnownIdentifier } from '../deid/types';
 import { PLACEHOLDER_PATTERN } from '../deid/publicationRenderer';
 
@@ -106,6 +107,17 @@ type ResearchSanitizer = {
 };
 
 function createResearchSanitizer(caseData: any): ResearchSanitizer {
+  // The fixed study case is a fictional patient, so there is nothing to mask.
+  // Masking it anyway rewrites the dates participants typed in their own drafts
+  // ("3월 11일" -> "[DATE_2]") and the date part of saved timestamps, which is
+  // exactly what the analysis needs to read.
+  if (isFixedStudyCaseText((caseData?.visits || []).map((visit: any) => visit?.soapText || ''))) {
+    return {
+      text: async (value: unknown) => String(value ?? ''),
+      object: async <T>(value: T) => value
+    };
+  }
+
   const sharedContext = createDeidReplacementContext();
   seedStoredReplacements(caseData, sharedContext);
   const knownIdentifiers = collectKnownIdentifiers(caseData);
