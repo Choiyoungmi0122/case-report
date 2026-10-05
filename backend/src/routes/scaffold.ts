@@ -97,6 +97,7 @@ const VALID_DRAFT_JUDGMENTS = new Set<DraftJudgment>([
   'pending',
   'supported_by_record',
   'differs_from_record',
+  'want_to_add',
   'needs_additional_confirmation',
   'needs_instructor_review',
   'uncertain'
@@ -1000,6 +1001,7 @@ function isCompleteDraftSentenceReviewItem(item: ScaffoldReviewItem) {
       item.judgment &&
       item.judgment !== 'pending' &&
       (item.judgment === 'supported_by_record' ||
+        item.judgment === 'want_to_add' ||
         String(item.note || '').trim() ||
         (item.evidenceIds || []).length > 0)
   );
@@ -1178,6 +1180,13 @@ export function buildLearningFeedback(
       prompts: [
         '문장의 시점, 수치, 주체가 원기록과 모두 일치하나요?',
         '기록에 없는 인과관계나 확정적 해석이 덧붙지 않았나요?'
+      ]
+    },
+    want_to_add: {
+      summary: '내 초안에 더하고 싶다고 표시한 문장입니다. 원기록에서 같은 내용을 찾아 내 말로 다시 써 보세요.',
+      prompts: [
+        '이 내용은 원기록의 어느 방문에 적혀 있나요?',
+        'CARE의 어떤 요소에 해당하는 내용인가요?'
       ]
     },
     differs_from_record: {
@@ -1692,7 +1701,8 @@ router.put('/:caseId/scaffold/review-items/:itemId', async (req: Request, res: R
         });
       }
 
-      if (judgment !== 'supported_by_record' && !note && evidenceIds.length === 0) {
+      // '기록 근거 충분'과 '내 초안에 더하고 싶음'은 이유 없이도 저장된다.
+      if (judgment !== 'supported_by_record' && judgment !== 'want_to_add' && !note && evidenceIds.length === 0) {
         return res.status(400).json({
           error: 'A draft sentence review requires either a note or concrete SOAP evidence.'
         });

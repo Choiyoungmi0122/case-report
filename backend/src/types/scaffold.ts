@@ -21,6 +21,7 @@ export type DraftJudgment =
   | 'pending'
   | 'supported_by_record'           // 기록 근거 충분
   | 'differs_from_record'           // 기록과 다름
+  | 'want_to_add'                   // 내 초안에 더하고 싶음
   | 'needs_additional_confirmation' // 추가 확인 필요
   | 'needs_instructor_review'       // 교수자/전문가 검토 필요
   | 'uncertain';                     // 판단하기 어려움

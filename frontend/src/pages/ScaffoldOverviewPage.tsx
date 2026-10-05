@@ -500,7 +500,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
         </li>
         <li>
           <strong>AI 초안을 내 초안과 비교하며 읽습니다.</strong>
-          <span>내 초안에 없던 내용이 무엇인지 살펴봅니다. 기록과 달라 보이거나 다시 확인하고 싶은 문장은 눌러서 표시할 수 있습니다. 다시 누르면 표시가 풀립니다.</span>
+          <span>내 초안에 없던 내용이 무엇인지 살펴봅니다. 내 초안에 더하고 싶은 문장, 기록과 달라 보이는 문장은 눌러서 표시할 수 있습니다. 다시 누르면 표시가 풀립니다.</span>
         </li>
         <li>
           <strong>비교하면서 알게 된 것을 적습니다.</strong>

@@ -445,6 +445,7 @@ const SCAFFOLD_SECTION_LABELS_KO: Record<string, string> = {
 const SCAFFOLD_JUDGMENT_LABELS_KO: Record<string, string> = {
   supported_by_record: '기록 근거 충분',
   differs_from_record: '기록과 다름',
+  want_to_add: '내 초안에 더하고 싶음',
   needs_additional_confirmation: '기록만으로 확인하기 어려움',
   needs_instructor_review: '교수님께 확인',
   uncertain: '판단 어려움',
@@ -605,7 +606,7 @@ function buildScaffoldSummaryChildren(caseData: Case) {
     }
 
     // 2. AI draft and the learner's review of each sentence
-    children.push(makeSubHeading('② AI 초안과 내 검토'));
+    children.push(makeSubHeading('② AI 초안과 비교'));
     if (!progress.draftRevealed) {
       children.push(makeBodyParagraph('아직 AI 초안을 확인하지 않았습니다.'));
     } else {

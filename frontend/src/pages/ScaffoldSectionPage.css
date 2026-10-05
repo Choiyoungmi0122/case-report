@@ -864,3 +864,23 @@
   font-size: 14px;
   line-height: 1.6;
 }
+
+
+/* A sentence the learner wants to take into their own draft is marked in green,
+ * distinct from sentences flagged as differing from the record (orange). */
+.scaffold-ai-sentence.is-flagged.is-add {
+  background: #cfeedd;
+  box-shadow: inset 0 -2px 0 #2f855a;
+}
+
+.scaffold-flag-card.is-add {
+  border-color: #b7dfc5;
+  border-left-color: #2f855a;
+  background: #f3faf5;
+}
+
+.scaffold-flag-card.is-add .scaffold-flag-card__types button.is-active {
+  border-color: #2f855a;
+  background: #dff3e6;
+  color: #1c5a3a;
+}

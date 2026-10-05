@@ -159,6 +159,7 @@ export type DraftJudgment =
   | 'pending'
   | 'supported_by_record'
   | 'differs_from_record'
+  | 'want_to_add'
   | 'needs_additional_confirmation'
   | 'needs_instructor_review'
   | 'uncertain';
