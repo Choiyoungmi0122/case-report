@@ -720,7 +720,16 @@ export interface ScaffoldRecordPointer {
   note?: string;
 }
 
+export interface ScaffoldCareElement {
+  code: string;
+  label: string;
+  required: boolean;
+  inRecord: string[];
+  notInRecord: string[];
+}
+
 export interface ScaffoldStateResponse {
+  careElementMap?: Record<string, ScaffoldCareElement[]>;
   memoSuggestions?: ScaffoldMemoSuggestion[];
   recordPointers?: Record<string, ScaffoldRecordPointer>;
   caseId: string;

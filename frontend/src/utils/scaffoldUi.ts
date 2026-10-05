@@ -272,6 +272,24 @@ export const CARE_WRITING_EXAMPLES: Array<{ sectionId: string; name: string; mus
   }
 ];
 
+/**
+ * CARE_SECTION_GUIDE 의 items 와 같은 순서로, CARE 체크리스트 세부 항목 번호와
+ * 필수·선택 구분을 둔다 (연구실의 CARE 필수·선택 구분표 기준).
+ */
+export const CARE_SECTION_ITEM_META: Record<string, Array<{ code: string; required: boolean }>> = {
+  THERAPEUTIC_INTERVENTIONS: [
+    { code: '9a', required: true },
+    { code: '9b', required: true },
+    { code: '9c', required: false }
+  ],
+  FOLLOW_UP_OUTCOMES: [
+    { code: '10a', required: true },
+    { code: '10b', required: false },
+    { code: '10c', required: false },
+    { code: '10d', required: true }
+  ]
+};
+
 export const CARE_SECTION_GUIDE: Record<string, { goal: string; items: string[] }> = {
   DIAGNOSTIC_ASSESSMENT: {
     goal: '어떤 평가를 거쳐 왜 그 진단에 이르렀는지 보여 줍니다.',

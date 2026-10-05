@@ -22,6 +22,7 @@ import {
   getSectionConfig,
   type ScaffoldType,
   CARE_SECTION_GUIDE,
+  CARE_SECTION_ITEM_META,
   CARE_WRITING_EXAMPLES,
   STUDY_SECTION_IDS
 } from '../utils/scaffoldUi';
@@ -988,6 +989,9 @@ export default function ScaffoldSectionPage() {
     void logScaffoldEvent('ui_action', { kind, step: currentStep, draftRevealed: sectionProgress.draftRevealed, ...metadata });
   };
 
+  // CARE 세부 항목 표는 펼친 채로 보여 주고, 접거나 다시 펼치면 기록한다.
+  const [careElementMapOpen, setCareElementMapOpen] = useState(true);
+
   // 입력 칸에 머문 시간. 칸에 들어갈 때 시작하고 나올 때 길이와 함께 남긴다.
   const fieldEditRef = useRef<Record<string, { startedAt: number; initial: string }>>({});
   const beginFieldEdit = (field: string, value: string) => {
@@ -1777,9 +1781,19 @@ export default function ScaffoldSectionPage() {
                   <h3>‘{scaffoldConfig?.displayName || sectionTitle}’에 들어가는 내용</h3>
                   <p>{sectionGuide.goal}</p>
                   <ul>
-                    {sectionGuide.items.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
+                    {sectionGuide.items.map((item, itemIndex) => {
+                      const meta = sectionId ? CARE_SECTION_ITEM_META[sectionId]?.[itemIndex] : undefined;
+                      return (
+                        <li key={item}>
+                          {meta ? (
+                            <span className={`scaffold-care-tag${meta.required ? ' is-required' : ''}`}>
+                              {meta.code} {meta.required ? '필수' : '선택'}
+                            </span>
+                          ) : null}
+                          {item}
+                        </li>
+                      );
+                    })}
                   </ul>
                   {sectionWritingExample ? (
                     <div className="scaffold-care-guide__example">
@@ -2428,6 +2442,61 @@ export default function ScaffoldSectionPage() {
                       })
                     )}
                   </div>
+                ) : null}
+
+                {draftSentences.length > 0 && sectionId && scaffoldData?.careElementMap?.[sectionId]?.length ? (
+                  <details
+                    className="scaffold-care-elements"
+                    open={careElementMapOpen}
+                    onToggle={(event) => {
+                      const expanded = event.currentTarget.open;
+                      if (expanded === careElementMapOpen) return;
+                      setCareElementMapOpen(expanded);
+                      logUiAction('care_element_map_toggled', { expanded });
+                    }}
+                  >
+                    <summary>CARE 세부 항목으로 기록 다시 보기: 기록에 있는 정보와 없는 정보</summary>
+                    <p>
+                      이 환자의 기록을 CARE 세부 항목별로 정리한 표입니다. 앞에서 정보가 충분한지 판단한 내용, 내 초안, AI
+                      초안과 견주어 보세요. 기록에 없는 정보는 증례보고에 추측해서 쓰지 않습니다. 확인할 수 있으면 확인하고,
+                      확인할 수 없으면 기록에 없다고 밝힙니다.
+                    </p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>CARE 세부 항목</th>
+                          <th>기록에 있는 정보</th>
+                          <th>기록에서 찾기 어려운 정보</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scaffoldData.careElementMap[sectionId].map((element) => (
+                          <tr key={element.code}>
+                            <td>
+                              <span className={`scaffold-care-tag${element.required ? ' is-required' : ''}`}>
+                                {element.code} {element.required ? '필수' : '선택'}
+                              </span>
+                              <div>{element.label}</div>
+                            </td>
+                            <td>
+                              <ul>
+                                {element.inRecord.map((text) => (
+                                  <li key={text}>{text}</li>
+                                ))}
+                              </ul>
+                            </td>
+                            <td className="scaffold-care-elements__missing">
+                              <ul>
+                                {element.notInRecord.map((text) => (
+                                  <li key={text}>{text}</li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
                 ) : null}
 
                 {draftSentences.length > 0 ? (

@@ -60,6 +60,7 @@ const UI_ACTION_LABELS: Record<string, string> = {
   sentence_flag_opened: 'AI 문장 누름',
   sentence_flag_kind_selected: '표시 종류 고름',
   sentence_flag_cancelled: '표시 해제',
+  care_element_map_toggled: 'CARE 세부 항목 표 펼침/접음',
   pause: '멈춤 (입력 없음)'
 };
 

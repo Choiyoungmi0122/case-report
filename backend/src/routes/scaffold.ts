@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import {
   DEFAULT_STUDY_MEMO_SUGGESTIONS,
   DEFAULT_STUDY_RECORD_POINTERS,
+  DEFAULT_STUDY_CARE_ELEMENT_MAP,
   isFixedStudyCaseText
 } from '../study/cases/defaultStudyCase';
 import { randomUUID } from 'crypto';
@@ -766,7 +767,11 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
       : {},
     memoSuggestions: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
       ? DEFAULT_STUDY_MEMO_SUGGESTIONS.map(({ id, visitIndex, type, text }) => ({ id, visitIndex, type, text }))
-      : []
+      : [],
+    // CARE 세부 항목별로 기록에 있는 정보와 찾기 어려운 정보. 화면에서는 AI 초안 공개 뒤에만 보여준다.
+    careElementMap: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+      ? DEFAULT_STUDY_CARE_ELEMENT_MAP
+      : {}
   };
 }
 
