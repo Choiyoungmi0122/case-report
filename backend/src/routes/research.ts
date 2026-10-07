@@ -15,8 +15,8 @@ function normalizeExperimentCode(value: unknown): string | null {
   const compact = raw.replace(/-/g, '').toUpperCase();
   const match = compact.match(/^(EQ|SQ)0*(\d+)$/);
   if (!match) {
-    const customCode = raw.toUpperCase();
-    return /^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(customCode) ? customCode : null;
+    const customCode = raw.replace(/\s+/g, ' ').toUpperCase();
+    return /^[A-Z0-9가-힣][A-Z0-9가-힣_\- ]{0,63}$/.test(customCode) ? customCode : null;
   }
 
   const number = Number(match[2]);

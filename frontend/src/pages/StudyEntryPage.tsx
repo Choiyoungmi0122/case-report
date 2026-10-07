@@ -18,8 +18,8 @@ function normalizeScaffoldExperimentCode(value: string) {
   const compact = raw.replace(/-/g, '').toUpperCase();
   const match = compact.match(/^SQ0*(\d+)$/);
   if (!match) {
-    const customCode = raw.toUpperCase();
-    return /^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(customCode) ? customCode : '';
+    const customCode = raw.replace(/\s+/g, ' ').toUpperCase();
+    return /^[A-Z0-9가-힣][A-Z0-9가-힣_\- ]{0,63}$/.test(customCode) ? customCode : '';
   }
 
   const number = Number(match[1]);
@@ -119,7 +119,7 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
           type="text"
           value={participantCode}
           onChange={(event) => setParticipantCode(event.target.value)}
-          placeholder={isScaffold ? '예: SQ005, SQ-005, test-01' : '예: E01'}
+          placeholder={isScaffold ? '예: T01, 홍길동, 홍길동 1' : '예: E01'}
           style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #c8d2dd', marginBottom: 12 }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {

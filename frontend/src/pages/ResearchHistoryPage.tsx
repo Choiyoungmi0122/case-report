@@ -248,6 +248,18 @@ export default function ResearchHistoryPage() {
   const exportData = history?.researchExport;
   const sections = useMemo(() => asArray(exportData?.sectionStates), [exportData]);
   const mode = exportData?.mode || history?.case?.mode || '-';
+  const outcomeStatusValue = exportData?.sessionOutcome?.status || '';
+  const outcomeLabel =
+    outcomeStatusValue === 'completed'
+      ? '완료'
+      : outcomeStatusValue === 'aborted'
+        ? '중단'
+        : outcomeStatusValue === 'in_progress'
+          ? '진행 중'
+          : '-';
+  const participationRaw = exportData?.studyMetadata?.participationMode;
+  const participationLabel =
+    participationRaw === 'offline' ? '대면' : participationRaw === 'online' ? '온라인' : participationRaw || '';
   const latestObservedUpdate = useMemo(() => {
     if (!exportData) return undefined;
     return latestTimestamp([
@@ -344,9 +356,9 @@ export default function ResearchHistoryPage() {
     <div style={styles.page}>
       <main style={styles.container}>
         <header style={styles.hero}>
-          <p style={styles.eyebrow}>Research History</p>
-          <h1 style={styles.h1}>Experiment Code Lookup</h1>
-          <p style={styles.lead}>Enter an experiment code such as EQ003, SQ005, SQ-005, or TEST-01.</p>
+          <p style={styles.eyebrow}>연구자용</p>
+          <h1 style={styles.h1}>실험 기록 조회</h1>
+          <p style={styles.lead}>실험번호를 입력하면 그 참가자의 세션 기록(소요 시간, 메모, 초안, 비교 내용, 행동 타임라인)을 볼 수 있습니다.</p>
         </header>
 
         <form onSubmit={handleSubmit} style={styles.searchBox}>
@@ -354,11 +366,11 @@ export default function ResearchHistoryPage() {
             type="text"
             value={experimentCode}
             onChange={(event) => setExperimentCode(event.target.value)}
-            placeholder="SQ005, SQ-005, TEST-01"
+            placeholder="예: T01, DRY-07, 홍길동 1"
             style={styles.input}
           />
           <button type="submit" disabled={loading || !experimentCode.trim()} style={styles.button}>
-            {loading ? 'Loading...' : 'Lookup'}
+            {loading ? '불러오는 중…' : '조회'}
           </button>
         </form>
 
@@ -367,42 +379,65 @@ export default function ResearchHistoryPage() {
         {history && exportData ? (
           <div style={styles.results}>
             <section style={styles.summary}>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <h2 style={styles.h2}>{history.experimentCode}</h2>
-                <p style={styles.small}>mode: {mode}</p>
+                <div style={styles.badgeRow}>
+                  <span style={styles.badge}>{mode === 'scaffold' ? 'Scaffold 실습' : '작성 모드'}</span>
+                  <span style={outcomeStatusValue === 'completed' ? styles.badge : styles.badgeMuted}>{outcomeLabel}</span>
+                  {participationLabel ? <span style={styles.badgeMuted}>{participationLabel}</span> : null}
+                </div>
               </div>
-              <button
-                type="button"
-                style={styles.secondaryButton}
-                onClick={() => downloadJson(exportData, `${history.experimentCode}_research-export.json`)}
-              >
-                Download JSON
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={styles.secondaryButton}
+                  onClick={() => downloadJson(exportData, `${history.experimentCode}_research-export.json`)}
+                >
+                  JSON 내려받기
+                </button>
+              </div>
             </section>
 
-            <section style={styles.metaGrid}>
-              <div><strong>participantCode</strong><span>{exportData.participantCode || '-'}</span></div>
-              <div><strong>sessionId</strong><span>{exportData.sessionId || '-'}</span></div>
-              <div><strong>caseId</strong><span>{history.caseId}</span></div>
-              <div><strong>createdAt</strong><span>{formatDate(exportData.createdAt || history.case.createdAt)}</span></div>
-              <div><strong>lastObservedAt</strong><span>{formatDate(latestObservedUpdate)}</span></div>
-              <div><strong>startedAt</strong><span>{formatDate(exportData.startedAt)}</span></div>
-              <div><strong>completedAt</strong><span>{formatDate(exportData.completedAt)}</span></div>
+            <section style={styles.sectionCard}>
+              <dl style={styles.metaGrid}>
+                <div style={styles.metaItem}>
+                  <dt style={styles.metaLabel}>시작 (분석 시작 버튼)</dt>
+                  <dd style={styles.metaValue}>{formatDate(exportData.startedAt || exportData.createdAt || history.case.createdAt)}</dd>
+                </div>
+                <div style={styles.metaItem}>
+                  <dt style={styles.metaLabel}>마지막 행동</dt>
+                  <dd style={styles.metaValue}>{formatDate(latestObservedUpdate)}</dd>
+                </div>
+                <div style={styles.metaItem}>
+                  <dt style={styles.metaLabel}>완료</dt>
+                  <dd style={styles.metaValue}>{exportData.completedAt ? formatDate(exportData.completedAt) : '아직 완료하지 않음'}</dd>
+                </div>
+                <div style={styles.metaItem}>
+                  <dt style={styles.metaLabel}>세션 결과</dt>
+                  <dd style={styles.metaValue}>
+                    {outcomeLabel}
+                    {exportData.sessionOutcome?.stopReason ? ` (${exportData.sessionOutcome.stopReason})` : ''}
+                  </dd>
+                </div>
+              </dl>
+              <details style={{ marginTop: 12 }}>
+                <summary style={styles.detailsSummary}>기술 정보 (ID, 버전)</summary>
+                <dl style={{ ...styles.metaGrid, marginTop: 10 }}>
+                  <div style={styles.metaItem}><dt style={styles.metaLabel}>사례 ID</dt><dd style={styles.metaCode}>{history.caseId}</dd></div>
+                  <div style={styles.metaItem}><dt style={styles.metaLabel}>세션 ID</dt><dd style={styles.metaCode}>{exportData.sessionId || '-'}</dd></div>
+                  <div style={styles.metaItem}><dt style={styles.metaLabel}>참가자 코드</dt><dd style={styles.metaCode}>{exportData.participantCode || '-'}</dd></div>
+                  <div style={styles.metaItem}>
+                    <dt style={styles.metaLabel}>앱 / Scaffold 버전</dt>
+                    <dd style={styles.metaValue}>{formatValue(exportData.versionMetadata?.appVersion)} / {formatValue(exportData.versionMetadata?.scaffoldVersion)}</dd>
+                  </div>
+                  <div style={styles.metaItem}><dt style={styles.metaLabel}>사례 버전</dt><dd style={styles.metaValue}>{formatValue(exportData.versionMetadata?.caseVersion)}</dd></div>
+                  <div style={styles.metaItem}>
+                    <dt style={styles.metaLabel}>연구 집단 / 단계 / 회차</dt>
+                    <dd style={styles.metaValue}>{formatValue(exportData.studyMetadata?.studyGroup)} / {formatValue(exportData.studyMetadata?.phase)} / {formatValue(exportData.studyMetadata?.sessionNo)}</dd>
+                  </div>
+                </dl>
+              </details>
             </section>
-
-            <details style={styles.sectionCard} open>
-              <summary style={styles.sectionTitle}>Study Info</summary>
-              <section style={styles.metaGrid}>
-                <div><strong>Study Group</strong><span>{formatValue(exportData.studyMetadata?.studyGroup)}</span></div>
-                <div><strong>Phase</strong><span>{formatValue(exportData.studyMetadata?.phase)}</span></div>
-                <div><strong>Session No.</strong><span>{formatValue(exportData.studyMetadata?.sessionNo)}</span></div>
-                <div><strong>Participation</strong><span>{formatValue(exportData.studyMetadata?.participationMode)}</span></div>
-                <div><strong>App Version</strong><span>{formatValue(exportData.versionMetadata?.appVersion)}</span></div>
-                <div><strong>Scaffold Version</strong><span>{formatValue(exportData.versionMetadata?.scaffoldVersion)}</span></div>
-                <div><strong>Case ID / Version</strong><span>{history.caseId} / {formatValue(exportData.versionMetadata?.caseVersion)}</span></div>
-                <div><strong>Outcome</strong><span>{formatValue(exportData.sessionOutcome?.status)}</span></div>
-              </section>
-            </details>
 
             {mode === 'scaffold' ? (
               <>
@@ -420,13 +455,13 @@ export default function ResearchHistoryPage() {
               ))
             ) : (
               <section style={styles.sectionCard}>
-                <p style={styles.empty}>No section state has been recorded yet.</p>
+                <p style={styles.empty}>아직 기록된 항목이 없다.</p>
               </section>
             )}
 
             {mode === 'write' ? (
               <section style={styles.sectionCard}>
-                <h3 style={styles.sectionTitle}>Write Trajectory / Final Manuscript</h3>
+                <h3 style={styles.sectionTitle}>작성 모드: 초안 변화와 최종 원고</h3>
                 <div style={styles.grid}>
                   <div>
                     <h4 style={styles.h4}>Draft Trajectory</h4>
@@ -441,59 +476,59 @@ export default function ResearchHistoryPage() {
             ) : null}
 
             <details style={styles.sectionCard}>
-              <summary style={styles.sectionTitle}>Research Notes</summary>
+              <summary style={styles.sectionTitle}>연구자 메모 (도움 준 내용, 기술 문제, 세션 결과)</summary>
               <div style={styles.grid}>
                 <div>
-                  <h4 style={styles.h4}>Researcher Assistance</h4>
+                  <h4 style={styles.h4}>연구자가 도운 내용</h4>
                   <select value={assistanceLevel} onChange={(event) => setAssistanceLevel(event.target.value as any)} style={styles.input}>
-                    <option value="minor">minor</option>
-                    <option value="major">major</option>
+                    <option value="minor">가벼운 도움 (사용법 안내)</option>
+                    <option value="major">큰 도움 (내용 판단에 영향)</option>
                   </select>
-                  <input value={assistanceSectionId} onChange={(event) => setAssistanceSectionId(event.target.value)} placeholder="sectionId (optional)" style={styles.input} />
-                  <textarea value={assistanceReason} onChange={(event) => setAssistanceReason(event.target.value)} placeholder="reason" style={styles.textarea} />
-                  <button type="button" style={styles.secondaryButton} onClick={() => void saveAssistance()}>Add assistance</button>
+                  <input value={assistanceSectionId} onChange={(event) => setAssistanceSectionId(event.target.value)} placeholder="항목 ID (선택, 예: THERAPEUTIC_INTERVENTIONS)" style={styles.input} />
+                  <textarea value={assistanceReason} onChange={(event) => setAssistanceReason(event.target.value)} placeholder="무엇을 도왔는지" style={styles.textarea} />
+                  <button type="button" style={styles.secondaryButton} onClick={() => void saveAssistance()}>도움 기록 추가</button>
                   <pre style={styles.pre}>{JSON.stringify(exportData.researcherAssistance || [], null, 2)}</pre>
                 </div>
                 <div>
-                  <h4 style={styles.h4}>Technical Issues</h4>
+                  <h4 style={styles.h4}>기술 문제</h4>
                   <select value={issueType} onChange={(event) => setIssueType(event.target.value)} style={styles.input}>
                     {['ai_generation_failure', 'network', 'save_failure', 'refresh', 'session_recovery', 'ui_error', 'other'].map((type) => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
-                  <input value={issueSectionId} onChange={(event) => setIssueSectionId(event.target.value)} placeholder="sectionId (optional)" style={styles.input} />
-                  <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="description" style={styles.textarea} />
-                  <button type="button" style={styles.secondaryButton} onClick={() => void saveIssue()}>Add issue</button>
+                  <input value={issueSectionId} onChange={(event) => setIssueSectionId(event.target.value)} placeholder="항목 ID (선택)" style={styles.input} />
+                  <textarea value={issueDescription} onChange={(event) => setIssueDescription(event.target.value)} placeholder="무슨 문제가 있었는지" style={styles.textarea} />
+                  <button type="button" style={styles.secondaryButton} onClick={() => void saveIssue()}>문제 기록 추가</button>
                   <pre style={styles.pre}>{JSON.stringify(exportData.technicalIssues || [], null, 2)}</pre>
                 </div>
               </div>
               <div style={styles.grid}>
                 <div>
-                  <h4 style={styles.h4}>Case Input Validation</h4>
+                  <h4 style={styles.h4}>입력 사례 확인 (불러온 기록을 고치지 않았는지)</h4>
                   <select value={validationStatus} onChange={(event) => setValidationStatus(event.target.value)} style={styles.input}>
-                    <option value="">Unset</option>
-                    <option value="true">validated true</option>
-                    <option value="false">validated false</option>
+                    <option value="">확인 안 함</option>
+                    <option value="true">원본과 같음</option>
+                    <option value="false">원본과 다름</option>
                   </select>
-                  <input value={validationMismatchCount} onChange={(event) => setValidationMismatchCount(event.target.value)} placeholder="mismatchCount" type="number" min={0} style={styles.input} />
-                  <textarea value={validationNote} onChange={(event) => setValidationNote(event.target.value)} placeholder="note" style={styles.textarea} />
+                  <input value={validationMismatchCount} onChange={(event) => setValidationMismatchCount(event.target.value)} placeholder="다른 곳의 수" type="number" min={0} style={styles.input} />
+                  <textarea value={validationNote} onChange={(event) => setValidationNote(event.target.value)} placeholder="메모" style={styles.textarea} />
                 </div>
                 <div>
-                  <h4 style={styles.h4}>Session Outcome</h4>
+                  <h4 style={styles.h4}>세션 결과</h4>
                   <select value={outcomeStatus} onChange={(event) => setOutcomeStatus(event.target.value)} style={styles.input}>
-                    <option value="">Unset</option>
-                    <option value="in_progress">in_progress</option>
-                    <option value="completed">completed</option>
-                    <option value="aborted">aborted</option>
+                    <option value="">정하지 않음</option>
+                    <option value="in_progress">진행 중</option>
+                    <option value="completed">완료</option>
+                    <option value="aborted">중단</option>
                   </select>
-                  <textarea value={outcomeStopReason} onChange={(event) => setOutcomeStopReason(event.target.value)} placeholder="stopReason" style={styles.textarea} />
-                  <button type="button" style={styles.secondaryButton} onClick={() => void saveValidationAndOutcome()}>Save validation / outcome</button>
+                  <textarea value={outcomeStopReason} onChange={(event) => setOutcomeStopReason(event.target.value)} placeholder="중단했다면 그 이유" style={styles.textarea} />
+                  <button type="button" style={styles.secondaryButton} onClick={() => void saveValidationAndOutcome()}>사례 확인과 세션 결과 저장</button>
                 </div>
               </div>
             </details>
 
             <details style={styles.rawDetails}>
-              <summary>Raw research export</summary>
+              <summary style={styles.sectionTitle}>원자료 JSON 전체</summary>
               <pre style={styles.pre}>{JSON.stringify(exportData, null, 2)}</pre>
             </details>
           </div>
@@ -612,7 +647,48 @@ const styles: Record<string, CSSProperties> = {
   metaGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: 10
+    gap: 12,
+    margin: 0
+  },
+  metaItem: {
+    minWidth: 0
+  },
+  metaLabel: {
+    margin: '0 0 2px 0',
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#5a6c81'
+  },
+  metaValue: {
+    margin: 0,
+    fontSize: 15,
+    overflowWrap: 'anywhere'
+  },
+  metaCode: {
+    margin: 0,
+    fontSize: 13,
+    fontFamily: 'Consolas, monospace',
+    overflowWrap: 'anywhere'
+  },
+  badgeRow: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: 8
+  },
+  badgeMuted: {
+    borderRadius: 8,
+    padding: '5px 10px',
+    background: '#eef2f6',
+    color: '#42566b',
+    fontSize: 12,
+    fontWeight: 800
+  },
+  detailsSummary: {
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#2f5d8a'
   },
   sectionCard: {
     background: '#fff',

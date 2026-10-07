@@ -538,8 +538,9 @@ function normalizeExperimentCodeForMode(value: unknown, mode: CaseMode): string 
   const compact = raw.replace(/-/g, '').toUpperCase();
   const match = compact.match(new RegExp(`^${prefix}0*(\\d+)$`));
   if (!match) {
-    const customCode = raw.toUpperCase();
-    return /^[A-Z0-9][A-Z0-9_-]{0,63}$/.test(customCode) ? customCode : null;
+    // 한글 이름도 번호로 쓸 수 있게 한다. 띄어쓰기는 한 칸으로 줄인다 (예: '홍길동 1').
+    const customCode = raw.replace(/\s+/g, ' ').toUpperCase();
+    return /^[A-Z0-9가-힣][A-Z0-9가-힣_\- ]{0,63}$/.test(customCode) ? customCode : null;
   }
 
   const number = Number(match[1]);
