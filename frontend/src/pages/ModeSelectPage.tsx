@@ -123,6 +123,22 @@ export default function ModeSelectPage() {
             </ul>
             <button
               type="button"
+              onClick={() => navigate('/study/write')}
+              style={{
+                border: '1px solid #2f6ea5',
+                borderRadius: 6,
+                padding: '10px 16px',
+                background: '#ffffff',
+                color: '#2f6ea5',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              실험용 Write 시작
+            </button>
+            <button
+              type="button"
               onClick={() => navigate('/write')}
               style={{ ...buttonStyleBase, background: '#2f6ea5' }}
             >
