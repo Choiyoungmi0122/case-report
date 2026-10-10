@@ -348,11 +348,17 @@ export async function generateNextRound(
   }
 
   const asked = new Set(allQuestions(state).map((question) => question.text.trim()));
+  // 같은 세부 항목은 한 회차에 하나만 묻는다 (모델이 8c 를 두 번 묻는 일이 있었다).
+  const seenCareItems = new Set<string>();
   const picked = output.questions
     .map((question) => ({ ...question, targetSectionIds: normalizeTargetSectionIds(question.targetSectionIds) }))
-    .filter(
-      (question) => question.question.trim() && question.targetSectionIds.length > 0 && !asked.has(question.question.trim())
-    )
+    .filter((question) => {
+      const key = question.careItem.trim().toLowerCase();
+      if (!question.question.trim() || question.targetSectionIds.length === 0 || asked.has(question.question.trim())) return false;
+      if (key && seenCareItems.has(key)) return false;
+      if (key) seenCareItems.add(key);
+      return true;
+    })
     .slice(0, Math.min(state.questionBudget.perRound, remaining));
 
   const now = new Date().toISOString();
