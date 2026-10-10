@@ -793,14 +793,15 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
       ? {
           sessionId: researchSessionId,
           participantCode: participantCode.trim() || undefined,
-          experimentCode: mode === 'scaffold' ? participantCode.trim() || undefined : undefined,
+          experimentCode: participantCode.trim() || undefined,
           studyMetadata: routeStudyMetadata,
           sessionOutcome: { status: 'in_progress' }
         }
       : undefined;
 
-  const getResearchExperimentCode = () =>
-    researchMode && mode === 'scaffold' ? participantCode.trim() || undefined : undefined;
+  // 실험용 경로에서는 참가자 코드가 곧 실험번호다 (Scaffold, Write 모두). 조회 화면에서
+  // 같은 번호로 찾을 수 있어야 한다.
+  const getResearchExperimentCode = () => (researchMode ? participantCode.trim() || undefined : undefined);
 
   /** 이미 존재하는 케이스(임시 저장 등)에 연구 세션을 연결한다. */
   const attachResearchSession = async (caseId: string) => {
@@ -1126,6 +1127,18 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
 
       if (researchMode) {
         setResearchParticipantCode(mode, participantCode);
+      }
+
+      // 실험용 Write: 분석은 뒤에서 돌리고, 바로 질의응답 화면으로 간다. 1회차 질문은
+      // 분석이 필요 없어서 기다리지 않아도 된다. 분석 요청은 질의응답 화면이 보낸다.
+      if (mode === 'write' && researchMode) {
+        await caseApi.startStudyWriteInterview(caseId, {
+          inputSource: uploadedRecordSource
+            ? { source: uploadedRecordSource.source, fileName: uploadedRecordSource.fileName, visitCount: uploadedRecordSource.visitCount }
+            : { source: 'manual', visitCount: normalizedVisits.length }
+        });
+        navigate(`/study/write/cases/${caseId}/interview`);
+        return;
       }
 
       // Processing runs for roughly two minutes. Poll the stage the backend is

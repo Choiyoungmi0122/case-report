@@ -726,6 +726,66 @@ export type StudyWriteInspectResult =
   | { kind: 'xlsx'; fileName: string; sheets: StudyWriteInspectedSheet[] }
   | { kind: 'docx'; fileName: string; text: string; visits: StudyWriteImportedVisit[]; splitBy: 'full_date' | 'month_day' | 'none' };
 
+export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped';
+
+export interface StudyWriteQuestion {
+  id: string;
+  roundNo: number;
+  order: number;
+  text: string;
+  source: 'fixed' | 'generated';
+  targetSectionIds: string[];
+  careItem?: string;
+  priority: 'required' | 'optional' | 'case';
+  status: StudyWriteAnswerStatus;
+  answer: string;
+  askedAt: string;
+  answeredAt?: string;
+  editHistory: Array<{ previousAnswer: string; previousStatus: StudyWriteAnswerStatus; editedAt: string }>;
+}
+
+export interface StudyWriteRound {
+  roundNo: number;
+  kind: 'case' | 'gap';
+  questions: StudyWriteQuestion[];
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface StudyWriteInputSource {
+  source: 'manual' | 'xlsx' | 'docx';
+  fileName?: string;
+  visitCount: number;
+}
+
+export interface StudyWriteState {
+  version: 'study-write-v1';
+  inputSource?: StudyWriteInputSource | null;
+  questionBudget: { maxRounds: number; perRound: number; maxTotal: number };
+  rounds: StudyWriteRound[];
+  interviewStartedAt?: string;
+  interviewCompletedAt?: string;
+  processingRequestedAt?: string;
+  answersLockedAt?: string;
+  submittedAt?: string;
+  updatedAt: string;
+}
+
+export interface StudyWriteInterviewResponse {
+  caseId: string;
+  experimentCode: string | null;
+  analysis: {
+    ready: boolean;
+    currentStep: string | null;
+    completedSteps: string[];
+    blocked: boolean;
+    processingRequestedAt: string | null;
+  };
+  pendingTermCount: number;
+  nextRound: { ok: boolean; reason?: string };
+  interview: StudyWriteState;
+}
+
 export interface ScaffoldMemoSuggestion {
   id: string;
   visitIndex: number;
@@ -1349,6 +1409,36 @@ export const caseApi = {
       blob: response.data,
       fileName: parseDownloadFileName(disposition, `case_${caseId}_${mode}_${layout}.docx`)
     };
+  },
+
+  getStudyWriteInterview: async (caseId: string) => {
+    const response = await api.get<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview`);
+    return response.data;
+  },
+
+  startStudyWriteInterview: async (
+    caseId: string,
+    body: { processingRequested?: boolean; inputSource?: StudyWriteInputSource | null } = {}
+  ) => {
+    const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/start`, body);
+    return response.data;
+  },
+
+  answerStudyWriteQuestion: async (caseId: string, body: { questionId: string; answer?: string; skipped?: boolean }) => {
+    const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/answer`, body);
+    return response.data;
+  },
+
+  nextStudyWriteRound: async (caseId: string) => {
+    const response = await api.post<StudyWriteInterviewResponse & { stopReason?: string | null }>(
+      `/study-write/cases/${caseId}/interview/next-round`
+    );
+    return response.data;
+  },
+
+  finishStudyWriteInterview: async (caseId: string) => {
+    const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/finish`);
+    return response.data;
   },
 
   /** 실험용 Write: 올린 xlsx/docx 의 내용을 읽어 온다. 파일은 서버에 남지 않는다. */

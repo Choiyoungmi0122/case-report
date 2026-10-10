@@ -99,7 +99,8 @@ export class CaseModel {
       scaffoldState: (doc as any).scaffoldState || null,
       researchState: (doc as any).researchState || null,
       studyConfig: (doc as any).studyConfig || null,
-      finalDraft: (doc as any).finalDraft || null
+      finalDraft: (doc as any).finalDraft || null,
+      studyWrite: (doc as any).studyWrite || null
     }));
   }
 
@@ -243,7 +244,8 @@ export class CaseModel {
       scaffoldState: (doc as any).scaffoldState || null,
       researchState: (doc as any).researchState || null,
       studyConfig: (doc as any).studyConfig || null,
-      finalDraft: (doc as any).finalDraft || null
+      finalDraft: (doc as any).finalDraft || null,
+      studyWrite: (doc as any).studyWrite || null
     } as Case & { sectionStates?: any[]; sectionDrafts?: any[]; finalDraft?: any };
   }
 
@@ -290,6 +292,7 @@ export class CaseModel {
     if ((updates as any).researchState !== undefined) updateData.researchState = (updates as any).researchState;
     if ((updates as any).studyConfig !== undefined) updateData.studyConfig = (updates as any).studyConfig;
     if ((updates as any).finalDraft !== undefined) updateData.finalDraft = (updates as any).finalDraft;
+    if ((updates as any).studyWrite !== undefined) updateData.studyWrite = (updates as any).studyWrite;
 
     await CaseMongoModel.updateOne({ id }, { $set: updateData }).exec();
   }

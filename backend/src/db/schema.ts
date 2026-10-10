@@ -52,6 +52,8 @@ const CaseSchema = new mongoose.Schema(
     sectionDrafts: { type: Array, default: [] },
     sectionAdequacyReviews: { type: Object, default: {} },
     scaffoldState: { type: Object, default: null },
+    // 실험용 Write 상태 (질의응답, 제출). Scaffold 상태와 별개.
+    studyWrite: { type: Object, default: null },
     researchState: { type: Object, default: null },
     studyConfig: { type: Object, default: null },
     finalDraft: { type: Object, default: null }
