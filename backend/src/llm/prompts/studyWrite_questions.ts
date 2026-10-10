@@ -7,24 +7,11 @@
  *
  * 상한의 근거: docs/question_budget_basis_v1.md
  */
-export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v1';
+import { careChecklistText } from '../../studyWrite/careItems';
 
-export const CARE_ITEM_CHECKLIST = `CARE 세부 항목 (필수 / 선택). 괄호 안이 targetSectionIds 에 쓰는 섹션 id 입니다:
-- 1 제목 (TITLE): 필수 "증례보고" 명시, 주요 현상
-- 2 키워드 (TITLE): 필수 2~5개
-- 3 초록 (ABSTRACT): 필수 소개, 사례 제시, 결론
-- 4 서론 (INTRODUCTION): 필수 배경과 보고 이유(기여)
-- 5 환자 정보 (PATIENT_INFORMATION): 필수 5a 인구학적 정보, 5b 주요 증상, 5c 병력(의학적·가족력·심리사회적) / 선택 환경 노출 등
-- 6 임상 소견 (CLINICAL_FINDINGS): 필수 신체 진찰과 임상 소견
-- 7 타임라인 (TIMELINE): 필수 주요 사건을 날짜 순으로
-- 8 진단 평가 (DIAGNOSTIC_ASSESSMENT): 필수 8a 진단 방법, 8c 진단 추론 / 선택 8b 진단의 어려움, 8d 예후 특성
-- 9 치료 개입 (THERAPEUTIC_INTERVENTIONS): 필수 9a 개입 종류, 9b 시행 방법(용량·경로·기간·빈도) / 선택 9c 변경과 이유
-- 10 추적 관찰 및 결과 (FOLLOW_UP_OUTCOMES): 필수 10a 임상의·환자가 평가한 결과, 10d 이상반응과 예상 밖 사건 / 선택 10b 중요한 추적 검사, 10c 순응도·내약성과 그 확인 방법
-- 11 고찰 (DISCUSSION_CONCLUSION): 필수 11c 결론의 근거, 11d 핵심 메시지 / 선택 11a 강점과 한계, 11b 문헌 비교
-- 12 환자 관점 (PATIENT_PERSPECTIVE): 해당 시
-- 13 동의 (INFORMED_CONSENT): 필수 서면 동의 여부
+export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v2';
 
-targetSectionIds 에는 위 괄호 안의 섹션 id(영문 대문자)만 넣습니다. 번호를 넣지 않습니다.`;
+export const CARE_ITEM_CHECKLIST = careChecklistText();
 
 export const studyWriteGapQuestionsSystemPrompt = `
 역할:

@@ -17,7 +17,7 @@ import {
   StudyWriteReviseOutputSchema
 } from '../llm/schemas/studyWrite_draft';
 import { StudyWriteCareCheck, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
-import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItemsText } from './careItems';
+import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItemsText, careWritingRule } from './careItems';
 import { allQuestions, buildRecordText } from './interview';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 
@@ -70,6 +70,7 @@ export async function runDraftForSection(params: {
       sectionId,
       sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
       careItems: careItemsText(sectionId),
+      writingRule: careWritingRule(sectionId),
       recordText: buildRecordText(caseData),
       currentDraft: currentDraftOf(caseData, sectionId),
       qaText: await buildQaText(state, sectionId)
@@ -138,6 +139,7 @@ export async function runRevise(params: {
       sectionId: section.sectionId,
       sectionName: CARE_SECTION_NAMES[section.sectionId] || section.sectionId,
       careItems: careItemsText(section.sectionId),
+      writingRule: careWritingRule(section.sectionId),
       recordText: buildRecordText(caseData),
       currentDraft: section.draftText,
       qaText: await buildQaText(state, section.sectionId),

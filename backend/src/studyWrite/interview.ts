@@ -261,10 +261,15 @@ const MAX_RECORD_CHARS = 16000;
 /** 비식별된 방문 기록 전문. 체인이 "기록에 이미 있는 것"을 묻지 않도록 함께 보낸다. */
 export function buildRecordText(caseData: any): string {
   const records: any[] = Array.isArray(caseData?.deidentifiedEMRs) ? caseData.deidentifiedEMRs : [];
+  const visits: any[] = Array.isArray(caseData?.visits) ? caseData.visits : [];
   const text = records
     .map((record, index) => {
-      const date = record?.visitDateTime || record?.date || '';
-      return `[방문 ${record?.visitIndex || index + 1}${date ? ` ${String(date).slice(0, 16)}` : ''}]\n${String(record?.deidentifiedText || '').trim()}`;
+      // 방문 날짜와 구분(초진/재진)을 머리글에 넣는다. 날짜가 없으면 모델이 연도를
+      // 추정해 타임라인이 틀어진다.
+      const visit = visits[index] || {};
+      const date = record?.visitDate || record?.visitDateTime || visit?.date || '';
+      const type = visit?.type ? ` ${visit.type}` : '';
+      return `[방문 ${record?.visitIndex || index + 1}${type}${date ? ` ${String(date).slice(0, 16).replace('T', ' ')}` : ''}]\n${String(record?.deidentifiedText || '').trim()}`;
     })
     .join('\n\n');
   return text.length > MAX_RECORD_CHARS ? `${text.slice(0, MAX_RECORD_CHARS)}\n…(이하 생략)` : text;

@@ -39,6 +39,18 @@ function bodyParagraphs(text: string): Paragraph[] {
     .map((block) => new Paragraph({ spacing: { after: 160, line: 340 }, children: [run(block)] }));
 }
 
+/** "날짜 | 사건" 줄로 쓴 타임라인을 표 행으로. 그런 줄이 2개 미만이면 null (문단으로 둔다). */
+export function timelineRows(text: string): string[][] | null {
+  const rows = renderClinicalAnonymizedText(text)
+    .split('\n')
+    .map((line) => line.replace(/^[-*•\s]+/, '').trim())
+    .filter((line) => line.includes('|'))
+    .map((line) => line.split('|').map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 2 && cells.some(Boolean));
+  if (rows.length < 2) return null;
+  return [['날짜', '사건'], ...rows.map((cells) => [cells[0], cells.slice(1).join(' | ')])];
+}
+
 function tableBlock(rows: string[][]): Table {
   const columnCount = Math.max(...rows.map((row) => row.length), 1);
   return new Table({
@@ -122,7 +134,13 @@ export async function buildStudyWriteManuscriptDocx(params: {
     );
     // 제목 섹션은 위에 썼으므로 남은 줄(핵심 단어 등)만
     const text = sectionId === 'TITLE' ? titleSection.split('\n').slice(1).join('\n') : section.draftText;
-    children.push(...bodyParagraphs(text));
+    const timeline = sectionId === 'TIMELINE' ? timelineRows(text) : null;
+    if (timeline) {
+      children.push(tableBlock(timeline));
+      children.push(new Paragraph({ spacing: { after: 160 }, children: [] }));
+    } else {
+      children.push(...bodyParagraphs(text));
+    }
 
     for (const attachmentId of section.attachmentIds) {
       const attachment = attachments.find((item) => item.id === attachmentId);
