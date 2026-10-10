@@ -269,7 +269,8 @@ function VisitsEditor({
       <div className="visits-header">
         <h2>방문 기록</h2>
         <div className="visits-header-buttons">
-          {researchMode ? (
+          {/* 고정 실험 사례는 Scaffold 실험에서만 쓴다. Write 실험은 참여자가 자기 기록을 올린다. */}
+          {researchMode && !uploadPanel ? (
             <button onClick={onLoadStudyCase} className="btn-load-draft">
               실험 사례 불러오기
             </button>
