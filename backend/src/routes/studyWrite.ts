@@ -25,6 +25,7 @@ import {
 } from '../studyWrite/attachments';
 import { randomUUID } from 'crypto';
 import { buildStudyWriteManuscriptDocx } from '../studyWrite/manuscriptDocx';
+import { getStudyWritePreset, listStudyWritePresets } from '../studyWrite/presets';
 import { buildContentDispositionHeader } from '../utils/unicode';
 
 /**
@@ -50,6 +51,19 @@ router.post('/inspect', upload.single('file'), async (req: Request, res: Respons
   } catch (error: any) {
     return res.status(400).json({ error: error?.message || '파일을 읽지 못했습니다.' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// 실험 사례 불러오기 (방문 기록만)
+
+router.get('/presets', (_req: Request, res: Response) => {
+  res.json({ presets: listStudyWritePresets() });
+});
+
+router.get('/presets/:presetId', (req: Request, res: Response) => {
+  const preset = getStudyWritePreset(req.params.presetId);
+  if (!preset) return res.status(404).json({ error: '사례를 찾지 못했습니다.' });
+  return res.json(preset);
 });
 
 // ---------------------------------------------------------------------------

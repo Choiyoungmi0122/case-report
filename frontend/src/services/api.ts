@@ -773,9 +773,23 @@ export interface StudyWriteRound {
 }
 
 export interface StudyWriteInputSource {
-  source: 'manual' | 'xlsx' | 'docx' | 'pdf';
+  source: 'manual' | 'xlsx' | 'docx' | 'pdf' | 'preset';
   fileName?: string;
   visitCount: number;
+  relativeDates?: boolean;
+  presetId?: string;
+}
+
+export interface StudyWritePresetSummary {
+  id: string;
+  label: string;
+  specialty: string;
+  relativeDates: boolean;
+  visitCount: number;
+}
+
+export interface StudyWritePreset extends StudyWritePresetSummary {
+  visits: Array<{ date: string; type: '초진' | '재진'; soapText: string; dayOffset?: number }>;
 }
 
 export interface StudyWriteState {
@@ -1529,6 +1543,16 @@ export const caseApi = {
 
   finishStudyWriteInterview: async (caseId: string) => {
     const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/finish`);
+    return response.data;
+  },
+
+  getStudyWritePresets: async () => {
+    const response = await api.get<{ presets: StudyWritePresetSummary[] }>('/study-write/presets');
+    return response.data.presets;
+  },
+
+  getStudyWritePreset: async (presetId: string) => {
+    const response = await api.get<StudyWritePreset>(`/study-write/presets/${encodeURIComponent(presetId)}`);
     return response.data;
   },
 

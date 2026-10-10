@@ -262,14 +262,23 @@ const MAX_RECORD_CHARS = 16000;
 export function buildRecordText(caseData: any): string {
   const records: any[] = Array.isArray(caseData?.deidentifiedEMRs) ? caseData.deidentifiedEMRs : [];
   const visits: any[] = Array.isArray(caseData?.visits) ? caseData.visits : [];
+  // 전문가 기록 프리셋은 날짜가 첫 기록일 기준 일수뿐이다. 입력 칸의 날짜는 임의
+  // 기준일이므로 모델에는 보여 주지 않고 "첫 기록일 +N일"로 쓴다.
+  const relativeDates = Boolean(caseData?.studyWrite?.inputSource?.relativeDates);
+  const firstVisitMs = relativeDates && visits[0]?.date ? new Date(visits[0].date).getTime() : NaN;
   const text = records
     .map((record, index) => {
       // 방문 날짜와 구분(초진/재진)을 머리글에 넣는다. 날짜가 없으면 모델이 연도를
       // 추정해 타임라인이 틀어진다.
       const visit = visits[index] || {};
-      const date = record?.visitDate || record?.visitDateTime || visit?.date || '';
+      const absolute = record?.visitDate || record?.visitDateTime || visit?.date || '';
+      let date = absolute ? String(absolute).slice(0, 16).replace('T', ' ') : '';
+      if (relativeDates && visit?.date && !Number.isNaN(firstVisitMs)) {
+        const days = Math.round((new Date(visit.date).getTime() - firstVisitMs) / 86400000);
+        date = days === 0 ? '첫 기록일' : `첫 기록일 +${days}일`;
+      }
       const type = visit?.type ? ` ${visit.type}` : '';
-      return `[방문 ${record?.visitIndex || index + 1}${type}${date ? ` ${String(date).slice(0, 16).replace('T', ' ')}` : ''}]\n${String(record?.deidentifiedText || '').trim()}`;
+      return `[방문 ${record?.visitIndex || index + 1}${type}${date ? ` ${date}` : ''}]\n${String(record?.deidentifiedText || '').trim()}`;
     })
     .join('\n\n');
   return text.length > MAX_RECORD_CHARS ? `${text.slice(0, MAX_RECORD_CHARS)}\n…(이하 생략)` : text;

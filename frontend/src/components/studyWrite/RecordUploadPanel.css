@@ -265,3 +265,40 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+.record-upload__presets {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px 0;
+  padding: 12px 16px;
+  border: 1px solid #cfe5cf;
+  border-radius: 12px;
+  background: #f1f8f2;
+  font-size: 14px;
+  font-weight: 700;
+  color: #23663a;
+}
+
+.record-upload__presets select {
+  flex: 1;
+  min-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid #c8d2dd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  background: #fff;
+}
+
+.record-upload__presets button {
+  padding: 9px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #23663a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}

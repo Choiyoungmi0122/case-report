@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Case, caseApi, CaseMode, StudyWriteImportedVisit, Visit } from '../services/api';
+import { Case, caseApi, CaseMode, StudyWriteImportedVisit, StudyWritePresetSummary, Visit } from '../services/api';
 import RecordUploadPanel from '../components/studyWrite/RecordUploadPanel';
 import { getReviewRequiredDescription, getReviewRequiredTitle } from '../utils/caseStatusUi';
 import { getProcessStageMessage } from '../utils/uiLabels';
@@ -269,10 +269,10 @@ function VisitsEditor({
       <div className="visits-header">
         <h2>방문 기록</h2>
         <div className="visits-header-buttons">
-          {/* Scaffold 실험은 저장해 둔 분석 결과·AI 초안까지 쓰고, Write 실험은 방문 기록만 가져와 새로 분석한다. */}
-          {researchMode ? (
+          {/* Scaffold 실험은 저장해 둔 분석 결과·AI 초안까지 쓴다. Write 실험은 위 패널의 사례 목록에서 방문 기록만 가져온다. */}
+          {researchMode && !uploadPanel ? (
             <button onClick={onLoadStudyCase} className="btn-load-draft">
-              {uploadPanel ? '실험 사례 불러오기 (방문 기록만)' : '실험 사례 불러오기'}
+              실험 사례 불러오기
             </button>
           ) : null}
           <button
@@ -737,9 +737,11 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   const [visits, setVisits] = useState<Visit[]>([createEmptyVisit()]);
   // 어떤 파일에서 기록을 가져왔는지. 사례를 만들 때 연구용 기록으로 같이 보낸다.
   const [uploadedRecordSource, setUploadedRecordSource] = useState<{
-    source: 'xlsx' | 'docx' | 'pdf';
+    source: 'xlsx' | 'docx' | 'pdf' | 'preset';
     fileName: string;
     visitCount: number;
+    relativeDates?: boolean;
+    presetId?: string;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -757,6 +759,19 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   // 연구 세션(/study/*)에서만 참가자 코드/세션 ID를 사용한다. 일반 사용자는 입력하지 않는다.
   const researchMode = isResearchRoute(location.pathname);
   const routeStudyMetadata = (location.state as any)?.studyMetadata;
+  // 실험 사례 목록 (Write 실험). 가상환자 + 전문가 기록 프리셋
+  const [presets, setPresets] = useState<StudyWritePresetSummary[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  useEffect(() => {
+    if (!(mode === 'write' && researchMode)) return;
+    caseApi
+      .getStudyWritePresets()
+      .then((items) => {
+        setPresets(items);
+        if (items[0]) setSelectedPresetId((prev) => prev || items[0].id);
+      })
+      .catch(() => undefined);
+  }, [mode, researchMode]);
   const [participantCode, setParticipantCode] = useState(() => {
     // StudyEntryPage에서 전달된 값이 있으면 사용하고, 없으면 저장된 값을 복구한다.
     return (location.state as any)?.participantCode || getStoredParticipantCode(mode) || '';
@@ -939,6 +954,36 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
     );
     setCurrentDraftCaseId(null);
     setUploadedRecordSource({ source, fileName, visitCount: imported.length });
+  };
+
+  /** Write 실험: 고른 사례의 방문 기록만 입력 칸에 넣는다. 분석은 새로 한다. */
+  const handleLoadPreset = async () => {
+    const preset = presets.find((item) => item.id === selectedPresetId);
+    if (!preset) return;
+    if (hasTextInput && !window.confirm(`현재 입력 내용을 지우고 "${preset.label}"의 방문 기록으로 바꿀까요?`)) {
+      return;
+    }
+    setError(null);
+    try {
+      const full = await caseApi.getStudyWritePreset(preset.id);
+      setVisits(
+        full.visits.map((visit) => ({
+          type: visit.type,
+          date: visit.date,
+          soapText: visit.soapText
+        }))
+      );
+      setCurrentDraftCaseId(null);
+      setUploadedRecordSource({
+        source: 'preset',
+        fileName: full.label,
+        visitCount: full.visits.length,
+        relativeDates: full.relativeDates,
+        presetId: full.id
+      });
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '사례를 불러오지 못했습니다.');
+    }
   };
 
   const handleCaseClick = (caseItem: Case) => {
@@ -1135,7 +1180,13 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
       if (mode === 'write' && researchMode) {
         await caseApi.startStudyWriteInterview(caseId, {
           inputSource: uploadedRecordSource
-            ? { source: uploadedRecordSource.source, fileName: uploadedRecordSource.fileName, visitCount: uploadedRecordSource.visitCount }
+            ? {
+                source: uploadedRecordSource.source,
+                fileName: uploadedRecordSource.fileName,
+                visitCount: uploadedRecordSource.visitCount,
+                relativeDates: uploadedRecordSource.relativeDates,
+                presetId: uploadedRecordSource.presetId
+              }
             : { source: 'manual', visitCount: normalizedVisits.length }
         });
         navigate(`/study/write/cases/${caseId}/interview`);
@@ -1257,11 +1308,29 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
             uploadPanel={
               mode === 'write' && researchMode ? (
                 <>
+                  {presets.length > 0 ? (
+                    <div className="record-upload__presets">
+                      <span>실험 사례 불러오기 (방문 기록만, 분석은 새로 함)</span>
+                      <select value={selectedPresetId} onChange={(event) => setSelectedPresetId(event.target.value)}>
+                        {presets.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label} · 방문 {preset.visitCount}회{preset.relativeDates ? ' · 상대 날짜' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" onClick={() => void handleLoadPreset()}>
+                        불러오기
+                      </button>
+                    </div>
+                  ) : null}
                   <RecordUploadPanel onApplyVisits={handleApplyUploadedVisits} />
                   {uploadedRecordSource ? (
                     <p className="record-upload__applied">
                       "{uploadedRecordSource.fileName}"에서 방문 {uploadedRecordSource.visitCount}개를 가져왔습니다. 아래에서 날짜와
                       내용을 확인하고 고칠 수 있습니다.
+                      {uploadedRecordSource.relativeDates
+                        ? ' 이 기록은 날짜 대신 "첫 기록일 기준 N일 후"만 있어, 아래 날짜 칸은 2025-01-01을 기준일로 둔 임의 날짜입니다. 초안에는 "첫 기록일 +N일"로 들어갑니다.'
+                        : ''}
                     </p>
                   ) : null}
                 </>
