@@ -131,6 +131,8 @@ export interface StudyWriteState {
   /** 섹션별 초안 상태. 키는 CARE 섹션 id */
   sections?: Record<string, StudyWriteSectionState>;
   draftGeneration?: StudyWriteDraftGeneration;
+  /** 처음 전체 초안 생성 (⑤). 부분 재작성과 구분해 소요 시간을 잰다 */
+  firstGeneration?: { startedAt: string; finishedAt?: string };
   /** 최종 수정에 들어가 답 수정이 잠긴 시각 */
   answersLockedAt?: string;
   /** 최종 제출 시각 */

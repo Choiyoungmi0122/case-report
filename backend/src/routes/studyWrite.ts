@@ -24,6 +24,8 @@ import {
   updateAttachmentCaption
 } from '../studyWrite/attachments';
 import { randomUUID } from 'crypto';
+import { buildStudyWriteManuscriptDocx } from '../studyWrite/manuscriptDocx';
+import { buildContentDispositionHeader } from '../utils/unicode';
 
 /**
  * 실험용 Write 전용 경로. Scaffold 경로(/api/cases/:id/scaffold)와 파일을 공유하지 않는다.
@@ -264,6 +266,7 @@ router.post('/cases/:caseId/drafts/generate', async (req: Request, res: Response
       const next: StudyWriteState = {
         ...state,
         interviewCompletedAt: state.interviewCompletedAt || new Date().toISOString(),
+        firstGeneration: state.firstGeneration || (source === 'answers' ? { startedAt: new Date().toISOString() } : undefined),
         draftGeneration: {
           status: 'running',
           startedAt: new Date().toISOString(),
@@ -284,10 +287,13 @@ router.post('/cases/:caseId/drafts/generate', async (req: Request, res: Response
           const latest = await loadCase(req.params.caseId);
           const state = normalizeStudyWriteState(latest.studyWrite);
           const generation = state.draftGeneration!;
+          const finishedAt = new Date().toISOString();
           await saveState(latest.id, {
             ...state,
-            draftGeneration: { ...generation, status, finishedAt: new Date().toISOString(), lastError },
-            updatedAt: new Date().toISOString()
+            draftGeneration: { ...generation, status, finishedAt, lastError },
+            firstGeneration:
+              state.firstGeneration && !state.firstGeneration.finishedAt ? { ...state.firstGeneration, finishedAt } : state.firstGeneration,
+            updatedAt: finishedAt
           });
         });
       try {
@@ -517,6 +523,85 @@ router.delete('/cases/:caseId/attachments/:attachmentId', async (req: Request, r
     return res.json({ success: true });
   } catch (error: any) {
     return res.status(400).json({ error: error?.message || '지우지 못했습니다.' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ⑦ 최종 수정 (답 잠금) · 제출 · ⑧ Word
+
+/** 최종 수정에 들어간다. 이때부터 질의응답 답은 고칠 수 없다 (직접 편집한 글이 덮이지 않게). */
+router.post('/cases/:caseId/lock-answers', async (req: Request, res: Response) => {
+  try {
+    const result = await serialize(req.params.caseId, async () => {
+      const latest = await loadCase(req.params.caseId);
+      if (!latest) return null;
+      const state = normalizeStudyWriteState(latest.studyWrite);
+      const next: StudyWriteState = state.answersLockedAt
+        ? state
+        : { ...state, answersLockedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      if (next !== state) await saveState(latest.id, next);
+      return buildDraftsResponse(latest, next, await listAttachments(latest.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '잠그지 못했습니다.' });
+  }
+});
+
+router.post('/cases/:caseId/submit', async (req: Request, res: Response) => {
+  try {
+    const result = await serialize(req.params.caseId, async () => {
+      const latest = await loadCase(req.params.caseId);
+      if (!latest) return null;
+      const state = normalizeStudyWriteState(latest.studyWrite);
+      const now = new Date().toISOString();
+      const next: StudyWriteState = state.submittedAt
+        ? state
+        : { ...state, answersLockedAt: state.answersLockedAt || now, submittedAt: now, updatedAt: now };
+      if (next !== state) {
+        await saveState(latest.id, next);
+        await caseModel.updateCase(latest.id, { sessionOutcome: { status: 'completed' } } as any);
+      }
+      return buildDraftsResponse(latest, next, await listAttachments(latest.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '제출하지 못했습니다.' });
+  }
+});
+
+router.get('/cases/:caseId/manuscript.docx', async (req: Request, res: Response) => {
+  try {
+    const caseData = await loadCase(req.params.caseId);
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const state = normalizeStudyWriteState(caseData.studyWrite);
+    const attachments = await listAttachments(caseData.id);
+    const buffer = await buildStudyWriteManuscriptDocx({
+      caseId: caseData.id,
+      experimentCode: caseData.experiment_code,
+      state,
+      attachments
+    });
+    // 내보낸 기록을 남긴다 (연구용 내보내기의 exportLogs 와 같은 자리).
+    await serialize(req.params.caseId, async () => {
+      const latest = await loadCase(req.params.caseId);
+      const logs = Array.isArray(latest.exportLogs) ? latest.exportLogs : [];
+      await caseModel.updateCase(latest.id, {
+        exportLogs: [
+          ...logs,
+          { exportId: `export_${Date.now()}`, requestedAt: new Date().toISOString(), mode: 'study_write_manuscript', layout: 'sections', succeeded: true, fileName: 'case-report_study-write.docx' }
+        ]
+      } as any);
+    });
+    const fileName = `증례보고_초안_${caseData.experiment_code || caseData.id}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', buildContentDispositionHeader(fileName));
+    return res.send(buffer);
+  } catch (error: any) {
+    console.error('[study-write] docx export failed', error);
+    return res.status(500).json({ error: error?.message || 'Word 파일을 만들지 못했습니다.' });
   }
 });
 

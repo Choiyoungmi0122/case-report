@@ -1308,7 +1308,9 @@ export async function reprocessCaseFromStoredTerms(params: {
       : preprocessVisitsForChain1Impl(visitsForChain1, {
           storedConfirmations: params.caseData.pendingTermConfirmations || [],
           semanticMatcher: params.semanticMatcher,
-          llmResolver: params.llmResolver
+          llmResolver: params.llmResolver,
+          // 실험용 Write 사례는 날짜를 가리지 않는다 (사용자 결정 2026-10-10)
+          keepDates: Boolean((params.caseData as any).studyWrite)
         })
   );
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { caseApi, StudyWriteInterviewResponse, StudyWriteQuestion } from '../services/api';
+import { caseApi, PendingTermConfirmation, StudyWriteInterviewResponse, StudyWriteQuestion } from '../services/api';
+import PendingTermConfirmationModal from '../components/PendingTermConfirmationModal';
 import { getProcessStageMessage } from '../utils/uiLabels';
 import './StudyWriteInterviewPage.css';
 
@@ -38,6 +39,8 @@ export default function StudyWriteInterviewPage() {
   const [editDraft, setEditDraft] = useState('');
   const [stopReason, setStopReason] = useState<string | null>(null);
   const [generationFailed, setGenerationFailed] = useState(false);
+  const [pendingTerms, setPendingTerms] = useState<PendingTermConfirmation[]>([]);
+  const [termModalOpen, setTermModalOpen] = useState(false);
   const [, setTick] = useState(0);
   const processingKicked = useRef(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -128,6 +131,17 @@ export default function StudyWriteInterviewPage() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [questions.length, answeredCount, generating, data?.analysis.ready]);
+
+  // 분석이 끝나면 애매한 전문용어 목록을 가져온다 (초안 전에 확인).
+  useEffect(() => {
+    if (!caseId || !data?.analysis.ready) return;
+    caseApi
+      .getPendingTerms(caseId)
+      .then((result) => setPendingTerms(result.items || []))
+      .catch(() => undefined);
+  }, [caseId, data?.analysis.ready, data?.pendingTermCount]);
+
+  const pendingTermCount = pendingTerms.filter((item) => item.status === 'PENDING').length;
 
   const submitAnswer = async (skipped: boolean) => {
     if (!caseId || !pendingQuestion || sending) return;
@@ -283,6 +297,11 @@ export default function StudyWriteInterviewPage() {
             고칠 수 있습니다.
           </div>
         ) : null}
+        {finished && pendingTermCount > 0 ? (
+          <div className="sw-bubble sw-bubble--system sw-bubble--warn">
+            기록에서 뜻이 애매한 전문용어 {pendingTermCount}건이 있습니다. 초안을 만들기 전에 확인해 주세요.
+          </div>
+        ) : null}
       </div>
 
       <div className="sw-interview__composer">
@@ -309,8 +328,13 @@ export default function StudyWriteInterviewPage() {
           </>
         ) : finished ? (
           <div className="sw-interview__actions">
+            {pendingTermCount > 0 ? (
+              <button type="button" className="is-secondary" onClick={() => setTermModalOpen(true)}>
+                전문용어 확인 ({pendingTermCount}건)
+              </button>
+            ) : null}
             <button type="button" onClick={() => navigate(`/study/write/cases/${caseId}/draft`)}>
-              초안 만들기
+              {pendingTermCount > 0 ? '확인 없이 초안 만들기' : '초안 만들기'}
             </button>
           </div>
         ) : (
@@ -338,6 +362,18 @@ export default function StudyWriteInterviewPage() {
           </div>
         )}
       </div>
+
+      {caseId ? (
+        <PendingTermConfirmationModal
+          caseId={caseId}
+          isOpen={termModalOpen}
+          onClose={() => setTermModalOpen(false)}
+          onResolved={async (result) => {
+            setPendingTerms(result.pendingTermConfirmations || []);
+          }}
+          pendingTerms={pendingTerms}
+        />
+      ) : null}
     </div>
   );
 }

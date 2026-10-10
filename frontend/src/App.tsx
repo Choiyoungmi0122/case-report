@@ -14,6 +14,7 @@ import StudyEntryPage from './pages/StudyEntryPage';
 import ResearchHistoryPage from './pages/ResearchHistoryPage';
 import StudyWriteInterviewPage from './pages/StudyWriteInterviewPage';
 import StudyWriteDraftPage from './pages/StudyWriteDraftPage';
+import StudyWriteFinalPage from './pages/StudyWriteFinalPage';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
         <Route path="/study/write/cases/:caseId" element={<CaseOverviewPage studyMode />} />
         <Route path="/study/write/cases/:caseId/interview" element={<StudyWriteInterviewPage />} />
         <Route path="/study/write/cases/:caseId/draft" element={<StudyWriteDraftPage />} />
+        <Route path="/study/write/cases/:caseId/final" element={<StudyWriteFinalPage />} />
         <Route path="/study/write/cases/:caseId/sections/:sectionId" element={<SectionDetailPage studyMode />} />
         <Route path="/study/write/cases/:caseId/manuscript" element={<ManuscriptPage studyMode />} />
         <Route path="/study/scaffold/cases/:caseId" element={<ScaffoldOverviewPage studyMode />} />

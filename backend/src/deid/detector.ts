@@ -338,8 +338,10 @@ export async function detectPHI(text: string, options: DeidOptions = {}): Promis
   spans.push(...detectByRegex(text, RESIDENT_ID_REGEX, 'RESIDENT_ID', 0.995, protectedRanges));
   spans.push(...detectByRegex(text, EMAIL_REGEX, 'EMAIL', 0.99, protectedRanges));
 
-  for (const regex of DATE_REGEXES) {
-    spans.push(...detectByRegex(text, regex, 'DATE', 0.95, protectedRanges));
+  if (options.dateMode !== 'KEEP') {
+    for (const regex of DATE_REGEXES) {
+      spans.push(...detectByRegex(text, regex, 'DATE', 0.95, protectedRanges));
+    }
   }
 
   for (const regex of PATIENT_ID_REGEXES) {

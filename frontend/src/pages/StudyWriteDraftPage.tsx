@@ -215,6 +215,9 @@ export default function StudyWriteDraftPage() {
           <button type="button" className="is-secondary" onClick={() => navigate(`/study/write/cases/${caseId}/interview`)}>
             질의응답 보기
           </button>
+          <button type="button" disabled={running || !hasAnyDraft} onClick={() => navigate(`/study/write/cases/${caseId}/final`)}>
+            {locked ? '최종 수정으로' : '최종 수정으로 (답 수정 잠김)'}
+          </button>
         </div>
       </header>
 

@@ -66,7 +66,8 @@ export interface DeidOptions {
   emrId?: string;
   preserveTerms?: string[];
   entityProvider?: LocalEntityProvider;
-  dateMode?: 'PLACEHOLDER' | 'RELATIVE_PLACEHOLDER';
+  /** KEEP: 날짜를 가리지 않는다 (실험용 Write — 증례보고의 날짜는 임상 정보로 본다) */
+  dateMode?: 'PLACEHOLDER' | 'RELATIVE_PLACEHOLDER' | 'KEEP';
   /**
    * Export rechecks skip the broad surname-shaped name rule because pipeline
    * output is already de-identified and ordinary words can match that rule.

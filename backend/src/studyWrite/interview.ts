@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { createOutboundDeidContext, deidentifyOutboundField } from '../deid/outbound';
+import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 import { callLLMWithSchema } from '../llm/client';
 import { getModelForChain } from '../llm/chains';
 import {
@@ -227,7 +227,8 @@ function clip(text: string, max: number): string {
 const outboundContext = createOutboundDeidContext();
 async function deidentifyAnswer(answer: string): Promise<string> {
   if (!answer.trim()) return '';
-  return deidentifyOutboundField(answer, outboundContext);
+  // 날짜는 가리지 않는다 (실험용 Write 정책). 이름·연락처 등은 가린다.
+  return (await deidentifyOutboundText(answer, { sharedContext: outboundContext, dateMode: 'KEEP' })).text;
 }
 
 export async function buildPriorQaSummary(state: StudyWriteState): Promise<string> {

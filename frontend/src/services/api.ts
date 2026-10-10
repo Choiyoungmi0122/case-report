@@ -1554,6 +1554,18 @@ export const caseApi = {
     return response.data;
   },
 
+  lockStudyWriteAnswers: async (caseId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/lock-answers`);
+    return response.data;
+  },
+
+  submitStudyWrite: async (caseId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/submit`);
+    return response.data;
+  },
+
+  studyWriteManuscriptUrl: (caseId: string) => `/api/study-write/cases/${caseId}/manuscript.docx`,
+
   studyWriteAttachmentFileUrl: (caseId: string, attachmentId: string) =>
     `/api/study-write/cases/${caseId}/attachments/${attachmentId}/file`,
 

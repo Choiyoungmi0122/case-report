@@ -48,7 +48,7 @@ export function createOutboundDeidContext(): DeidReplacementContext {
 
 export async function deidentifyOutboundText(
   text: string,
-  options: { sharedContext?: DeidReplacementContext; preserveTerms?: string[] } = {}
+  options: { sharedContext?: DeidReplacementContext; preserveTerms?: string[]; dateMode?: 'PLACEHOLDER' | 'RELATIVE_PLACEHOLDER' | 'KEEP' } = {}
 ): Promise<OutboundDeidResult> {
   const source = String(text ?? '');
   if (!source.trim()) {
@@ -57,6 +57,7 @@ export async function deidentifyOutboundText(
 
   const result = await deidentifyEMR(source, {
     sharedContext: options.sharedContext,
+    dateMode: options.dateMode,
     preserveTerms: [...(options.preserveTerms || []), ...collectExistingPlaceholders(source)]
   });
 

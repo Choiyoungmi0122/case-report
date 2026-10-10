@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { caseApi, ResearchHistoryResponse } from '../services/api';
 import ScaffoldSessionRecord from '../components/research/ScaffoldSessionRecord';
+import StudyWriteSessionRecord from '../components/research/StudyWriteSessionRecord';
 
 function asArray<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -382,7 +383,7 @@ export default function ResearchHistoryPage() {
               <div style={{ minWidth: 0 }}>
                 <h2 style={styles.h2}>{history.experimentCode}</h2>
                 <div style={styles.badgeRow}>
-                  <span style={styles.badge}>{mode === 'scaffold' ? 'Scaffold 실습' : '작성 모드'}</span>
+                  <span style={styles.badge}>{mode === 'scaffold' ? 'Scaffold 실습' : exportData.studyWriteData ? '실험용 Write' : '작성 모드'}</span>
                   <span style={outcomeStatusValue === 'completed' ? styles.badge : styles.badgeMuted}>{outcomeLabel}</span>
                   {participationLabel ? <span style={styles.badgeMuted}>{participationLabel}</span> : null}
                 </div>
@@ -442,6 +443,16 @@ export default function ResearchHistoryPage() {
             {mode === 'scaffold' ? (
               <>
                 <ScaffoldSessionRecord exportData={exportData} experimentCode={history.experimentCode} />
+                <details style={styles.sectionCard}>
+                  <summary style={styles.sectionTitle}>원자료 (전체 항목, 이전 형식)</summary>
+                  {sections.map((section: any) => (
+                    <SectionHistory key={section.sectionId} section={section} exportData={exportData} />
+                  ))}
+                </details>
+              </>
+            ) : exportData.studyWriteData ? (
+              <>
+                <StudyWriteSessionRecord data={exportData.studyWriteData} />
                 <details style={styles.sectionCard}>
                   <summary style={styles.sectionTitle}>원자료 (전체 항목, 이전 형식)</summary>
                   {sections.map((section: any) => (

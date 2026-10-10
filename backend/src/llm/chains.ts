@@ -640,6 +640,8 @@ export async function preprocessVisitsForChain1(
     storedConfirmations?: PendingTermConfirmation[];
     semanticMatcher?: NormalizerSemanticMatcher;
     llmResolver?: NormalizerLlmResolver;
+    /** 실험용 Write: 날짜는 가리지 않는다 */
+    keepDates?: boolean;
   } = {}
 ): Promise<PreprocessedChain1Input> {
   // The fixed virtual-patient study case has no real identifiers; running the
@@ -657,7 +659,8 @@ export async function preprocessVisitsForChain1(
         visits.map((visit) => ({
           text: visit.text || '',
           emrId: `visit_${visit.index}`
-        }))
+        })),
+        options.keepDates ? { dateMode: 'KEEP' } : {}
       );
   const deidentifiedResults = visits.map((visit, index) => ({
     visit,

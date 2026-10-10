@@ -19,7 +19,7 @@ import {
 import { StudyWriteCareCheck, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItemsText } from './careItems';
 import { allQuestions, buildRecordText } from './interview';
-import { createOutboundDeidContext, deidentifyOutboundField } from '../deid/outbound';
+import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 
 /**
  * 실험용 Write ⑤~⑥: 답변을 반영한 섹션 초안(SW-D), 지시로 고쳐 쓰기(SW-R), CARE 점검(SW-C).
@@ -31,7 +31,7 @@ const DRAFT_CONCURRENCY = 3;
 const outboundContext = createOutboundDeidContext();
 async function deidentifyText(text: string): Promise<string> {
   if (!text.trim()) return '';
-  return deidentifyOutboundField(text, outboundContext);
+  return (await deidentifyOutboundText(text, { sharedContext: outboundContext, dateMode: 'KEEP' })).text;
 }
 
 /** 질의응답을 체인 입력용 텍스트로. 답은 비식별 처리한다. */

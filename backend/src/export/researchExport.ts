@@ -2,6 +2,7 @@ import { CareSection, CaseMode, ResearchState } from '../types';
 import { getVersionMetadata } from '../config/researchMetadata';
 import { deidentifyEMR, createDeidReplacementContext } from '../deid';
 import { isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
+import { buildStudyWriteSummary } from '../studyWrite/researchSummary';
 import { KnownIdentifier } from '../deid/types';
 import { PLACEHOLDER_PATTERN } from '../deid/publicationRenderer';
 
@@ -133,6 +134,8 @@ function createResearchSanitizer(caseData: any): ResearchSanitizer {
       sharedContext,
       knownIdentifiers,
       detectionProfile: 'research_export',
+      // 실험용 Write 사례는 날짜를 가리지 않는다.
+      dateMode: caseData?.studyWrite ? 'KEEP' : undefined,
       preserveTerms: Array.from(new Set(source.match(PLACEHOLDER_PATTERN) || []))
     });
     cache.set(source, result.deidentifiedText);
@@ -590,7 +593,15 @@ export async function buildResearchExportPayload(params: BuildResearchExportPara
     timing: buildTimingSummary(researchState, caseData),
 
     // --- scaffold-only ------------------------------------------------------
-    scaffoldData: await sanitizeScaffoldData(scaffoldState, sanitizedSectionDrafts, sanitizer)
+    scaffoldData: await sanitizeScaffoldData(scaffoldState, sanitizedSectionDrafts, sanitizer),
+
+    // --- study write only ---------------------------------------------------
+    studyWriteData: caseData.studyWrite
+      ? {
+          summary: buildStudyWriteSummary(caseData.studyWrite, toIsoString(caseData.createdAt)),
+          state: await sanitizer.object(caseData.studyWrite)
+        }
+      : null
   };
 }
 
