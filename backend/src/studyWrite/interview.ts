@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { deidentifyEMR } from '../deid';
+import { createOutboundDeidContext, deidentifyOutboundField } from '../deid/outbound';
 import { callLLMWithSchema } from '../llm/client';
 import { getModelForChain } from '../llm/chains';
 import {
@@ -224,10 +224,10 @@ function clip(text: string, max: number): string {
 }
 
 /** 참여자의 답은 외부로 나가기 전에 비식별 처리한다 (기록과 같은 기준). */
+const outboundContext = createOutboundDeidContext();
 async function deidentifyAnswer(answer: string): Promise<string> {
   if (!answer.trim()) return '';
-  const result = await deidentifyEMR(answer);
-  return result.deidentifiedText;
+  return deidentifyOutboundField(answer, outboundContext);
 }
 
 export async function buildPriorQaSummary(state: StudyWriteState): Promise<string> {

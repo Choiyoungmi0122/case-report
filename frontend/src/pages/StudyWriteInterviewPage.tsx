@@ -309,7 +309,7 @@ export default function StudyWriteInterviewPage() {
           </>
         ) : finished ? (
           <div className="sw-interview__actions">
-            <button type="button" onClick={() => navigate(`/study/write/cases/${caseId}`)}>
+            <button type="button" onClick={() => navigate(`/study/write/cases/${caseId}/draft`)}>
               초안 만들기
             </button>
           </div>

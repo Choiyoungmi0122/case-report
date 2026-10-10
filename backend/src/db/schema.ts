@@ -121,6 +121,28 @@ export const ExperimentCounterModel = mongoose.model('ExperimentCounter', Experi
 export const SectionInteractionModel = mongoose.model('SectionInteraction', SectionInteractionSchema);
 export const ManuscriptReviewModel = mongoose.model('ManuscriptReview', ManuscriptReviewSchema);
 
+// 실험용 Write 의 표·그림 첨부. 파일 하나가 문서 하나 (그림 5MB 이하).
+const StudyWriteAttachmentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    caseId: { type: String, required: true, index: true },
+    sectionId: { type: String, required: true },
+    kind: { type: String, required: true, enum: ['image', 'table'] },
+    fileName: { type: String, required: true },
+    mimeType: { type: String, required: true },
+    caption: { type: String, default: '' },
+    /** 그림: 원본 바이트. 표: 쓰지 않음 */
+    data: { type: Buffer, default: null },
+    /** 표: xlsx 첫 시트를 문자열 행렬로 */
+    tableRows: { type: Array, default: null },
+    size: { type: Number, default: 0 },
+    createdAt: { type: Date, required: true, default: Date.now }
+  },
+  { collection: 'study_write_attachments' }
+);
+
+export const StudyWriteAttachmentModel = mongoose.model('StudyWriteAttachment', StudyWriteAttachmentSchema);
+
 function formatExperimentCode(mode: 'write' | 'scaffold', number: number): string {
   const prefix = mode === 'scaffold' ? 'SQ' : 'EQ';
   return `${prefix}${String(number).padStart(3, '0')}`;

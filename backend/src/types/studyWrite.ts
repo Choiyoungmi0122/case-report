@@ -57,6 +57,66 @@ export interface StudyWriteQuestionBudget {
   maxTotal: number;
 }
 
+export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable';
+
+export interface StudyWriteCareCheck {
+  checkedAt: string;
+  promptVersion: string;
+  items: Array<{
+    code: string;
+    label: string;
+    required: boolean;
+    status: StudyWriteCareItemStatus;
+    hint: string;
+  }>;
+}
+
+export interface StudyWriteDraftVersion {
+  version: number;
+  text: string;
+  /** answers: 질의응답 반영 초안, answers_edited: 답 수정 뒤 재작성, revise: 채팅 지시, manual: 직접 편집 */
+  source: 'answers' | 'answers_edited' | 'revise' | 'manual';
+  at: string;
+  model?: string;
+  promptVersion?: string;
+  usedQuestionIds?: string[];
+  notes?: string[];
+  instruction?: string;
+  changeSummary?: string;
+  outOfRecordClaims?: string[];
+}
+
+export interface StudyWriteChatEntry {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  at: string;
+  /** assistant 가 초안을 바꿨으면 그 버전 */
+  resultVersion?: number;
+}
+
+export interface StudyWriteSectionState {
+  sectionId: string;
+  draftText: string;
+  version: number;
+  history: StudyWriteDraftVersion[];
+  chat: StudyWriteChatEntry[];
+  careCheck: StudyWriteCareCheck | null;
+  /** 표·그림 첨부 id (study_write_attachments 컬렉션) 순서대로 */
+  attachmentIds: string[];
+  lastGeneratedAt?: string;
+}
+
+export interface StudyWriteDraftGeneration {
+  status: 'idle' | 'running' | 'done' | 'failed';
+  startedAt?: string;
+  finishedAt?: string;
+  targetSectionIds: string[];
+  doneSectionIds: string[];
+  failedSectionIds: string[];
+  lastError?: string;
+}
+
 export interface StudyWriteState {
   version: 'study-write-v1';
   inputSource?: { source: 'manual' | 'xlsx' | 'docx'; fileName?: string; visitCount: number } | null;
@@ -68,6 +128,9 @@ export interface StudyWriteState {
   interviewCompletedAt?: string;
   /** 분석(/process) 요청을 보낸 시각. 중복 요청을 막는 데 쓴다 */
   processingRequestedAt?: string;
+  /** 섹션별 초안 상태. 키는 CARE 섹션 id */
+  sections?: Record<string, StudyWriteSectionState>;
+  draftGeneration?: StudyWriteDraftGeneration;
   /** 최종 수정에 들어가 답 수정이 잠긴 시각 */
   answersLockedAt?: string;
   /** 최종 제출 시각 */

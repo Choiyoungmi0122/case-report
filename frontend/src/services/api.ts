@@ -771,6 +771,77 @@ export interface StudyWriteState {
   updatedAt: string;
 }
 
+export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable';
+
+export interface StudyWriteCareCheck {
+  checkedAt: string;
+  promptVersion: string;
+  items: Array<{ code: string; label: string; required: boolean; status: StudyWriteCareItemStatus; hint: string }>;
+}
+
+export interface StudyWriteDraftVersion {
+  version: number;
+  text: string;
+  source: 'answers' | 'answers_edited' | 'revise' | 'manual';
+  at: string;
+  instruction?: string;
+  changeSummary?: string;
+  outOfRecordClaims?: string[];
+  notes?: string[];
+}
+
+export interface StudyWriteChatEntry {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  at: string;
+  resultVersion?: number;
+}
+
+export interface StudyWriteAttachment {
+  id: string;
+  caseId: string;
+  sectionId: string;
+  kind: 'image' | 'table';
+  fileName: string;
+  mimeType: string;
+  caption: string;
+  size: number;
+  tableRows?: string[][] | null;
+  createdAt: string;
+}
+
+export interface StudyWriteSection {
+  sectionId: string;
+  name: string;
+  draftText: string;
+  version: number;
+  history: StudyWriteDraftVersion[];
+  chat: StudyWriteChatEntry[];
+  careCheck: StudyWriteCareCheck | null;
+  attachmentIds: string[];
+  attachments: StudyWriteAttachment[];
+  lastGeneratedAt?: string;
+}
+
+export interface StudyWriteDraftsResponse {
+  caseId: string;
+  experimentCode: string | null;
+  generation: {
+    status: 'idle' | 'running' | 'done' | 'failed';
+    startedAt?: string;
+    finishedAt?: string;
+    targetSectionIds: string[];
+    doneSectionIds: string[];
+    failedSectionIds: string[];
+    lastError?: string;
+  };
+  interview: StudyWriteState;
+  answersLockedAt: string | null;
+  submittedAt: string | null;
+  sections: StudyWriteSection[];
+}
+
 export interface StudyWriteInterviewResponse {
   caseId: string;
   experimentCode: string | null;
@@ -1440,6 +1511,51 @@ export const caseApi = {
     const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/finish`);
     return response.data;
   },
+
+  getStudyWriteDrafts: async (caseId: string) => {
+    const response = await api.get<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/drafts`);
+    return response.data;
+  },
+
+  generateStudyWriteDrafts: async (caseId: string, sectionIds?: string[]) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/drafts/generate`, { sectionIds });
+    return response.data;
+  },
+
+  reviseStudyWriteSection: async (caseId: string, sectionId: string, instruction: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/revise`, {
+      instruction
+    });
+    return response.data;
+  },
+
+  saveStudyWriteSectionDraft: async (caseId: string, sectionId: string, draftText: string) => {
+    const response = await api.put<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/draft`, { draftText });
+    return response.data;
+  },
+
+  uploadStudyWriteAttachment: async (caseId: string, sectionId: string, file: File, caption: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('caption', caption);
+    const response = await api.post<StudyWriteAttachment>(`/study-write/cases/${caseId}/sections/${sectionId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  updateStudyWriteAttachmentCaption: async (caseId: string, attachmentId: string, caption: string) => {
+    const response = await api.put<StudyWriteAttachment>(`/study-write/cases/${caseId}/attachments/${attachmentId}`, { caption });
+    return response.data;
+  },
+
+  deleteStudyWriteAttachment: async (caseId: string, attachmentId: string) => {
+    const response = await api.delete<{ success: boolean }>(`/study-write/cases/${caseId}/attachments/${attachmentId}`);
+    return response.data;
+  },
+
+  studyWriteAttachmentFileUrl: (caseId: string, attachmentId: string) =>
+    `/api/study-write/cases/${caseId}/attachments/${attachmentId}/file`,
 
   /** 실험용 Write: 올린 xlsx/docx 의 내용을 읽어 온다. 파일은 서버에 남지 않는다. */
   inspectStudyWriteFile: async (file: File) => {
