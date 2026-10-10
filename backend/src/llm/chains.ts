@@ -767,9 +767,13 @@ async function prepareVisitsForChain1(
         rawClauses,
         CLAUSE_NORMALIZATION_CONCURRENCY,
         async (clause) => {
+          // 용어는 찾아 두되 본문은 바꾸지 않는다. 환자의 말("두근거림")과 기록 표기를 그대로
+          // 두고, 사용자가 전문용어 확인에서 고른 것만 applyTermDecisionToText 로 반영한다
+          // (사용자 결정 2026-10-11).
           const normalized = await normalizeTextWithTerms(clause.text, {
             semanticMatcher: options.semanticMatcher,
-            llmResolver: options.llmResolver
+            llmResolver: options.llmResolver,
+            rewriteText: false
           });
           return {
             sourceText: clause.text,

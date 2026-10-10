@@ -36,6 +36,11 @@ type DetectedMatch = {
 export interface TermNormalizerOptions {
   semanticMatcher?: SemanticMatchProvider;
   llmResolver?: RetrievedTermResolver;
+  /**
+   * false 면 용어를 찾기만 하고 본문은 바꾸지 않는다 (동의어 자동 치환 없음). 환자가 말한
+   * "두근거림"을 "심계"로 바꾸지 않기 위해 기록 전처리는 false 로 부른다 (사용자 결정 2026-10-11).
+   */
+  rewriteText?: boolean;
 }
 
 const MIN_FUZZY_CONFIDENCE = 0.74;
@@ -512,7 +517,7 @@ export async function normalizeTextWithTerms(
         ) === index
     );
 
-  const normalizedText = applyReplacements(normalizedInputText, allMatches);
+  const normalizedText = options.rewriteText === false ? normalizedInputText : applyReplacements(normalizedInputText, allMatches);
   const sectionHints = Array.from(new Set(allMatches.flatMap((match) => match.sectionHints))) as CareSection[];
 
   return {
