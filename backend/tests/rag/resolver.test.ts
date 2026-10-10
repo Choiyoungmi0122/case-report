@@ -24,15 +24,30 @@ async function run() {
   });
   assert.equal(deterministic.decision, 'USE_CANDIDATE');
 
+  // 뜻이 비슷한 매칭(semantic)은 같은 용어가 아니다. 묻지도 바꾸지도 않고 원문을 둔다 (2026-10-11).
   const ambiguous = await resolveRetrievedTerminology({
     original: '귀비',
     candidates: [makeCandidate('term_001', 0.81, 'semantic'), makeCandidate('term_002', 0.79, 'semantic')]
   });
-  assert.equal(ambiguous.decision, 'ASK_USER');
+  assert.equal(ambiguous.decision, 'KEEP_ORIGINAL');
+
+  let semanticResolverCalled = false;
+  const strongSemantic = await resolveRetrievedTerminology({
+    original: '가슴이',
+    candidates: [makeCandidate('term_001', 0.9, 'semantic')],
+    llmResolver: {
+      resolve: () => {
+        semanticResolverCalled = true;
+        return { decision: 'USE_CANDIDATE', selectedTermId: 'term_001', confidence: 0.9, reason: 'should not be used' };
+      }
+    }
+  });
+  assert.equal(strongSemantic.decision, 'KEEP_ORIGINAL');
+  assert.equal(semanticResolverCalled, false);
 
   const invalidSelection = await resolveRetrievedTerminology({
     original: '귀비',
-    candidates: [makeCandidate('term_001', 0.81, 'semantic'), makeCandidate('term_002', 0.79, 'semantic')],
+    candidates: [makeCandidate('term_001', 0.81, 'partial'), makeCandidate('term_002', 0.79, 'partial')],
     llmResolver: {
       resolve: () => ({
         decision: 'USE_CANDIDATE',
@@ -63,8 +78,8 @@ async function run() {
   assert.equal(resolverCalled, false);
 
   const llmFailureFallback = await resolveRetrievedTerminology({
-    original: 'ambiguous semantic',
-    candidates: [makeCandidate('term_001', 0.81, 'semantic'), makeCandidate('term_002', 0.79, 'semantic')],
+    original: 'ambiguous partial',
+    candidates: [makeCandidate('term_001', 0.81, 'partial'), makeCandidate('term_002', 0.79, 'partial')],
     llmResolver: {
       resolve: () => {
         throw new Error('resolver unavailable');

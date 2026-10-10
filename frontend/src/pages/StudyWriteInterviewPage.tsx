@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { caseApi, PendingTermConfirmation, StudyWriteInterviewResponse, StudyWriteQuestion } from '../services/api';
-import PendingTermConfirmationModal from '../components/PendingTermConfirmationModal';
+import TermReviewPanel from '../components/studyWrite/TermReviewPanel';
+import type { Visit } from '../services/api';
 import { getProcessStageMessage } from '../utils/uiLabels';
 import './StudyWriteInterviewPage.css';
 
@@ -40,6 +41,8 @@ export default function StudyWriteInterviewPage() {
   const [stopReason, setStopReason] = useState<string | null>(null);
   const [generationFailed, setGenerationFailed] = useState(false);
   const [pendingTerms, setPendingTerms] = useState<PendingTermConfirmation[]>([]);
+  // 전문용어 확인 화면에서 회차별 원문을 보여 주기 위한 방문 기록
+  const [visits, setVisits] = useState<Visit[]>([]);
   const [termModalOpen, setTermModalOpen] = useState(false);
   const [, setTick] = useState(0);
   const processingKicked = useRef(false);
@@ -138,6 +141,10 @@ export default function StudyWriteInterviewPage() {
     caseApi
       .getPendingTerms(caseId)
       .then((result) => setPendingTerms(result.items || []))
+      .catch(() => undefined);
+    caseApi
+      .getCase(caseId)
+      .then((caseData) => setVisits(((caseData as any).visits as Visit[] | undefined) || []))
       .catch(() => undefined);
   }, [caseId, data?.analysis.ready, data?.pendingTermCount]);
 
@@ -364,7 +371,7 @@ export default function StudyWriteInterviewPage() {
       </div>
 
       {caseId ? (
-        <PendingTermConfirmationModal
+        <TermReviewPanel
           caseId={caseId}
           isOpen={termModalOpen}
           onClose={() => setTermModalOpen(false)}
@@ -372,6 +379,8 @@ export default function StudyWriteInterviewPage() {
             setPendingTerms(result.pendingTermConfirmations || []);
           }}
           pendingTerms={pendingTerms}
+          visits={visits}
+          relativeDates={Boolean(data?.interview.inputSource?.relativeDates)}
         />
       ) : null}
     </div>

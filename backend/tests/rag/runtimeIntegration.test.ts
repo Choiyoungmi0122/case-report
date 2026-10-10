@@ -39,13 +39,14 @@ async function run() {
     }
   );
 
+  // 뜻 유사 매칭은 판정기까지 가지 않고 원문을 둔다. 사용자에게 묻는 항목도 만들지 않는다 (2026-10-11).
   assert.ok(semanticCalls > 0);
-  assert.ok(resolverCalls > 0);
-  assert.ok(
-    processed.pendingTermConfirmations.some(
-      (item) => item.surface.toLowerCase().includes('moodscore') && item.matchType === 'semantic'
-    )
+  assert.equal(resolverCalls, 0);
+  assert.equal(
+    processed.pendingTermConfirmations.some((item) => item.surface.toLowerCase().includes('moodscore')),
+    false
   );
+  assert.ok(processed.deidentifiedEMRs[0]?.deidentifiedText.includes('moodscore'));
 
   const fallback = await preprocessVisitsForChain1(
     [

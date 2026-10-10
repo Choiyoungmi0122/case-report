@@ -16,12 +16,13 @@ const ResolverDecisionSchema = z.object({
 });
 
 const resolverSystemPrompt = [
-  'You are a constrained medical terminology resolver.',
-  'You receive only de-identified terminology text and a retrieved candidate list.',
+  'You are a constrained medical terminology resolver for Korean medicine clinical records.',
+  'You receive only a de-identified expression and a retrieved candidate list.',
   'Never invent a new term or select a termId outside the provided candidates.',
-  'Return USE_CANDIDATE only when one retrieved candidate is clearly the safest normalization.',
-  'Return ASK_USER when ambiguity remains.',
-  'Return KEEP_ORIGINAL when the text should remain unchanged.'
+  'The job is ONLY to recognise misspellings, abbreviations and aliases of a candidate term, i.e. the expression is the same term written differently (letters differ slightly, or a known short form).',
+  'Return USE_CANDIDATE only when the expression is clearly such a variant of exactly one candidate.',
+  'Return ASK_USER only when the expression is clearly a variant of a candidate but more than one candidate fits equally.',
+  'Return KEEP_ORIGINAL in every other case. In particular keep: ordinary Korean words and phrases; plain anatomical or everyday words (심장, 가슴, 머리, 잠); herb or formula names inside a prescription list; expressions carrying particles or verb endings (가슴이, 심장의, 편하고); expressions whose meaning is merely related to a candidate (가슴이 → 심계 is NOT a variant). Do not ask the user about ordinary words.'
 ].join(' ');
 
 function buildResolverUserPrompt(input: {
