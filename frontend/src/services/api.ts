@@ -724,7 +724,14 @@ export interface StudyWriteImportedVisit {
 
 export type StudyWriteInspectResult =
   | { kind: 'xlsx'; fileName: string; sheets: StudyWriteInspectedSheet[] }
-  | { kind: 'docx'; fileName: string; text: string; visits: StudyWriteImportedVisit[]; splitBy: 'full_date' | 'month_day' | 'none' };
+  | {
+      kind: 'docx' | 'pdf';
+      fileName: string;
+      text: string;
+      visits: StudyWriteImportedVisit[];
+      splitBy: 'full_date' | 'month_day' | 'none';
+      warnings?: string[];
+    };
 
 export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped';
 
@@ -753,7 +760,7 @@ export interface StudyWriteRound {
 }
 
 export interface StudyWriteInputSource {
-  source: 'manual' | 'xlsx' | 'docx';
+  source: 'manual' | 'xlsx' | 'docx' | 'pdf';
   fileName?: string;
   visitCount: number;
 }

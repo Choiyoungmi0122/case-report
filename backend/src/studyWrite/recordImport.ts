@@ -1,4 +1,7 @@
 import mammoth from 'mammoth';
+// pdf-parse 에는 타입 선언이 없다. 쓰는 두 필드만 적는다.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse: (buffer: Buffer) => Promise<{ text: string; numpages: number }> = require('pdf-parse');
 import * as XLSX from 'xlsx';
 import { normalizeUnicodeText, normalizeUnicodeWhitespace } from '../utils/unicode';
 
@@ -34,7 +37,15 @@ export interface ImportedVisit {
 
 export type InspectResult =
   | { kind: 'xlsx'; fileName: string; sheets: InspectedSheet[] }
-  | { kind: 'docx'; fileName: string; text: string; visits: ImportedVisit[]; splitBy: 'full_date' | 'month_day' | 'none' };
+  | {
+      kind: 'docx' | 'pdf';
+      fileName: string;
+      text: string;
+      visits: ImportedVisit[];
+      splitBy: 'full_date' | 'month_day' | 'none';
+      /** pdf: 글자가 거의 없으면(스캔본) 알려 준다 */
+      warnings?: string[];
+    };
 
 const DATE_HEADER_ALIASES = ['date', 'datetime', 'visitdate', '날짜', '일자', '내원일', '진료일', '방문일', '시점', '일시'];
 
@@ -191,13 +202,39 @@ export async function inspectDocx(buffer: Buffer, fileName: string): Promise<Ins
   return { kind: 'docx', fileName, text, visits, splitBy };
 }
 
+/**
+ * 글자가 있는 PDF만 지원한다(스캔 이미지 PDF는 글자가 안 나온다). 한자, 괄호·대괄호
+ * 표기는 그대로 글자로 나오므로 문제없다. PDF 글꼴 때문에 한글이 깨지는 경우가 있어
+ * 화면 미리보기에서 확인하게 한다.
+ */
+export async function inspectPdf(buffer: Buffer, fileName: string): Promise<InspectResult> {
+  const parsed = await pdfParse(buffer);
+  const text = normalizeUnicodeWhitespace(parsed.text);
+  const warnings: string[] = [];
+  const letters = (text.match(/[가-힣A-Za-z0-9一-龥]/g) || []).length;
+  if (letters < 20) {
+    throw new Error('PDF에서 글자를 찾지 못했습니다. 스캔한 이미지 PDF는 지원하지 않습니다. 원본 문서(docx)나 엑셀로 올려 주세요.');
+  }
+  // 한글이 깨지면 자모가 낱자로 나오거나 치환 문자가 많이 나온다.
+  const broken = (text.match(/[\u3131-\u318E\uFFFD]/g) || []).length;
+  if (broken > letters * 0.05) {
+    warnings.push('PDF 글꼴 때문에 한글 일부가 깨졌을 수 있습니다. 넣기 전에 아래 미리보기를 확인하고, 깨졌으면 docx로 올려 주세요.');
+  }
+  if (parsed.numpages > 1) {
+    warnings.push(`${parsed.numpages}쪽을 읽었습니다. 쪽 머리글·바닥글(병원명, 쪽 번호)이 본문에 섞여 있을 수 있습니다.`);
+  }
+  const { visits, splitBy } = splitTextIntoVisits(text);
+  return { kind: 'pdf', fileName, text, visits, splitBy, warnings };
+}
+
 export async function inspectRecordFile(buffer: Buffer, fileName: string): Promise<InspectResult> {
   if (buffer.length > MAX_FILE_BYTES) {
     throw new Error('파일이 10MB를 넘습니다.');
   }
   if (/\.xlsx$/i.test(fileName)) return inspectWorkbook(buffer, fileName);
   if (/\.docx$/i.test(fileName)) return inspectDocx(buffer, fileName);
-  throw new Error('xlsx 또는 docx 파일만 올릴 수 있습니다.');
+  if (/\.pdf$/i.test(fileName)) return inspectPdf(buffer, fileName);
+  throw new Error('xlsx, docx, pdf 파일만 올릴 수 있습니다.');
 }
 
 /**

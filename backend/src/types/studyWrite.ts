@@ -119,7 +119,7 @@ export interface StudyWriteDraftGeneration {
 
 export interface StudyWriteState {
   version: 'study-write-v1';
-  inputSource?: { source: 'manual' | 'xlsx' | 'docx'; fileName?: string; visitCount: number } | null;
+  inputSource?: { source: 'manual' | 'xlsx' | 'docx' | 'pdf'; fileName?: string; visitCount: number } | null;
   questionBudget: StudyWriteQuestionBudget;
   rounds: StudyWriteRound[];
   /** 질의응답 단계가 시작된 시각 (1회차를 보여 준 때) */

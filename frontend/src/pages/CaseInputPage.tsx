@@ -736,7 +736,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   const [visits, setVisits] = useState<Visit[]>([createEmptyVisit()]);
   // 어떤 파일에서 기록을 가져왔는지. 사례를 만들 때 연구용 기록으로 같이 보낸다.
   const [uploadedRecordSource, setUploadedRecordSource] = useState<{
-    source: 'xlsx' | 'docx';
+    source: 'xlsx' | 'docx' | 'pdf';
     fileName: string;
     visitCount: number;
   } | null>(null);
@@ -922,7 +922,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   /** 올린 파일에서 만든 방문 목록을 입력 칸에 넣는다. 넣은 뒤에는 입력 칸에서 고칠 수 있다. */
   const handleApplyUploadedVisits = (
     imported: StudyWriteImportedVisit[],
-    source: 'xlsx' | 'docx',
+    source: 'xlsx' | 'docx' | 'pdf',
     fileName: string
   ) => {
     if (hasTextInput && !window.confirm('현재 입력 내용을 지우고 올린 파일의 기록으로 바꿀까요?')) {

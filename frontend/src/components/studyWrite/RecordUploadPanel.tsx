@@ -6,7 +6,7 @@ import './RecordUploadPanel.css';
 
 type RecordUploadPanelProps = {
   /** 만들어진 방문 목록을 입력 칸에 넣는다. */
-  onApplyVisits: (visits: StudyWriteImportedVisit[], source: 'xlsx' | 'docx', fileName: string) => void;
+  onApplyVisits: (visits: StudyWriteImportedVisit[], source: 'xlsx' | 'docx' | 'pdf', fileName: string) => void;
 };
 
 /**
@@ -26,7 +26,7 @@ export default function RecordUploadPanel({ onApplyVisits }: RecordUploadPanelPr
 
   const previewVisits = useMemo<StudyWriteImportedVisit[]>(() => {
     if (!result) return [];
-    if (result.kind === 'docx') return result.visits;
+    if (result.kind === 'docx' || result.kind === 'pdf') return result.visits;
     if (!sheet || textColumns.length === 0) return [];
     return buildVisitsFromSheet({ sheet, dateColumn, textColumns, mergeSameDate });
   }, [result, sheet, dateColumn, textColumns, mergeSameDate]);
@@ -69,12 +69,12 @@ export default function RecordUploadPanel({ onApplyVisits }: RecordUploadPanelPr
         <div>
           <h3 id="record-upload-title">기록 파일 올리기</h3>
           <p>
-            엑셀(xlsx) 또는 워드(docx) 파일을 올리면 방문별 기록으로 나눠 아래 입력 칸에 넣습니다. 올린 파일은 저장하지 않고,
-            분석 전에 환자 식별 정보는 가려집니다.
+            엑셀(xlsx), 워드(docx), 글자가 있는 PDF 파일을 올리면 방문별 기록으로 나눠 아래 입력 칸에 넣습니다. 스캔한 이미지
+            PDF는 읽지 못합니다. 올린 파일은 저장하지 않고, 분석 전에 환자 식별 정보는 가려집니다.
           </p>
         </div>
         <label className="record-upload__file">
-          <input type="file" accept=".xlsx,.docx" onChange={handleFile} disabled={inspecting} />
+          <input type="file" accept=".xlsx,.docx,.pdf" onChange={handleFile} disabled={inspecting} />
           {inspecting ? '읽는 중…' : '파일 선택'}
         </label>
       </div>
@@ -154,8 +154,13 @@ export default function RecordUploadPanel({ onApplyVisits }: RecordUploadPanelPr
         </div>
       ) : null}
 
-      {result?.kind === 'docx' ? (
+      {result?.kind === 'docx' || result?.kind === 'pdf' ? (
         <div className="record-upload__mapping">
+          {result.warnings?.map((warning) => (
+            <p key={warning} className="record-upload__warning">
+              {warning}
+            </p>
+          ))}
           <p>
             {result.splitBy === 'none'
               ? '날짜가 적힌 줄을 찾지 못해 한 방문으로 넣습니다. 넣은 뒤 "방문 추가"로 나눌 수 있습니다.'
@@ -180,6 +185,12 @@ export default function RecordUploadPanel({ onApplyVisits }: RecordUploadPanelPr
               방문 기록으로 넣기
             </button>
           </div>
+          {result.kind === 'pdf' ? (
+            <details className="record-upload__rawtext">
+              <summary>PDF에서 읽은 글 전체 보기 (깨진 글자가 없는지 확인)</summary>
+              <pre>{result.text.slice(0, 6000)}{result.text.length > 6000 ? ' …' : ''}</pre>
+            </details>
+          ) : null}
           {previewVisits.slice(0, 2).map((visit, index) => (
             <div key={index} className="record-upload__visit">
               <span>{visit.date ? visit.date.replace('T', ' ') : '날짜 없음'}</span>
