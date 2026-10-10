@@ -30,9 +30,10 @@ function normalizeScaffoldExperimentCode(value: string) {
 export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
   const navigate = useNavigate();
   const [participantCode, setParticipantCode] = useState(() => getStoredParticipantCode(mode));
-  const [studyGroup, setStudyGroup] = useState<'expert' | 'novice' | ''>('');
-  const [phase, setPhase] = useState<'pilot' | 'main' | 'followup' | ''>('main');
-  const [sessionNo, setSessionNo] = useState('1');
+  // 실험용 Write 참여자는 모두 전문가(본 실험, 1회차)라 화면에서 고르지 않고 고정한다.
+  const studyGroup = 'expert';
+  const phase = 'main';
+  const sessionNo = '1';
   const [participationMode, setParticipationMode] = useState<'online' | 'offline' | ''>('');
   const [error, setError] = useState<string | null>(null);
 
@@ -78,11 +79,6 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
       return;
     }
 
-    if (!isScaffold && !studyGroup) {
-      setError('연구 그룹을 선택해 주세요.');
-      return;
-    }
-
     if (!participationMode) {
       setError('참여 방식을 선택해 주세요.');
       return;
@@ -119,7 +115,7 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
           type="text"
           value={participantCode}
           onChange={(event) => setParticipantCode(event.target.value)}
-          placeholder={isScaffold ? '예: T01, 홍길동, 홍길동 1' : '예: E01'}
+          placeholder={isScaffold ? '예: T01, 홍길동, 홍길동 1' : '예: E01, 홍길동'}
           style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #c8d2dd', marginBottom: 12 }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -129,44 +125,15 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
         />
 
         <div style={{ display: 'grid', gap: 10, margin: '8px 0 14px' }}>
-          {!isScaffold ? (
-            <>
-              <label style={styles.fieldLabel}>Study group</label>
-              <select value={studyGroup} onChange={(event) => setStudyGroup(event.target.value as any)} style={styles.select}>
-                <option value="">Unset</option>
-                <option value="novice">novice</option>
-                <option value="expert">expert</option>
-              </select>
-              <label style={styles.fieldLabel}>Phase</label>
-              <select value={phase} onChange={(event) => setPhase(event.target.value as any)} style={styles.select}>
-                <option value="">Unset</option>
-                <option value="pilot">pilot</option>
-                <option value="main">main</option>
-                <option value="followup">followup</option>
-              </select>
-            </>
-          ) : null}
-          {!isScaffold ? (
-            <>
-              <label style={styles.fieldLabel}>Session No.</label>
-              <input
-                type="number"
-                min={1}
-                value={sessionNo}
-                onChange={(event) => setSessionNo(event.target.value)}
-                style={styles.select}
-              />
-            </>
-          ) : null}
-          <label style={styles.fieldLabel}>Participation mode</label>
+          <label style={styles.fieldLabel}>참여 방식</label>
           <select
             value={participationMode}
             onChange={(event) => setParticipationMode(event.target.value as any)}
             style={styles.select}
           >
-            <option value="">Unset</option>
-            <option value="offline">offline</option>
-            <option value="online">online</option>
+            <option value="">선택</option>
+            <option value="offline">대면</option>
+            <option value="online">온라인</option>
           </select>
         </div>
 
