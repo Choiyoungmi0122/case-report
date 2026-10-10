@@ -571,11 +571,14 @@ function normalizeStudyMetadata(raw: any) {
       ? raw.participationMode
       : undefined;
   const sessionNo = Number(raw.sessionNo);
+  // 실험용 Write 참여자의 전문 분야 (자유 문자열, 64자까지)
+  const specialty = typeof raw.specialty === 'string' ? raw.specialty.trim().slice(0, 64) : '';
   return {
     ...(studyGroup ? { studyGroup } : {}),
     ...(phase ? { phase } : {}),
     ...(Number.isFinite(sessionNo) && sessionNo > 0 ? { sessionNo } : {}),
-    ...(participationMode ? { participationMode } : {})
+    ...(participationMode ? { participationMode } : {}),
+    ...(specialty ? { specialty } : {})
   };
 }
 

@@ -93,7 +93,20 @@ export interface StudyMetadata {
   phase?: 'pilot' | 'main' | 'followup';
   sessionNo?: number;
   participationMode?: 'online' | 'offline';
+  /** 실험용 Write 참여자의 전문 분야 */
+  specialty?: string;
 }
+
+export const STUDY_WRITE_SPECIALTIES = [
+  '비만(다이어트)',
+  '한방부인과·소아과',
+  '한방내과',
+  '한방신경정신과',
+  '한방안이비인후피부과',
+  '침구의학과',
+  '근골격계·퇴행성척추질환'
+] as const;
+
 
 export interface VersionMetadata {
   appVersion?: string;

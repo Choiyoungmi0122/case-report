@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CaseMode } from '../services/api';
+import { CaseMode, STUDY_WRITE_SPECIALTIES } from '../services/api';
 import {
   getStoredParticipantCode,
   resetResearchSession,
@@ -35,6 +35,7 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
   const phase = 'main';
   const sessionNo = '1';
   const [participationMode, setParticipationMode] = useState<'online' | 'offline' | ''>('');
+  const [specialty, setSpecialty] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const isScaffold = mode === 'scaffold';
@@ -55,7 +56,8 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
           !isScaffold && Number.isFinite(parsedSessionNo) && parsedSessionNo > 0
             ? parsedSessionNo
             : undefined,
-        participationMode: participationMode || undefined
+        participationMode: participationMode || undefined,
+        specialty: isScaffold ? undefined : specialty || undefined
       }
     };
 
@@ -76,6 +78,11 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
 
     if (isScaffold && !normalizedScaffoldCode) {
       setError('실험번호는 SQ005, SQ-005, test-01처럼 영문, 숫자, 하이픈, 언더스코어로 입력해 주세요.');
+      return;
+    }
+
+    if (!isScaffold && !specialty) {
+      setError('전문 분야를 선택해 주세요.');
       return;
     }
 
@@ -125,6 +132,19 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
         />
 
         <div style={{ display: 'grid', gap: 10, margin: '8px 0 14px' }}>
+          {!isScaffold ? (
+            <>
+              <label style={styles.fieldLabel}>전문 분야</label>
+              <select value={specialty} onChange={(event) => setSpecialty(event.target.value)} style={styles.select}>
+                <option value="">선택</option>
+                {STUDY_WRITE_SPECIALTIES.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : null}
           <label style={styles.fieldLabel}>참여 방식</label>
           <select
             value={participationMode}

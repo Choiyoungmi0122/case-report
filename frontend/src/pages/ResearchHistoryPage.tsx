@@ -432,6 +432,9 @@ export default function ResearchHistoryPage() {
                     <dd style={styles.metaValue}>{formatValue(exportData.versionMetadata?.appVersion)} / {formatValue(exportData.versionMetadata?.scaffoldVersion)}</dd>
                   </div>
                   <div style={styles.metaItem}><dt style={styles.metaLabel}>사례 버전</dt><dd style={styles.metaValue}>{formatValue(exportData.versionMetadata?.caseVersion)}</dd></div>
+                  {exportData.studyMetadata?.specialty ? (
+                    <div style={styles.metaItem}><dt style={styles.metaLabel}>전문 분야</dt><dd style={styles.metaValue}>{exportData.studyMetadata.specialty}</dd></div>
+                  ) : null}
                   <div style={styles.metaItem}>
                     <dt style={styles.metaLabel}>연구 집단 / 단계 / 회차</dt>
                     <dd style={styles.metaValue}>{formatValue(exportData.studyMetadata?.studyGroup)} / {formatValue(exportData.studyMetadata?.phase)} / {formatValue(exportData.studyMetadata?.sessionNo)}</dd>

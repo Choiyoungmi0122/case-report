@@ -74,6 +74,8 @@ export interface StudyMetadata {
   phase?: 'pilot' | 'main' | 'followup';
   sessionNo?: number;
   participationMode?: 'online' | 'offline';
+  /** 실험용 Write 참여자의 전문 분야 */
+  specialty?: string;
 }
 
 export interface VersionMetadata {
