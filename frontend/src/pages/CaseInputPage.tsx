@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Case, caseApi, CaseMode, Visit } from '../services/api';
+import { Case, caseApi, CaseMode, StudyWriteImportedVisit, Visit } from '../services/api';
+import RecordUploadPanel from '../components/studyWrite/RecordUploadPanel';
 import { getReviewRequiredDescription, getReviewRequiredTitle } from '../utils/caseStatusUi';
 import { getProcessStageMessage } from '../utils/uiLabels';
 import {
@@ -61,6 +62,8 @@ type VisitsEditorProps = {
   onAddVisit: () => void;
   onUpdateVisit: (index: number, field: keyof Visit, value: string) => void;
   onRemoveVisit: (index: number) => void;
+  /** 실험용 Write에서만 쓰는 기록 파일 올리기 패널 */
+  uploadPanel?: React.ReactNode;
 };
 
 type ReviewRequiredPanelProps = {
@@ -117,6 +120,7 @@ type InputTabContentProps = {
   onSubmit: () => void;
   onDelete: () => void;
   formatDate: (dateString: string) => string;
+  uploadPanel?: React.ReactNode;
 };
 
 type HistoryTabContentProps = {
@@ -257,7 +261,8 @@ function VisitsEditor({
   onLoadStudyCase,
   onAddVisit,
   onUpdateVisit,
-  onRemoveVisit
+  onRemoveVisit,
+  uploadPanel
 }: VisitsEditorProps) {
   return (
     <div className="visits-section">
@@ -280,6 +285,7 @@ function VisitsEditor({
           </button>
         </div>
       </div>
+      {uploadPanel}
 
       <div className="field-group" style={{ marginBottom: 16 }}>
         <label>증례 제목</label>
@@ -541,6 +547,7 @@ function InputTabContent({
   onSelectDraft,
   onShowSaveDraftModal,
   onSubmit,
+  uploadPanel,
   onDelete,
   formatDate
 }: InputTabContentProps) {
@@ -561,6 +568,7 @@ function InputTabContent({
         onAddVisit={onAddVisit}
         onUpdateVisit={onUpdateVisit}
         onRemoveVisit={onRemoveVisit}
+        uploadPanel={uploadPanel}
       />
 
       {error ? <div className="error-message">{error}</div> : null}
@@ -726,6 +734,12 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   const pageCopy = useMemo(() => getPageCopy(mode), [mode]);
 
   const [visits, setVisits] = useState<Visit[]>([createEmptyVisit()]);
+  // 어떤 파일에서 기록을 가져왔는지. 사례를 만들 때 연구용 기록으로 같이 보낸다.
+  const [uploadedRecordSource, setUploadedRecordSource] = useState<{
+    source: 'xlsx' | 'docx';
+    fileName: string;
+    visitCount: number;
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -902,6 +916,27 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
     } catch (nextError: any) {
       setError(nextError.message || '실험 사례를 불러오지 못했습니다.');
     }
+  };
+
+  /** 올린 파일에서 만든 방문 목록을 입력 칸에 넣는다. 넣은 뒤에는 입력 칸에서 고칠 수 있다. */
+  const handleApplyUploadedVisits = (
+    imported: StudyWriteImportedVisit[],
+    source: 'xlsx' | 'docx',
+    fileName: string
+  ) => {
+    if (hasTextInput && !window.confirm('현재 입력 내용을 지우고 올린 파일의 기록으로 바꿀까요?')) {
+      return;
+    }
+    setError(null);
+    setVisits(
+      imported.map((visit, index) => ({
+        type: (index === 0 ? '초진' : '재진') as '초진' | '재진',
+        date: visit.date || new Date().toISOString().slice(0, 16),
+        soapText: visit.soapText
+      }))
+    );
+    setCurrentDraftCaseId(null);
+    setUploadedRecordSource({ source, fileName, visitCount: imported.length });
   };
 
   const handleCaseClick = (caseItem: Case) => {
@@ -1205,6 +1240,19 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
               void loadDraftCases();
             }}
             onLoadStudyCase={() => void handleLoadStudyCase()}
+            uploadPanel={
+              mode === 'write' && researchMode ? (
+                <>
+                  <RecordUploadPanel onApplyVisits={handleApplyUploadedVisits} />
+                  {uploadedRecordSource ? (
+                    <p className="record-upload__applied">
+                      "{uploadedRecordSource.fileName}"에서 방문 {uploadedRecordSource.visitCount}개를 가져왔습니다. 아래에서 날짜와
+                      내용을 확인하고 고칠 수 있습니다.
+                    </p>
+                  ) : null}
+                </>
+              ) : undefined
+            }
             onAddVisit={addVisit}
             onUpdateVisit={updateVisit}
             onRemoveVisit={removeVisit}

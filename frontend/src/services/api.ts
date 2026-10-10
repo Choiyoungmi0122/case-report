@@ -708,6 +708,24 @@ export interface TimelineImportResponse {
   finalDraft?: FinalDraft | null;
 }
 
+export interface StudyWriteInspectedSheet {
+  name: string;
+  headers: string[];
+  rows: string[][];
+  rowCount: number;
+  truncated: boolean;
+  guessedDateColumn: number;
+}
+
+export interface StudyWriteImportedVisit {
+  date: string;
+  soapText: string;
+}
+
+export type StudyWriteInspectResult =
+  | { kind: 'xlsx'; fileName: string; sheets: StudyWriteInspectedSheet[] }
+  | { kind: 'docx'; fileName: string; text: string; visits: StudyWriteImportedVisit[]; splitBy: 'full_date' | 'month_day' | 'none' };
+
 export interface ScaffoldMemoSuggestion {
   id: string;
   visitIndex: number;
@@ -1331,6 +1349,18 @@ export const caseApi = {
       blob: response.data,
       fileName: parseDownloadFileName(disposition, `case_${caseId}_${mode}_${layout}.docx`)
     };
+  },
+
+  /** 실험용 Write: 올린 xlsx/docx 의 내용을 읽어 온다. 파일은 서버에 남지 않는다. */
+  inspectStudyWriteFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post<StudyWriteInspectResult>('/study-write/inspect', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
   },
 
   importTimelineExcel: async (caseId: string, file: File) => {

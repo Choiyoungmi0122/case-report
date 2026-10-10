@@ -11,6 +11,7 @@ import manuscriptReviewRouter from './routes/manuscriptReview';
 import researchRouter from './routes/research';
 import scaffoldRouter from './routes/scaffold';
 import sectionsRouter from './routes/sections';
+import studyWriteRouter from './routes/studyWrite';
 
 const app = express();
 const HOST = process.env.HOST || '0.0.0.0';
@@ -49,6 +50,7 @@ app.use('/api/cases', casesRouter);
 app.use('/api/cases', sectionsRouter);
 app.use('/api/cases', scaffoldRouter);
 app.use('/api/research', researchRouter);
+app.use('/api/study-write', studyWriteRouter);
 app.use('/api/manuscript-review', manuscriptReviewRouter);
 
 app.get('/health', (_req, res) => {

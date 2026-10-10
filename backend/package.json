@@ -33,7 +33,8 @@
     "test:privacy-gate": "tsx tests/privacy/highRiskGate.test.ts",
     "test:privacy-clinical": "tsx tests/privacy/clinicalTermFalsePositive.test.ts",
     "test:privacy-render": "tsx tests/privacy/publicationRenderer.test.ts",
-    "test:privacy-docx": "tsx tests/privacy/docxPlaceholders.test.ts"
+    "test:privacy-docx": "tsx tests/privacy/docxPlaceholders.test.ts",
+    "test:study-write": "tsx tests/studyWrite/recordImport.test.ts"
   },
   "keywords": [],
   "author": "",
