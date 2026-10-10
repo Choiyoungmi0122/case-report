@@ -2385,7 +2385,30 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error creating case:', error);
     if (error?.code === 11000 && error?.keyPattern?.experiment_code) {
-      return res.status(409).json({ error: 'This experiment code is already in use.' });
+      // 같은 코드로 만든 사례가 있으면 어디서 이어서 할지 같이 알려 준다.
+      const code = String(error?.keyValue?.experiment_code || req.body?.experimentCode || req.body?.metadata?.experimentCode || '');
+      const existing: any = code
+        ? (await caseModel.getAllCases()).find((item: any) => String(item.experiment_code || '').toUpperCase() === code.toUpperCase())
+        : null;
+      const studyWrite = existing?.studyWrite;
+      const resumeStage = !existing
+        ? null
+        : existing.mode === 'scaffold'
+          ? 'scaffold'
+          : studyWrite?.submittedAt || studyWrite?.answersLockedAt
+            ? 'final'
+            : studyWrite?.sections && Object.keys(studyWrite.sections).length > 0
+              ? 'draft'
+              : studyWrite
+                ? 'interview'
+                : 'overview';
+      return res.status(409).json({
+        error: `"${code}"는 이미 쓴 코드입니다. 이어서 하거나, 새로 시작하려면 다른 코드(예: ${code} 2)를 쓰세요.`,
+        duplicateExperimentCode: code,
+        existingCaseId: existing?.id || null,
+        existingMode: existing?.mode || null,
+        resumeStage
+      });
     }
     res.status(500).json({
       error: error.message || 'Failed to create case',

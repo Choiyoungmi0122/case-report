@@ -121,6 +121,8 @@ type InputTabContentProps = {
   onDelete: () => void;
   formatDate: (dateString: string) => string;
   uploadPanel?: React.ReactNode;
+  duplicateCase?: { caseId: string; code: string; resumeStage: string | null; mode: string | null } | null;
+  onResumeDuplicate?: () => void;
 };
 
 type HistoryTabContentProps = {
@@ -549,6 +551,8 @@ function InputTabContent({
   onShowSaveDraftModal,
   onSubmit,
   uploadPanel,
+  duplicateCase,
+  onResumeDuplicate,
   onDelete,
   formatDate
 }: InputTabContentProps) {
@@ -572,7 +576,16 @@ function InputTabContent({
         uploadPanel={uploadPanel}
       />
 
-      {error ? <div className="error-message">{error}</div> : null}
+      {error ? (
+        <div className="error-message">
+          {error}
+          {duplicateCase ? (
+            <button type="button" className="btn-load-draft" style={{ marginLeft: 12 }} onClick={onResumeDuplicate}>
+              "{duplicateCase.code}" 이어서 하기
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {blockedCase ? (
         <ReviewRequiredPanel blockedCase={blockedCase} onOpenCase={onOpenBlockedCase} />
@@ -759,6 +772,31 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   // 연구 세션(/study/*)에서만 참가자 코드/세션 ID를 사용한다. 일반 사용자는 입력하지 않는다.
   const researchMode = isResearchRoute(location.pathname);
   const routeStudyMetadata = (location.state as any)?.studyMetadata;
+  // 같은 코드로 만든 사례가 이미 있을 때 이어서 갈 곳
+  const [duplicateCase, setDuplicateCase] = useState<{
+    caseId: string;
+    code: string;
+    resumeStage: string | null;
+    mode: string | null;
+  } | null>(null);
+  const resumeDuplicate = () => {
+    if (!duplicateCase) return;
+    const { caseId, resumeStage, mode: existingMode } = duplicateCase;
+    if (existingMode === 'scaffold') {
+      navigate(`/study/scaffold/cases/${caseId}`);
+      return;
+    }
+    const path =
+      resumeStage === 'final'
+        ? `/study/write/cases/${caseId}/final`
+        : resumeStage === 'draft'
+          ? `/study/write/cases/${caseId}/draft`
+          : resumeStage === 'interview'
+            ? `/study/write/cases/${caseId}/interview`
+            : `/study/write/cases/${caseId}`;
+    navigate(path);
+  };
+
   // 실험 사례 목록 (Write 실험). 가상환자 + 전문가 기록 프리셋
   const [presets, setPresets] = useState<StudyWritePresetSummary[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState('');
@@ -1054,6 +1092,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   const saveDraft = async () => {
     setError(null);
     setBlockedCase(null);
+    setDuplicateCase(null);
     setIsSaving(true);
 
     try {
@@ -1136,6 +1175,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
   const submitForProcessing = async () => {
     setError(null);
     setBlockedCase(null);
+    setDuplicateCase(null);
     setIsSubmitting(true);
 
     try {
@@ -1222,8 +1262,17 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
       navigate(getOverviewPath(mode, caseId, researchMode));
     } catch (nextError: any) {
       const blockedCaseId = nextError?.response?.data?.caseId;
+      const duplicate = nextError?.response?.data?.existingCaseId ? nextError.response.data : null;
 
-      if (blockedCaseId && nextError?.response?.status === 409) {
+      if (duplicate && nextError?.response?.status === 409) {
+        setDuplicateCase({
+          caseId: duplicate.existingCaseId,
+          code: duplicate.duplicateExperimentCode,
+          resumeStage: duplicate.resumeStage,
+          mode: duplicate.existingMode
+        });
+        setError(duplicate.error || '이미 쓴 코드입니다.');
+      } else if (blockedCaseId && nextError?.response?.status === 409) {
         try {
           const caseResult = await caseApi.getCase(blockedCaseId);
           setBlockedCase(caseResult);
@@ -1305,6 +1354,8 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
               void loadDraftCases();
             }}
             onLoadStudyCase={() => void handleLoadStudyCase()}
+            duplicateCase={duplicateCase}
+            onResumeDuplicate={resumeDuplicate}
             uploadPanel={
               mode === 'write' && researchMode ? (
                 <>
