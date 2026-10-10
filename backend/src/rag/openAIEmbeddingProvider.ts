@@ -1,5 +1,6 @@
 import { assertOutboundTextsAreSafe } from '../deid/outbound';
 import { getOpenAIClient, hasOpenAIApiKey } from '../llm/client';
+import { appendUsageLog } from '../llm/usageLog';
 import { EmbeddingProvider } from './semantic';
 
 const DEFAULT_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
@@ -21,6 +22,14 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     const response = await getOpenAIClient().embeddings.create({
       model: this.model,
       input: texts
+    });
+    appendUsageLog({
+      kind: 'embedding',
+      label: 'RAG embedding',
+      model: this.model,
+      inputs: texts.length,
+      promptTokens: response.usage?.prompt_tokens,
+      totalTokens: response.usage?.total_tokens
     });
 
     return response.data

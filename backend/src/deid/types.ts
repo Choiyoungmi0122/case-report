@@ -71,8 +71,10 @@ export interface DeidOptions {
   /**
    * Export rechecks skip the broad surname-shaped name rule because pipeline
    * output is already de-identified and ordinary words can match that rule.
+   * anonymized_record: 참여자가 이미 이름을 지운 기록(실험용 Write). 표지가 분명한
+   * 이름 규칙만 쓴다 (rules.ts PATIENT_NAME_REGEXES_ANONYMIZED_RECORD).
    */
-  detectionProfile?: 'full' | 'research_export';
+  detectionProfile?: 'full' | 'research_export' | 'anonymized_record';
   sharedContext?: DeidReplacementContext;
   /**
    * Identifiers confirmed in OTHER visits of the same case. A follow-up note

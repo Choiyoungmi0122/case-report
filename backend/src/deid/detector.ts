@@ -8,6 +8,8 @@ import {
   HOSPITAL_REGEXES,
   PATIENT_ID_REGEXES,
   PATIENT_NAME_REGEXES,
+  PATIENT_NAME_REGEXES_ANONYMIZED_RECORD,
+  GENERIC_FACILITY_WORDS,
   PHONE_REGEX,
   RESIDENT_ID_REGEX
 } from './rules';
@@ -110,7 +112,11 @@ function detectByRegex(
   return matches;
 }
 
-function detectHospitals(text: string, protectedRanges: ProtectedRange[]): PHISpan[] {
+function detectHospitals(
+  text: string,
+  protectedRanges: ProtectedRange[],
+  detectionProfile?: DeidOptions['detectionProfile']
+): PHISpan[] {
   const spans: PHISpan[] = [];
 
   for (const hospital of DEFAULT_HOSPITAL_DICTIONARY) {
@@ -134,6 +140,8 @@ function detectHospitals(text: string, protectedRanges: ProtectedRange[]): PHISp
 
   for (const regex of HOSPITAL_REGEXES) {
     for (const span of detectByRegex(text, regex, 'HOSPITAL', 0.88, protectedRanges)) {
+      // 이미 비식별된 기록: "한의원", "타병원"처럼 기관 이름이 없는 일반 단어는 둔다.
+      if (detectionProfile === 'anonymized_record' && GENERIC_FACILITY_WORDS.has(span.originalText.trim())) continue;
       pushSpan(spans, span, protectedRanges);
     }
   }
@@ -349,9 +357,11 @@ export async function detectPHI(text: string, options: DeidOptions = {}): Promis
   }
 
   const patientNameRegexes =
-    options.detectionProfile === 'research_export'
-      ? PATIENT_NAME_REGEXES.slice(1)
-      : PATIENT_NAME_REGEXES;
+    options.detectionProfile === 'anonymized_record'
+      ? PATIENT_NAME_REGEXES_ANONYMIZED_RECORD
+      : options.detectionProfile === 'research_export'
+        ? PATIENT_NAME_REGEXES.slice(1)
+        : PATIENT_NAME_REGEXES;
 
   for (const regex of patientNameRegexes) {
     const candidates = detectByRegex(text, regex, 'PATIENT_NAME', 0.9, protectedRanges, 1);
@@ -372,7 +382,7 @@ export async function detectPHI(text: string, options: DeidOptions = {}): Promis
     spans.push(...detectByRegex(text, regex, 'ADDRESS', 0.88, protectedRanges));
   }
 
-  spans.push(...detectHospitals(text, protectedRanges));
+  spans.push(...detectHospitals(text, protectedRanges, options.detectionProfile));
 
   if (options.entityProvider) {
     const entitySpans = await Promise.resolve(options.entityProvider.detect(text, preserveTerms));

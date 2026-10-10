@@ -133,7 +133,8 @@ function createResearchSanitizer(caseData: any): ResearchSanitizer {
     const result = await deidentifyEMR(source, {
       sharedContext,
       knownIdentifiers,
-      detectionProfile: 'research_export',
+      // 실험용 Write 사례는 참여자가 이름을 지운 기록이라 표지가 분명한 이름 규칙만 쓴다.
+      detectionProfile: caseData?.studyWrite ? 'anonymized_record' : 'research_export',
       // 실험용 Write 사례는 날짜를 가리지 않는다.
       dateMode: caseData?.studyWrite ? 'KEEP' : undefined,
       preserveTerms: Array.from(new Set(source.match(PLACEHOLDER_PATTERN) || []))

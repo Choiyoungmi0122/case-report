@@ -116,6 +116,19 @@ async function run() {
   assert.ok(shared[1]?.deidentifiedText.includes('[PATIENT_NAME_1]'));
   assert.ok(shared[1]?.deidentifiedText.includes('[HOSPITAL_1]'));
 
+  // 이미 비식별된 기록(실험용 Write): 약재·일반 단어·병명·일반 시설 단어는 두고, 표지가 분명한 이름만 가린다.
+  const anonymized = await deidentifyEMR(
+    `첫 기록일. 백두구 6, 오미자 8. 발작성 심방세동 환자에게 설명하였다. 한의원 올라오는 계단에서 두근거림. 타병원에서 홀터 검사 예정. 환자명: ${PATIENT_NAME}`,
+    { detectionProfile: 'anonymized_record', dateMode: 'KEEP' }
+  );
+  assert.ok(anonymized.deidentifiedText.includes('첫 기록일'));
+  assert.ok(anonymized.deidentifiedText.includes('백두구 6, 오미자 8'));
+  assert.ok(anonymized.deidentifiedText.includes('심방세동 환자에게'));
+  assert.ok(anonymized.deidentifiedText.includes('한의원 올라오는'));
+  assert.ok(anonymized.deidentifiedText.includes('타병원에서'));
+  assert.ok(anonymized.deidentifiedText.includes('[PATIENT_NAME_1]'));
+  assert.ok(!anonymized.deidentifiedText.includes(PATIENT_NAME));
+
   console.log('deid tests passed');
 }
 

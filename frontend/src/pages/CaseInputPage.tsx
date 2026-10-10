@@ -43,6 +43,8 @@ type PageHeaderProps = {
   pageCopy: PageCopy;
   homePath: string;
   onSelectMode: () => void;
+  /** 실험용 Write: 실험에 없는 기능(기존 Word 원고 검토)은 숨긴다 */
+  hideReview?: boolean;
   onGoHome: () => void;
   onOpenReview: () => void;
 };
@@ -208,7 +210,8 @@ function PageHeader({
   pageCopy,
   onSelectMode,
   onGoHome,
-  onOpenReview
+  onOpenReview,
+  hideReview
 }: PageHeaderProps) {
   return (
     <div className="header">
@@ -233,9 +236,11 @@ function PageHeader({
         <button type="button" className="btn-load-draft" onClick={onGoHome}>
           {pageCopy.homeLabel}
         </button>
-        <button type="button" className="btn-load-draft" onClick={onOpenReview}>
-          기존 Word 원고 검토
-        </button>
+        {!hideReview ? (
+          <button type="button" className="btn-load-draft" onClick={onOpenReview}>
+            기존 Word 원고 검토
+          </button>
+        ) : null}
       </div>
       <h1>{pageCopy.heading}</h1>
       {isScaffold ? (
@@ -277,12 +282,14 @@ function VisitsEditor({
               실험 사례 불러오기
             </button>
           ) : null}
-          <button
-            onClick={onOpenDrafts}
-            className="btn-load-draft"
-          >
-            임시 저장 불러오기
-          </button>
+          {!uploadPanel ? (
+            <button
+              onClick={onOpenDrafts}
+              className="btn-load-draft"
+            >
+              임시 저장 불러오기
+            </button>
+          ) : null}
           <button onClick={onAddVisit} className="btn-add-visit">
             + 방문 추가
           </button>
@@ -290,15 +297,17 @@ function VisitsEditor({
       </div>
       {uploadPanel}
 
-      <div className="field-group" style={{ marginBottom: 16 }}>
-        <label>증례 제목</label>
-        <input
-          type="text"
-          value={draftTitle}
-          onChange={(event) => onDraftTitleChange(event.target.value)}
-          placeholder={titlePlaceholder}
-        />
-      </div>
+      {!uploadPanel ? (
+        <div className="field-group" style={{ marginBottom: 16 }}>
+          <label>증례 제목</label>
+          <input
+            type="text"
+            value={draftTitle}
+            onChange={(event) => onDraftTitleChange(event.target.value)}
+            placeholder={titlePlaceholder}
+          />
+        </div>
+      ) : null}
 
       {researchMode ? (
         <div className="case-input-meta-grid" style={{ marginBottom: 16 }}>
@@ -311,10 +320,12 @@ function VisitsEditor({
               placeholder="예: E01"
             />
           </div>
-          <div className="field-group">
-            <label>세션 ID</label>
-            <input type="text" value={sessionId} readOnly />
-          </div>
+          {!uploadPanel ? (
+            <div className="field-group">
+              <label>세션 ID</label>
+              <input type="text" value={sessionId} readOnly />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -612,13 +623,15 @@ function InputTabContent({
       ) : null}
 
       <div className="actions">
-        <button
-          onClick={onShowSaveDraftModal}
-          disabled={isSaving || isSubmitting}
-          className="btn-save-draft"
-        >
-          임시 저장
-        </button>
+        {!uploadPanel ? (
+          <button
+            onClick={onShowSaveDraftModal}
+            disabled={isSaving || isSubmitting}
+            className="btn-save-draft"
+          >
+            임시 저장
+          </button>
+        ) : null}
         <button
           onClick={onSubmit}
           disabled={isSubmitting || isSaving}
@@ -626,13 +639,15 @@ function InputTabContent({
         >
           {isSubmitting ? '처리 시작 중...' : pageCopy.submitLabel}
         </button>
-        <button
-          onClick={onDelete}
-          disabled={!hasTextInput || isSaving || isSubmitting}
-          className="btn-delete-action"
-        >
-          삭제
-        </button>
+        {!uploadPanel ? (
+          <button
+            onClick={onDelete}
+            disabled={!hasTextInput || isSaving || isSubmitting}
+            className="btn-delete-action"
+          >
+            삭제
+          </button>
+        ) : null}
       </div>
     </>
   );
@@ -791,9 +806,8 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
         ? `/study/write/cases/${caseId}/final`
         : resumeStage === 'draft'
           ? `/study/write/cases/${caseId}/draft`
-          : resumeStage === 'interview'
-            ? `/study/write/cases/${caseId}/interview`
-            : `/study/write/cases/${caseId}`;
+          // 그 밖(질의응답 중이거나 아직 시작 전)은 질의응답 화면. 옛 개요 화면은 쓰지 않는다.
+          : `/study/write/cases/${caseId}/interview`;
     navigate(path);
   };
 
@@ -1264,7 +1278,13 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
       const blockedCaseId = nextError?.response?.data?.caseId;
       const duplicate = nextError?.response?.data?.existingCaseId ? nextError.response.data : null;
 
-      if (duplicate && nextError?.response?.status === 409) {
+      if (duplicate && nextError?.response?.status === 409 && duplicate.existingMode && duplicate.existingMode !== mode) {
+        // 다른 실험(예: Scaffold)에서 쓴 코드. 그쪽 화면으로 이어 가면 안 되므로 다른 코드를 쓰게 한다.
+        const otherLabel = duplicate.existingMode === 'scaffold' ? 'Scaffold' : 'Write';
+        setError(
+          `"${duplicate.duplicateExperimentCode}"는 ${otherLabel} 실험에서 이미 쓴 코드입니다. 다른 코드(예: ${duplicate.duplicateExperimentCode} 2)를 쓰세요.`
+        );
+      } else if (duplicate && nextError?.response?.status === 409) {
         setDuplicateCase({
           caseId: duplicate.existingCaseId,
           code: duplicate.duplicateExperimentCode,
@@ -1312,6 +1332,7 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
           onSelectMode={() => navigate('/')}
           onGoHome={() => navigate(getHomePath(mode, researchMode))}
           onOpenReview={() => navigate('/manuscript-review')}
+          hideReview={mode === 'write' && researchMode}
         />
 
         <div className="main-tab-menu">
@@ -1321,12 +1342,15 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
           >
             입력
           </button>
-          <button
-            className={`main-tab-item ${mainTab === HISTORY_TAB ? 'active' : ''}`}
-            onClick={() => handleMainTabChange(HISTORY_TAB)}
-          >
-            히스토리
-          </button>
+          {/* 실험용 Write 는 입력 화면만 쓴다. 히스토리는 실험번호 조회에서 본다. */}
+          {!(mode === 'write' && researchMode) ? (
+            <button
+              className={`main-tab-item ${mainTab === HISTORY_TAB ? 'active' : ''}`}
+              onClick={() => handleMainTabChange(HISTORY_TAB)}
+            >
+              히스토리
+            </button>
+          ) : null}
         </div>
 
         {mainTab === INPUT_TAB ? (

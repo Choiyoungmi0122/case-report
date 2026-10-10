@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import { assertOutboundTextIsSafe } from '../deid/outbound';
 import { shouldRetryLLMError, summarizeError } from '../utils/errorSummary';
+import { appendUsageLog } from './usageLog';
 
 const MAX_RETRIES = 2;
 const LLM_MODEL = process.env.LLM_MODEL || 'gpt-4.1';
@@ -89,7 +90,18 @@ export async function callLLMWithSchema<T>(
           }
         : null;
       options?.onUsage?.(usage);
-      console.log(`[${label}] attempt ${i + 1} succeeded in ${elapsedMs}ms`);
+      appendUsageLog({
+        kind: 'chat',
+        label,
+        model,
+        elapsedMs,
+        ...(usage || {}),
+        cachedTokens: (response.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0
+      });
+      console.log(
+        `[${label}] attempt ${i + 1} succeeded in ${elapsedMs}ms` +
+          (usage ? ` (tokens in=${usage.promptTokens} out=${usage.completionTokens})` : '')
+      );
       return validated;
     } catch (error) {
       lastError = error;

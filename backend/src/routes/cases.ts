@@ -1316,7 +1316,10 @@ export async function reprocessCaseFromStoredTerms(params: {
           semanticMatcher: params.semanticMatcher,
           llmResolver: params.llmResolver,
           // 실험용 Write 사례는 날짜를 가리지 않는다 (사용자 결정 2026-10-10)
-          keepDates: Boolean((params.caseData as any).studyWrite)
+          keepDates: Boolean((params.caseData as any).studyWrite),
+          // 실험용 Write 기록은 참여자가 이름을 지우고 올린다. 성씨 모양만으로 가리면
+          // 약재·일반 단어가 지워지므로 표지가 분명한 이름 규칙만 쓴다 (사용자 결정 2026-10-11)
+          anonymizedRecord: Boolean((params.caseData as any).studyWrite)
         })
   );
 
@@ -2399,9 +2402,9 @@ router.post('/', async (req: Request, res: Response) => {
             ? 'final'
             : studyWrite?.sections && Object.keys(studyWrite.sections).length > 0
               ? 'draft'
-              : studyWrite
-                ? 'interview'
-                : 'overview';
+              // 질의응답 상태가 아직 없어도(시작 직후 끊긴 사례) 질의응답 화면이 1회차를 연다.
+              // 옛 개요 화면으로 보내면 Scaffold 와 같은 화면이 떠서 혼란스럽다.
+              : 'interview';
       return res.status(409).json({
         error: `"${code}"는 이미 쓴 코드입니다. 이어서 하거나, 새로 시작하려면 다른 코드(예: ${code} 2)를 쓰세요.`,
         duplicateExperimentCode: code,

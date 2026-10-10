@@ -642,6 +642,8 @@ export async function preprocessVisitsForChain1(
     llmResolver?: NormalizerLlmResolver;
     /** 실험용 Write: 날짜는 가리지 않는다 */
     keepDates?: boolean;
+    /** 실험용 Write: 참여자가 이름을 지우고 올린 기록. 표지가 분명한 이름 규칙만 쓴다 */
+    anonymizedRecord?: boolean;
   } = {}
 ): Promise<PreprocessedChain1Input> {
   // The fixed virtual-patient study case has no real identifiers; running the
@@ -660,7 +662,10 @@ export async function preprocessVisitsForChain1(
           text: visit.text || '',
           emrId: `visit_${visit.index}`
         })),
-        options.keepDates ? { dateMode: 'KEEP' } : {}
+        {
+          ...(options.keepDates ? { dateMode: 'KEEP' as const } : {}),
+          ...(options.anonymizedRecord ? { detectionProfile: 'anonymized_record' as const } : {})
+        }
       );
   const deidentifiedResults = visits.map((visit, index) => ({
     visit,

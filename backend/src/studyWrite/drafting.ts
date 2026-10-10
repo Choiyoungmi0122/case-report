@@ -31,7 +31,9 @@ const DRAFT_CONCURRENCY = 3;
 const outboundContext = createOutboundDeidContext();
 async function deidentifyText(text: string): Promise<string> {
   if (!text.trim()) return '';
-  return (await deidentifyOutboundText(text, { sharedContext: outboundContext, dateMode: 'KEEP' })).text;
+  return (
+    await deidentifyOutboundText(text, { sharedContext: outboundContext, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
+  ).text;
 }
 
 /** 질의응답을 체인 입력용 텍스트로. 답은 비식별 처리한다. */
@@ -45,6 +47,20 @@ export async function buildQaText(state: StudyWriteState, forSectionId?: string)
     lines.push(`- id: ${question.id}\n  쓰이는 섹션: ${question.targetSectionIds.join(', ')}\n  Q: ${question.text}\n  A: ${answer}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * 모델이 입력에 없는 비식별 자리표시(예: [PATIENT_NAME_1])를 새로 써 넣는 일이 있다
+ * (2차 측정에서 프롬프트 예시를 베껴 "[PATIENT_NAME_1]에게는"으로 씀). 입력 어디에도
+ * 없는 자리표시는 사람 이름이면 "환자", 그 밖은 비운다.
+ */
+export function dropForeignPlaceholders(draftText: string, inputs: string[]): string {
+  const known = new Set<string>();
+  for (const input of inputs) for (const match of String(input || '').match(/\[[A-Z_]+_\d+\]/g) || []) known.add(match);
+  return String(draftText || '').replace(/\[([A-Z_]+)_\d+\]/g, (token, type: string) => {
+    if (known.has(token)) return token;
+    return /NAME/.test(type) ? '환자' : '';
+  });
 }
 
 function currentDraftOf(caseData: any, sectionId: string): string {
@@ -63,6 +79,9 @@ export async function runDraftForSection(params: {
 }): Promise<{ draftText: string; usedQuestionIds: string[]; notes: string[]; model: string }> {
   const { caseData, state, sectionId } = params;
   const model = getModelForChain('chain6');
+  const recordText = buildRecordText(caseData);
+  const currentDraft = currentDraftOf(caseData, sectionId);
+  const qaText = await buildQaText(state, sectionId);
   const output = await callLLMWithSchema(
     StudyWriteDraftOutputSchema,
     studyWriteDraftSystemPrompt,
@@ -71,13 +90,18 @@ export async function runDraftForSection(params: {
       sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
       careItems: careItemsText(sectionId),
       writingRule: careWritingRule(sectionId),
-      recordText: buildRecordText(caseData),
-      currentDraft: currentDraftOf(caseData, sectionId),
-      qaText: await buildQaText(state, sectionId)
+      recordText,
+      currentDraft,
+      qaText
     }),
     { model, label: `SW-D ${sectionId}` }
   );
-  return { draftText: output.draftText, usedQuestionIds: output.usedQuestionIds || [], notes: output.notes || [], model };
+  return {
+    draftText: dropForeignPlaceholders(output.draftText, [recordText, currentDraft, qaText]),
+    usedQuestionIds: output.usedQuestionIds || [],
+    notes: output.notes || [],
+    model
+  };
 }
 
 export async function runCareCheck(params: {
@@ -132,6 +156,9 @@ export async function runRevise(params: {
     .slice(-5)
     .map((entry) => `- ${entry.text}`)
     .join('\n');
+  const recordText = buildRecordText(caseData);
+  const qaText = await buildQaText(state, section.sectionId);
+  const safeInstruction = await deidentifyText(instruction);
   const output = await callLLMWithSchema(
     StudyWriteReviseOutputSchema,
     studyWriteReviseSystemPrompt,
@@ -140,15 +167,20 @@ export async function runRevise(params: {
       sectionName: CARE_SECTION_NAMES[section.sectionId] || section.sectionId,
       careItems: careItemsText(section.sectionId),
       writingRule: careWritingRule(section.sectionId),
-      recordText: buildRecordText(caseData),
+      recordText,
       currentDraft: section.draftText,
-      qaText: await buildQaText(state, section.sectionId),
+      qaText,
       priorInstructions,
-      instruction: await deidentifyText(instruction)
+      instruction: safeInstruction
     }),
     { model, label: `SW-R ${section.sectionId}` }
   );
-  return { draftText: output.draftText, changeSummary: output.changeSummary, outOfRecordClaims: output.outOfRecordClaims || [], model };
+  return {
+    draftText: dropForeignPlaceholders(output.draftText, [recordText, section.draftText, qaText, safeInstruction]),
+    changeSummary: output.changeSummary,
+    outOfRecordClaims: output.outOfRecordClaims || [],
+    model
+  };
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {

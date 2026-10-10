@@ -228,7 +228,9 @@ const outboundContext = createOutboundDeidContext();
 async function deidentifyAnswer(answer: string): Promise<string> {
   if (!answer.trim()) return '';
   // 날짜는 가리지 않는다 (실험용 Write 정책). 이름·연락처 등은 가린다.
-  return (await deidentifyOutboundText(answer, { sharedContext: outboundContext, dateMode: 'KEEP' })).text;
+  return (
+    await deidentifyOutboundText(answer, { sharedContext: outboundContext, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
+  ).text;
 }
 
 export async function buildPriorQaSummary(state: StudyWriteState): Promise<string> {
