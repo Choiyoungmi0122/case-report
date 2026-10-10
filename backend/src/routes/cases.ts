@@ -1293,7 +1293,10 @@ export async function reprocessCaseFromStoredTerms(params: {
   const hasTermDecisions = (params.caseData.pendingTermConfirmations || []).some(
     (item: any) => item?.status === 'CONFIRMED' || item?.status === 'REJECTED'
   );
+  // 저장해 둔 분석 결과는 Scaffold 실험에서만 쓴다. Write 실험은 같은 방문 기록이라도
+  // 참여자 기록과 같은 경로로 새로 분석한다 (사용자 결정 2026-10-10).
   const fixedStudyAnalysis =
+    (params.caseData.mode || 'write') === 'scaffold' &&
     !params.dependencies?.preprocessVisitsForChain1 &&
     !params.dependencies?.runEvidenceSplit &&
     !params.dependencies?.runSectionAssessment &&
