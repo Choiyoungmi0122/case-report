@@ -156,6 +156,23 @@ export default function StudyWriteDraftPage() {
   // 섹션 전체 직접 편집
   const [fullEditOpen, setFullEditOpen] = useState(false);
   const [fullEditText, setFullEditText] = useState('');
+  // 직접 고친 뒤 "전체가 괜찮은지" 점검을 권하는 섹션들
+  const [needsReview, setNeedsReview] = useState<Record<string, boolean>>({});
+  const [reviewing, setReviewing] = useState(false);
+
+  const reviewAfterEdit = async () => {
+    if (!caseId || !section || reviewing) return;
+    setReviewing(true);
+    setError(null);
+    try {
+      setData(await caseApi.reviewStudyWriteSectionAfterEdit(caseId, section.sectionId));
+      setNeedsReview((prev) => ({ ...prev, [section.sectionId]: false }));
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '점검하지 못했습니다.');
+    } finally {
+      setReviewing(false);
+    }
+  };
   const mainTextRef = useRef<HTMLDivElement | null>(null);
 
   const captureSelection = () => {
@@ -212,7 +229,8 @@ export default function StudyWriteDraftPage() {
     setSelBusy(true);
     setError(null);
     try {
-      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, nextText));
+      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, nextText, { recheckCare: true }));
+      setNeedsReview((prev) => ({ ...prev, [section.sectionId]: true }));
       closeSelection();
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
@@ -226,7 +244,8 @@ export default function StudyWriteDraftPage() {
     setSelBusy(true);
     setError(null);
     try {
-      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, fullEditText));
+      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, fullEditText, { recheckCare: true }));
+      setNeedsReview((prev) => ({ ...prev, [section.sectionId]: true }));
       setFullEditOpen(false);
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
@@ -435,6 +454,24 @@ export default function StudyWriteDraftPage() {
               </div>
               {section.draftText && !locked && !fullEditOpen ? (
                 <p className="sw-draft__drag-hint">문장을 드래그하면 그 부분만 AI에게 고치게 하거나 직접 고칠 수 있습니다.</p>
+              ) : null}
+              {needsReview[section.sectionId] && !locked && !fullEditOpen ? (
+                <div className="sw-draft__review-banner">
+                  <span>직접 고친 내용이 있습니다. 고친 부분 때문에 나머지와 어긋나는 곳이 없는지 AI가 한 번 더 볼까요? 고친 내용은 그대로 둡니다.</span>
+                  <div>
+                    <button type="button" disabled={reviewing || revising} onClick={() => void reviewAfterEdit()}>
+                      {reviewing ? '점검 중…' : '전체 점검하기'}
+                    </button>
+                    <button
+                      type="button"
+                      className="is-secondary"
+                      disabled={reviewing}
+                      onClick={() => setNeedsReview((prev) => ({ ...prev, [section.sectionId]: false }))}
+                    >
+                      괜찮아요
+                    </button>
+                  </div>
+                </div>
               ) : null}
               {fullEditOpen ? (
                 <div className="sw-draft__full-edit">

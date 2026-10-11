@@ -35,6 +35,14 @@ async function main() {
   const caseId = process.argv[2];
   const baseUrl = (process.argv[3] || 'http://localhost:5000').replace(/\/$/, '');
   if (!caseId) throw new Error('Usage: npm run study:freeze -- <caseId> [apiBaseUrl]');
+  // 고정 결과는 학생 V1(2026-10-05~08)과 Scaffold V2 참가자가 본 AI 자료 그 자체다. 다시 얼리면 다른 초안이 되어
+  // 참가자 간 비교가 깨진다. 의도적으로만 실행하도록 환경변수로 막는다. 출처: docs/study_ai_draft_prompt_provenance_v1.md
+  if (process.env.ALLOW_STUDY_REFREEZE !== '1') {
+    throw new Error(
+      '고정 연구 사례를 다시 얼리는 것은 막혀 있습니다. 참가자가 본 AI 초안이 바뀝니다. ' +
+        '정말 필요하면 ALLOW_STUDY_REFREEZE=1 로 실행하고 docs/study_ai_draft_prompt_provenance_v1.md 를 갱신하세요.'
+    );
+  }
 
   const response = await fetch(`${baseUrl}/api/cases/${caseId}`);
   if (!response.ok) throw new Error(`Could not load case ${caseId}: HTTP ${response.status}`);

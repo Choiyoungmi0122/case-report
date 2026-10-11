@@ -25,6 +25,7 @@
     "test:optimization": "tsx tests/optimization/chainRuntime.test.ts",
     "test:common-questions": "tsx tests/questions/commonQuestions.test.ts",
     "test:study": "tsx tests/study/studyMode.test.ts",
+    "test:prompt-registry": "tsx tests/llm/promptRegistry.test.ts",
     "test:study-integration": "tsx tests/study/studyPersistence.integration.test.ts",
     "test:research-export": "tsx tests/research/researchExport.test.ts",
     "test:research-session": "tsx tests/research/researchSession.test.ts",

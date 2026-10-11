@@ -1,0 +1,147 @@
+/**
+ * 프롬프트 레지스트리: 체인마다 (1) 프롬프트 버전, (2) 시스템 프롬프트 템플릿 해시, (3) 지금 쓰는 모델을
+ * 한 곳에서 묻는다.
+ *
+ * 왜 필요한가 (docs/prompt_chain_review_v1.md §3): 2026-10-11까지는 프롬프트를 고쳐도 promptVersion 이 그대로였고,
+ * 어떤 캐시 키에도 프롬프트·모델이 들어가지 않아 옛 프롬프트의 결과가 재사용됐다. 이제
+ *  - 캐시 항목에 `promptFingerprint`(버전 + 템플릿 해시 + 모델)를 남기고, 캐시 적중 판정에서 비교한다
+ *    (지문이 없는 옛 항목은 호환을 위해 그대로 인정한다: 학생 V1 문서가 다시 LLM을 돌리지 않도록).
+ *  - 성능 로그·생성 메타데이터·실험용 Write 이력에 promptVersion 과 promptTemplateHash 를 기록한다.
+ *
+ * 규칙: 시스템 프롬프트 문구를 고치면 여기의 버전을 올린다. 버전 이력은 아래 PROMPT_VERSION_HISTORY 에 적는다.
+ */
+import { createHash } from 'crypto';
+import { chain1SystemPrompt } from './prompts/chain1_splitTag';
+import { chain2SystemPrompt } from './prompts/chain2_assess';
+import { chain3SystemPrompt } from './prompts/chain3_draft';
+import { chain4MissingSystemPrompt } from './prompts/chain4_missing';
+import { chain5QuestionSystemPrompt } from './prompts/chain5_questions';
+import { chain6UpdateSystemPrompt } from './prompts/chain6_update';
+import { chain7SystemPrompt } from './prompts/chain7_final';
+import { sectionAdequacyReviewSystemPrompt } from './prompts/section_adequacy_review';
+import {
+  STUDY_WRITE_CARE_CHECK_PROMPT_VERSION,
+  STUDY_WRITE_DRAFT_PROMPT_VERSION,
+  STUDY_WRITE_REVISE_PROMPT_VERSION,
+  studyWriteCareCheckSystemPrompt,
+  studyWriteDraftSystemPrompt,
+  studyWriteReviseSystemPrompt
+} from './prompts/studyWrite_draft';
+import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPrompt } from './prompts/studyWrite_questions';
+import { getModelForChain } from './models';
+
+/**
+ * 버전 이력 (문구가 바뀐 커밋 기준).
+ *  - CHAIN1~7, REVIEW v1: 2026-04-29 ~ 2026-10-04 (`c18c6e5`). 학생 V1·Scaffold V2 의 고정 AI 초안은 이 v1 chain3 로 만들었다
+ *    (promptTemplateHash e4e87023…, docs/study_ai_draft_prompt_provenance_v1.md).
+ *  - CHAIN1~7, REVIEW v2: 2026-10-11 `0a56cfa` "프롬프트 정비" (공통 원칙 P1~P7 도입, 4부 구조). 그때 버전을 올리지 않아 여기서 소급해 v2 로 둔다.
+ *  - CHAIN6 v3: 2026-10-11 답변-기록 충돌 정책을 "기록 우선, 차이는 표시"로 통일.
+ *  - SW-Q2 v3 / SW-D v3 / SW-R v3 / SW-C v2: 2026-10-11 공통 원칙을 common.ts 에서 가져오도록 통일(문구 동일화).
+ */
+export const PROMPT_VERSIONS = {
+  CHAIN1: 'v2',
+  CHAIN2: 'v2',
+  CHAIN3: 'v2',
+  CHAIN4: 'v2',
+  CHAIN5: 'v2',
+  CHAIN6: 'v3',
+  CHAIN7: 'v2',
+  REVIEW: 'v2',
+  /** 공개 단계는 chain3 프롬프트를 그대로 쓴다. */
+  CHAIN3_STUDY_REVEAL: 'v2',
+  SW_Q2: STUDY_WRITE_QUESTIONS_PROMPT_VERSION.split(':')[1],
+  SW_D: STUDY_WRITE_DRAFT_PROMPT_VERSION.split(':')[1],
+  SW_R: STUDY_WRITE_REVISE_PROMPT_VERSION.split(':')[1],
+  SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1]
+} as const;
+
+export type PromptKey = keyof typeof PROMPT_VERSIONS;
+
+const SYSTEM_PROMPTS: Record<PromptKey, string> = {
+  CHAIN1: chain1SystemPrompt,
+  CHAIN2: chain2SystemPrompt,
+  CHAIN3: chain3SystemPrompt,
+  CHAIN4: chain4MissingSystemPrompt,
+  CHAIN5: chain5QuestionSystemPrompt,
+  CHAIN6: chain6UpdateSystemPrompt,
+  CHAIN7: chain7SystemPrompt,
+  REVIEW: sectionAdequacyReviewSystemPrompt,
+  CHAIN3_STUDY_REVEAL: chain3SystemPrompt,
+  SW_Q2: studyWriteGapQuestionsSystemPrompt,
+  SW_D: studyWriteDraftSystemPrompt,
+  SW_R: studyWriteReviseSystemPrompt,
+  SW_C: studyWriteCareCheckSystemPrompt
+};
+
+/** getModelForChain 의 키. */
+const MODEL_KEYS: Record<PromptKey, string> = {
+  CHAIN1: 'chain1',
+  CHAIN2: 'chain2',
+  CHAIN3: 'chain3',
+  CHAIN4: 'chain4',
+  CHAIN5: 'chain5',
+  CHAIN6: 'chain6',
+  CHAIN7: 'chain7',
+  REVIEW: 'review',
+  CHAIN3_STUDY_REVEAL: 'chain3',
+  SW_Q2: 'chain5',
+  SW_D: 'chain6',
+  SW_R: 'chain6',
+  SW_C: 'chain4'
+};
+
+/** 기존 generationMetadata.promptTemplateHash 와 같은 방식: sha256(version + system prompt, 구분자 포함). */
+export function promptTemplateHash(key: PromptKey): string {
+  return createHash('sha256')
+    .update([promptVersionLabel(key), SYSTEM_PROMPTS[key]].join('\n\n---\n\n'))
+    .digest('hex');
+}
+
+/** 예: "CHAIN3:v2", "SW-D:v3" */
+export function promptVersionLabel(key: PromptKey): string {
+  const name = key.startsWith('SW_') ? key.replace('SW_', 'SW-') : key;
+  return `${name}:${PROMPT_VERSIONS[key]}`;
+}
+
+export function promptModel(key: PromptKey): string {
+  return getModelForChain(MODEL_KEYS[key]);
+}
+
+/** 캐시 항목에 남기는 지문. 버전·템플릿·모델 중 하나라도 바뀌면 달라진다. */
+export function promptFingerprint(key: PromptKey): string {
+  return `${promptVersionLabel(key)}|${promptTemplateHash(key).slice(0, 16)}|${promptModel(key)}`;
+}
+
+/**
+ * chainCache / chainPerformanceLogs 의 chainName 에서 프롬프트 키를 찾는다.
+ * 예: "CHAIN1", "REVIEW:THERAPEUTIC_INTERVENTIONS", "CHAIN3_STUDY_REVEAL:THERAPEUTIC_INTERVENTIONS".
+ */
+export function promptKeyForChainName(chainName: string): PromptKey | undefined {
+  const head = String(chainName || '').split(':')[0].toUpperCase();
+  if (head === 'CHAIN3_STUDY_REVEAL') return 'CHAIN3_STUDY_REVEAL';
+  if (head === 'REVIEW') return 'REVIEW';
+  if (head in PROMPT_VERSIONS) return head as PromptKey;
+  return undefined;
+}
+
+export function promptMetaForChainName(chainName: string):
+  | { promptVersion: string; promptTemplateHash: string; model: string; promptFingerprint: string }
+  | undefined {
+  const key = promptKeyForChainName(chainName);
+  if (!key) return undefined;
+  return {
+    promptVersion: promptVersionLabel(key),
+    promptTemplateHash: promptTemplateHash(key),
+    model: promptModel(key),
+    promptFingerprint: promptFingerprint(key)
+  };
+}
+
+export function promptMeta(key: PromptKey) {
+  return {
+    promptVersion: promptVersionLabel(key),
+    promptTemplateHash: promptTemplateHash(key),
+    model: promptModel(key),
+    promptFingerprint: promptFingerprint(key)
+  };
+}

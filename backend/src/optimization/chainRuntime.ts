@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { ChainCacheEntry, ChainPerformanceLog, ChainProgressState } from '../types';
+import { promptMetaForChainName } from '../llm/promptRegistry';
 
 function normalizeValue(value: any): any {
   if (Array.isArray(value)) {
@@ -36,16 +37,30 @@ export function hashJoinedParts(parts: Array<string | number | boolean | null | 
     .digest('hex');
 }
 
-export function buildChainCacheEntry(inputHash: string, outputValue?: any): ChainCacheEntry {
+/**
+ * chainName 을 주면 그 체인의 프롬프트 지문(버전·템플릿 해시·모델)을 함께 남긴다.
+ * 지문이 있는 항목은 프롬프트나 모델이 바뀌면 캐시 적중에서 빠진다.
+ */
+export function buildChainCacheEntry(inputHash: string, outputValue?: any, chainName?: string): ChainCacheEntry {
+  const meta = chainName ? promptMetaForChainName(chainName) : undefined;
   return {
     inputHash,
     outputHash: outputValue === undefined ? undefined : hashValue(outputValue),
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    ...(meta ? { promptFingerprint: meta.promptFingerprint } : {})
   };
 }
 
+/**
+ * 입력 해시가 같고, 항목에 프롬프트 지문이 있으면 지금 지문과도 같아야 적중이다.
+ * 지문이 없는 옛 항목(2026-10-11 이전, 학생 V1 문서 포함)은 호환을 위해 입력 해시만으로 인정한다.
+ */
 export function hasChainCacheHit(caseData: any, chainName: string, inputHash: string): boolean {
-  return caseData?.chainCache?.[chainName]?.inputHash === inputHash;
+  const entry = caseData?.chainCache?.[chainName];
+  if (!entry || entry.inputHash !== inputHash) return false;
+  if (!entry.promptFingerprint) return true;
+  const meta = promptMetaForChainName(chainName);
+  return !meta || entry.promptFingerprint === meta.promptFingerprint;
 }
 
 export function buildChainProgress(
@@ -78,6 +93,8 @@ export function buildPerformanceLog(params: {
   tokenUsage?: ChainPerformanceLog['tokenUsage'];
 }): ChainPerformanceLog {
   const endedAt = new Date().toISOString();
+  // 어떤 프롬프트·모델로 돌았는지 로그마다 남긴다 (연구 재현성).
+  const meta = promptMetaForChainName(params.chainName);
   return {
     chainName: params.chainName,
     startedAt: params.startedAt,
@@ -87,6 +104,7 @@ export function buildPerformanceLog(params: {
     cacheHit: params.cacheHit,
     llmCallCount: params.llmCallCount,
     tokenUsage: params.tokenUsage ?? null,
+    ...(meta ? { promptVersion: meta.promptVersion, promptTemplateHash: meta.promptTemplateHash, model: meta.model } : {}),
     ...(params.error ? { error: params.error } : {})
   };
 }

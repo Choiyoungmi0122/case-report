@@ -421,6 +421,8 @@ export interface ChainCacheEntry {
   inputHash: string;
   outputHash?: string;
   updatedAt: string;
+  /** 프롬프트 버전·템플릿 해시·모델 지문 (2026-10-11부터). 없으면 옛 항목. */
+  promptFingerprint?: string;
 }
 
 export interface ChainProgressState {
@@ -443,6 +445,10 @@ export interface ChainPerformanceLog {
     completionTokens?: number;
     totalTokens?: number;
   } | null;
+  /** 이 호출에 쓰인 프롬프트 버전·템플릿 해시·모델 (2026-10-11부터 기록) */
+  promptVersion?: string;
+  promptTemplateHash?: string;
+  model?: string;
   error?: string;
 }
 

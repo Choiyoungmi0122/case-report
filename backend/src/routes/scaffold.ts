@@ -6,6 +6,7 @@ import {
   isFixedStudyCaseText
 } from '../study/cases/defaultStudyCase';
 import { DEFAULT_STUDY_MEMO_SUGGESTIONS_V2 } from '../study/cases/defaultStudyCaseMemoSuggestionsV2';
+import { promptMeta } from '../llm/promptRegistry';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
@@ -848,7 +849,7 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
     throw new Error('The learner pre-reveal snapshot must be saved before AI draft generation.');
   }
 
-  const promptVersion = 'CHAIN3_STUDY_REVEAL:v1';
+  const promptVersion = promptMeta('CHAIN3_STUDY_REVEAL').promptVersion;
   const existingDraft = (caseData.sectionDrafts || []).find(
     (item: any) => item.sectionId === sectionId
   );
@@ -963,7 +964,7 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
   const chainKey = `CHAIN3_STUDY_REVEAL:${sectionId}`;
   const nextChainCache = {
     ...(caseData.chainCache || {}),
-    [chainKey]: buildChainCacheEntry(inputHash, draftWithMetadata)
+    [chainKey]: buildChainCacheEntry(inputHash, draftWithMetadata, chainKey)
   };
   const nextPerformanceLogs = appendPerformanceLog(
     caseData.chainPerformanceLogs || [],

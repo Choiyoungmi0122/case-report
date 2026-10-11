@@ -317,7 +317,7 @@ async function ensureAdequacyReview(params: {
     await caseModel.updateCase(params.caseId, {
       chainCache: {
         ...(params.caseData.chainCache || {}),
-        [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, existing)
+        [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, existing, `REVIEW:${params.sectionId}`)
       },
       chainPerformanceLogs: appendPerformanceLog(
         params.caseData.chainPerformanceLogs || [],
@@ -365,7 +365,7 @@ async function ensureAdequacyReview(params: {
     },
     chainCache: {
       ...(params.caseData.chainCache || {}),
-      [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot)
+      [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot, `REVIEW:${params.sectionId}`)
     },
     chainPerformanceLogs: appendPerformanceLog(
       params.caseData.chainPerformanceLogs || [],
@@ -387,7 +387,7 @@ async function ensureAdequacyReview(params: {
   };
   params.caseData.chainCache = {
     ...(params.caseData.chainCache || {}),
-    [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot)
+    [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot, `REVIEW:${params.sectionId}`)
   };
 
   return snapshot;
@@ -1124,21 +1124,21 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
           updatedDraftText: draftEntry.draftText || '',
           evidenceLinks: draftEntry.evidenceLinks || [],
           unsupportedClaims: draftEntry.unsupportedClaims || []
-        }),
+        }, 'CHAIN6'),
         CHAIN4: buildChainCacheEntry(globalState.cacheMeta.chain4InputHash, {
           commonMissingItems: globalState.commonMissingItems,
           sectionMissingBySection: sectionStates.map((item) => ({
             sectionId: item.sectionId,
             missingInfoBullets: item.missingInfoBullets || []
           }))
-        }),
+        }, 'CHAIN4'),
         CHAIN5: buildChainCacheEntry(globalState.cacheMeta.chain5InputHash, {
           commonQuestionSets: globalState.commonQuestionSets,
           sectionQuestionsBySection: sectionStates.map((item) => ({
             sectionId: item.sectionId,
             recommendedQuestions: item.recommendedQuestions || []
           }))
-        })
+        }, 'CHAIN5')
       },
       chainPerformanceLogs: appendPerformanceLog(
         appendPerformanceLog(

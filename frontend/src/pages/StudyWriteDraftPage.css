@@ -181,6 +181,28 @@
   cursor: pointer;
 }
 
+.sw-draft__review-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #efd9a8;
+  border-radius: 10px;
+  background: #fff8e8;
+  font-size: 13.5px;
+  color: #5a4a1f;
+  line-height: 1.5;
+}
+
+.sw-draft__review-banner > div {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+
 .sw-draft__full-edit textarea {
   width: 100%;
   padding: 14px 16px;

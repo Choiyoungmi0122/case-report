@@ -55,8 +55,12 @@ export interface StudyWriteRound {
   generation?: {
     model: string;
     promptVersion: string;
+    /** 시스템 프롬프트 템플릿 해시 (2026-10-11부터) */
+    promptTemplateHash?: string;
     generatedAt: string;
     candidateCount: number;
+    /** 기록 전문이 길어 뒷부분을 잘라 보냈으면 true */
+    recordTruncated?: boolean;
   };
 }
 
@@ -71,6 +75,7 @@ export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'n
 export interface StudyWriteCareCheck {
   checkedAt: string;
   promptVersion: string;
+  promptTemplateHash?: string;
   items: Array<{
     code: string;
     label: string;
@@ -88,6 +93,7 @@ export interface StudyWriteDraftVersion {
   at: string;
   model?: string;
   promptVersion?: string;
+  promptTemplateHash?: string;
   usedQuestionIds?: string[];
   notes?: string[];
   instruction?: string;

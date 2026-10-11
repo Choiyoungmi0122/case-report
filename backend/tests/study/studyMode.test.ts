@@ -18,6 +18,7 @@ import {
   sanitizeSectionStatesForScaffold
 } from '../../src/routes/scaffold';
 import { sanitizeSectionResponse } from '../../src/routes/sections';
+import { promptVersionLabel } from '../../src/llm/promptRegistry';
 import {
   DEFAULT_STUDY_MEMO_SUGGESTIONS_V2,
   findMemoSuggestionAnchorErrors
@@ -759,7 +760,7 @@ async function run() {
     }
   );
   assert.equal(generatedDraft.draftText, '스냅샷 이후 생성된 초안');
-  assert.equal(generatedDraft.generationMetadata.promptVersion, 'CHAIN3_STUDY_REVEAL:v1');
+  assert.equal(generatedDraft.generationMetadata.promptVersion, promptVersionLabel('CHAIN3_STUDY_REVEAL'));
   assert.equal(generatedUpdates.sectionDrafts.length, 1);
   assert.equal(generatedUpdates.chainPerformanceLogs.at(-1).llmCallCount, 1);
 

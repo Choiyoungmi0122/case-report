@@ -1630,8 +1630,19 @@ export const caseApi = {
     return response.data;
   },
 
-  saveStudyWriteSectionDraft: async (caseId: string, sectionId: string, draftText: string) => {
-    const response = await api.put<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/draft`, { draftText });
+  saveStudyWriteSectionDraft: async (caseId: string, sectionId: string, draftText: string, options: { recheckCare?: boolean } = {}) => {
+    const response = await api.put<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/draft`, {
+      draftText,
+      ...(options.recheckCare ? { recheckCare: true } : {})
+    });
+    return response.data;
+  },
+
+  /** 직접 수정 뒤 전체가 괜찮은지 AI 가 점검하고, 어긋나는 곳만 다듬는다 */
+  reviewStudyWriteSectionAfterEdit: async (caseId: string, sectionId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/revise`, {
+      reviewAfterEdit: true
+    });
     return response.data;
   },
 

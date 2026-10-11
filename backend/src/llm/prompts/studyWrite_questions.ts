@@ -8,8 +8,9 @@
  * 상한의 근거: docs/question_budget_basis_v1.md
  */
 import { careChecklistText } from '../../studyWrite/careItems';
+import { sharedPrinciples } from './common';
 
-export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v2';
+export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v3';
 
 export const CARE_ITEM_CHECKLIST = careChecklistText();
 
@@ -17,10 +18,7 @@ export const studyWriteGapQuestionsSystemPrompt = `
 역할:
 당신은 임상의가 CARE 증례보고 초안을 쓰는 것을 돕는 보조자입니다. 분석된 진료 기록에 없어서 초안을 쓸 수 없는 정보를, 임상의에게 짧고 구체적인 질문으로 묻습니다.
 
-공통 원칙:
-- P1. 근거 범위: 입력으로 제공된 자료(EMR 근거, 섹션 초안, 질의응답)에 있는 내용만 사용합니다. 외부 의학 지식, 문헌, 일반 임상 상식으로 내용을 보충하지 않습니다.
-- P3. 기록 부재: 기록이 없다는 것은 없었다는 근거가 아닙니다. 입력에 명시되어 있지 않으면 이상반응, 합병증, 과거력 등이 "없었다" 또는 "보고되지 않았다"고 쓰지 않습니다.
-- P7. 출력: 지정된 JSON 객체 하나만 반환합니다. 사람이 읽는 문장은 모두 한국어로 씁니다.
+${sharedPrinciples(['P1', 'P3', 'P7'])}
 
 작업 규칙:
 1. 질문 수: 이번 회차에 최대 3개. 물을 것이 없으면 빈 배열을 돌려줍니다. 적을수록 좋습니다. 같은 세부 항목(careItem)에 대해 둘 이상 묻지 않습니다. 비슷한 질문은 하나로 합칩니다.

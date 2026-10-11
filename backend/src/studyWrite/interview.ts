@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { CARE_ITEMS_BY_SECTION } from './careItems';
+import { promptMeta } from '../llm/promptRegistry';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 import { answerTextForPrompt } from './answerChoices';
 import { callLLMWithSchema } from '../llm/client';
@@ -285,20 +287,25 @@ function clip(text: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)} …` : value;
 }
 
-/** 참여자의 답은 외부로 나가기 전에 비식별 처리한다 (기록과 같은 기준). */
-const outboundContext = createOutboundDeidContext();
-async function deidentifyAnswer(answer: string): Promise<string> {
+/**
+ * 참여자의 답은 외부로 나가기 전에 비식별 처리한다 (기록과 같은 기준).
+ * 비식별 문맥은 호출(케이스)마다 새로 만든다. 프로세스 전역으로 공유하면 다른 케이스의 식별자 번호가
+ * 섞이고 원문 식별자가 메모리에 남는다 (docs/prompt_chain_review_v1.md §2-6).
+ */
+type OutboundContext = ReturnType<typeof createOutboundDeidContext>;
+async function deidentifyAnswer(answer: string, context: OutboundContext): Promise<string> {
   if (!answer.trim()) return '';
   // 날짜는 가리지 않는다 (실험용 Write 정책). 이름·연락처 등은 가린다.
   return (
-    await deidentifyOutboundText(answer, { sharedContext: outboundContext, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
+    await deidentifyOutboundText(answer, { sharedContext: context, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
   ).text;
 }
 
 export async function buildPriorQaSummary(state: StudyWriteState): Promise<string> {
+  const context = createOutboundDeidContext();
   const lines: string[] = [];
   for (const question of allQuestions(state)) {
-    const answer = question.status === 'answered' ? await deidentifyAnswer(question.answer) : answerTextForPrompt(question) || '(아직 답하지 않음)';
+    const answer = question.status === 'answered' ? await deidentifyAnswer(question.answer, context) : answerTextForPrompt(question) || '(아직 답하지 않음)';
     lines.push(`Q${question.order} [${question.roundNo}회차, ${question.careItem || '-'}] ${question.text}\nA: ${answer}`);
   }
   return lines.join('\n\n');
@@ -317,8 +324,20 @@ export function priorityForCareItem(careItem: string): 'required' | 'optional' {
 
 const MAX_RECORD_CHARS = 16000;
 
+/** 기록 전문이 상한을 넘어 뒷부분이 잘려 전송되는지. 회차·초안 이력에 남긴다. */
+export function isRecordTruncated(caseData: any): boolean {
+  return buildRecordTextFull(caseData).length > MAX_RECORD_CHARS;
+}
+
 /** 비식별된 방문 기록 전문. 체인이 "기록에 이미 있는 것"을 묻지 않도록 함께 보낸다. */
 export function buildRecordText(caseData: any): string {
+  const text = buildRecordTextFull(caseData);
+  if (text.length <= MAX_RECORD_CHARS) return text;
+  console.warn(`[studyWrite] record text truncated: ${text.length} > ${MAX_RECORD_CHARS} chars (case ${caseData?.id || '?'})`);
+  return `${text.slice(0, MAX_RECORD_CHARS)}\n…(기록이 길어 뒤의 ${text.length - MAX_RECORD_CHARS}자는 전달되지 않았습니다. 이 뒤의 내용은 기록에 없는 것으로 다루지 말고, 필요하면 임상의에게 확인을 요청하세요)`;
+}
+
+function buildRecordTextFull(caseData: any): string {
   const records: any[] = Array.isArray(caseData?.deidentifiedEMRs) ? caseData.deidentifiedEMRs : [];
   const visits: any[] = Array.isArray(caseData?.visits) ? caseData.visits : [];
   // 전문가 기록 프리셋은 날짜가 첫 기록일 기준 일수뿐이다. 입력 칸의 날짜는 임의
@@ -340,7 +359,19 @@ export function buildRecordText(caseData: any): string {
       return `[방문 ${record?.visitIndex || index + 1}${type}${date ? ` ${date}` : ''}]\n${String(record?.deidentifiedText || '').trim()}`;
     })
     .join('\n\n');
-  return text.length > MAX_RECORD_CHARS ? `${text.slice(0, MAX_RECORD_CHARS)}\n…(이하 생략)` : text;
+  return text;
+}
+
+/** careItem 코드("9b", "8a·8c")로 CARE 섹션을 찾는다. 모델이 섹션 id 를 이상하게 돌려줬을 때의 대체 경로. */
+export function sectionsForCareItem(careItem: string): string[] {
+  const codes = String(careItem || '').toLowerCase().match(/\d{1,2}[a-d]?/g) || [];
+  const result: string[] = [];
+  for (const code of codes) {
+    for (const [sectionId, defs] of Object.entries(CARE_ITEMS_BY_SECTION)) {
+      if (defs.some((def) => def.code.toLowerCase() === code) && !result.includes(sectionId)) result.push(sectionId);
+    }
+  }
+  return result;
 }
 
 export function buildAnalysisSummaries(caseData: any) {
@@ -423,8 +454,15 @@ export async function generateNextRound(
   const asked = new Set(allQuestions(state).map((question) => question.text.trim()));
   // 같은 세부 항목은 한 회차에 하나만 묻는다 (모델이 8c 를 두 번 묻는 일이 있었다).
   const seenCareItems = new Set<string>();
+  // 섹션 id 를 알아볼 수 없으면 careItem 코드로 섹션을 찾는다. 그래도 못 찾으면 그 질문만 버리고 세어 둔다.
+  let unmappable = 0;
   const picked = output.questions
-    .map((question) => ({ ...question, targetSectionIds: normalizeTargetSectionIds(question.targetSectionIds) }))
+    .map((question) => {
+      const normalized = normalizeTargetSectionIds(question.targetSectionIds);
+      const targetSectionIds = normalized.length > 0 ? normalized : sectionsForCareItem(question.careItem);
+      if (targetSectionIds.length === 0) unmappable += 1;
+      return { ...question, targetSectionIds };
+    })
     .filter((question) => {
       const key = question.careItem.trim().toLowerCase();
       if (!question.question.trim() || question.targetSectionIds.length === 0 || asked.has(question.question.trim())) return false;
@@ -435,6 +473,11 @@ export async function generateNextRound(
     .slice(0, Math.min(state.questionBudget.perRound, remaining));
 
   const now = new Date().toISOString();
+  if (picked.length === 0 && unmappable > 0) {
+    // 모델이 질문은 만들었는데 섹션을 못 알아본 경우다. 인터뷰를 끝내지 말고 다시 시도하게 한다.
+    console.error(`[SW-Q2 round ${roundNo}] ${unmappable} question(s) had unrecognizable section ids`, output.questions);
+    throw new Error('질문의 CARE 섹션을 알아보지 못했습니다. "다시 시도"를 눌러 주세요.');
+  }
   if (picked.length === 0) {
     return { state: finishInterview(state), round: null, stopReason: output.stopReason || '더 물을 빈칸이 없습니다.' };
   }
@@ -444,7 +487,14 @@ export async function generateNextRound(
     roundNo,
     kind: 'gap',
     startedAt: now,
-    generation: { model, promptVersion: STUDY_WRITE_QUESTIONS_PROMPT_VERSION, generatedAt: now, candidateCount: summaries.candidateCount },
+    generation: {
+      model,
+      promptVersion: STUDY_WRITE_QUESTIONS_PROMPT_VERSION,
+      promptTemplateHash: promptMeta('SW_Q2').promptTemplateHash,
+      generatedAt: now,
+      candidateCount: summaries.candidateCount,
+      recordTruncated: isRecordTruncated(caseData)
+    },
     questions: picked.map((question, index) => ({
       id: `swq-${randomUUID()}`,
       roundNo,

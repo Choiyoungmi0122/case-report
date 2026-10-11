@@ -47,8 +47,8 @@ import {
 } from '../types';
 import { repairSplitClinicalEvidenceCards } from '../utils/evidenceCardRepair';
 
-const FAST_LLM_MODEL = process.env.FAST_LLM_MODEL || 'gpt-4.1-mini';
-const QUALITY_LLM_MODEL = process.env.QUALITY_LLM_MODEL || 'gpt-4.1';
+import { getModelForChain } from './models';
+export { getModelForChain };
 
 const CORE_AI_SECTIONS: CareSection[] = [
   'PATIENT_INFORMATION',
@@ -110,23 +110,6 @@ type NormalizerLlmResolver = RetrievedTermResolver;
 type ChainRuntimeMeta = {
   onUsage?: (usage: LLMUsageMetrics | null) => void;
 };
-
-export function getModelForChain(chainName: string): string {
-  switch (chainName) {
-    case 'chain1':
-    case 'chain2':
-    case 'chain4':
-    case 'chain5':
-      return process.env[`${chainName.toUpperCase()}_MODEL`] || FAST_LLM_MODEL;
-    case 'chain3':
-    case 'chain6':
-    case 'chain7':
-    case 'review':
-      return process.env[`${chainName.toUpperCase()}_MODEL`] || QUALITY_LLM_MODEL;
-    default:
-      return process.env.LLM_MODEL || QUALITY_LLM_MODEL;
-  }
-}
 
 function normalizeForGrounding(text: string): string {
   return String(text || '')

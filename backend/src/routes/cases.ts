@@ -59,6 +59,7 @@ import {
   STUDENT_V1_CODE_PATTERN,
   STUDY_SCAFFOLD_V2_VERSION
 } from '../config/researchMetadata';
+import { promptMeta } from '../llm/promptRegistry';
 import { DEFAULT_STUDY_CASE_ID, DEFAULT_STUDY_CASE_VERSION, getStudyCaseTemplate } from '../study/cases/defaultStudyCase';
 import { getFixedStudyCaseAnalysis } from '../study/cases/studyCaseSnapshot';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
@@ -954,8 +955,9 @@ function attachDraftGenerationMetadata(params: {
       actualModelVersion: params.model,
       inputHash: params.inputHash,
       promptHash: params.promptHash,
-      promptTemplateHash: buildPromptTemplateHash(chain3SystemPrompt, `${params.chainName}:v1`),
-      promptVersion: `${params.chainName}:v1`,
+      // 프롬프트 레지스트리의 현재 버전·템플릿 해시를 기록한다 (프롬프트를 고치면 레지스트리 버전을 올린다).
+      promptTemplateHash: promptMeta('CHAIN3').promptTemplateHash,
+      promptVersion: promptMeta('CHAIN3').promptVersion,
       temperature: 0,
       generatedAt: params.startedAt,
       cacheHit: params.cacheHit,
@@ -1405,7 +1407,7 @@ export async function reprocessCaseFromStoredTerms(params: {
   const evidenceCards = mergeEvidenceCards(chain1EvidenceCards, importedTimelineEvidenceCards);
   nextChainCache = {
     ...nextChainCache,
-    CHAIN1: buildChainCacheEntry(chain1InputHash, evidenceCards)
+    CHAIN1: buildChainCacheEntry(chain1InputHash, evidenceCards, 'CHAIN1')
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
@@ -1450,7 +1452,7 @@ export async function reprocessCaseFromStoredTerms(params: {
       sectionId: state.sectionId,
       status: state.status,
       rationaleText: state.rationaleText
-    })))
+    })), 'CHAIN2')
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
@@ -1565,7 +1567,7 @@ export async function reprocessCaseFromStoredTerms(params: {
         sectionId: draft.sectionId,
         draftText: draft.draftText || ''
       }))
-    )
+    , 'CHAIN3')
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
@@ -1631,14 +1633,14 @@ export async function reprocessCaseFromStoredTerms(params: {
         sectionId: state.sectionId,
         missingInfoBullets: state.missingInfoBullets || []
       }))
-    }),
+    }, 'CHAIN4'),
     CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
       commonQuestionSets: nextState.commonQuestionSets,
       sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
         sectionId: state.sectionId,
         recommendedQuestions: state.recommendedQuestions || []
       }))
-    })
+    }, 'CHAIN5')
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
@@ -2082,7 +2084,7 @@ async function runFinalComposeJob(params: {
         finalDraft,
         chainCache: {
           ...(baseCase.chainCache || {}),
-          CHAIN7: buildChainCacheEntry(inputHash, finalDraft)
+          CHAIN7: buildChainCacheEntry(inputHash, finalDraft, 'CHAIN7')
         },
         chainProgress: buildChainProgress(undefined, ['CHAIN7'], []),
         chainPerformanceLogs: appendPerformanceLog(
@@ -3167,14 +3169,14 @@ router.patch('/:id/front-matter', async (req: Request, res: Response) => {
                 sectionId: state.sectionId,
                 missingInfoBullets: state.missingInfoBullets || []
               }))
-            }),
+            }, 'CHAIN4'),
             CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
               commonQuestionSets: nextState.commonQuestionSets,
               sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
                 sectionId: state.sectionId,
                 recommendedQuestions: state.recommendedQuestions || []
               }))
-            })
+            }, 'CHAIN5')
           }
         : anyCase.chainCache || {},
       ...(nextState
@@ -3448,14 +3450,14 @@ router.post('/:id/common-questions/answer', async (req: Request, res: Response) 
             sectionId: state.sectionId,
             missingInfoBullets: state.missingInfoBullets || []
           }))
-        }),
+        }, 'CHAIN4'),
         CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
           commonQuestionSets: nextState.commonQuestionSets,
           sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
             sectionId: state.sectionId,
             recommendedQuestions: state.recommendedQuestions || []
           }))
-        })
+        }, 'CHAIN5')
       },
       sectionAdequacyReviews: {}
     } as any);
@@ -3704,7 +3706,7 @@ router.post('/:id/final-compose', async (req: Request, res: Response) => {
       await caseModel.updateCase(id, {
         chainCache: {
           ...(anyCase.chainCache || {}),
-          CHAIN7: buildChainCacheEntry(chain7InputHash, anyCase.finalDraft)
+          CHAIN7: buildChainCacheEntry(chain7InputHash, anyCase.finalDraft, 'CHAIN7')
         },
         chainPerformanceLogs: appendPerformanceLog(
           anyCase.chainPerformanceLogs || [],

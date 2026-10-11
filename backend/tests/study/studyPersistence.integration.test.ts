@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import dotenv from 'dotenv';
 import express from 'express';
+import { promptVersionLabel } from '../../src/llm/promptRegistry';
 
 dotenv.config();
 
@@ -94,7 +95,7 @@ async function run() {
           openIssues: [],
           evidenceLinks: [],
           unsupportedClaims: [],
-          generationMetadata: { promptVersion: 'CHAIN3_STUDY_REVEAL:v1' }
+          generationMetadata: { promptVersion: promptVersionLabel('CHAIN3_STUDY_REVEAL') }
         }
       ],
       scaffoldState: {

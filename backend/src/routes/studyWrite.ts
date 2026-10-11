@@ -364,10 +364,14 @@ router.post('/cases/:caseId/drafts/generate', async (req: Request, res: Response
 /** 섹션 옆 채팅: 지시를 받아 그 섹션을 고쳐 쓰고 CARE 점검을 다시 한다. */
 router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, res: Response) => {
   try {
-    const instruction = String(req.body?.instruction || '').trim();
+    // 직접 수정 뒤 "전체가 괜찮은지" 점검: 고친 내용은 지키고 나머지와 어긋나는 곳만 다듬는다
+    const reviewAfterEdit = Boolean(req.body?.reviewAfterEdit);
+    const instruction = reviewAfterEdit
+      ? '임상의가 이 섹션을 직접 고쳤다. [직접 수정 전 초안]과 [현재 초안]을 비교해 임상의가 바꾼 곳(추가·삭제·수정)을 찾는다. 임상의가 바꾼 내용은 임상의가 넣은 사실로 보고 그대로 둔다. 기록에 없는 내용이어도 지우거나 되돌리지 않는다(기록에 없는 새 사실이면 그 문장 끝에 "[기록 외 내용: 직접 수정]"만 붙인다). 그 변경 때문에 나머지 문장과 어긋나게 된 곳(같은 내용의 중복, 앞뒤 모순, 용어·시제·표기 불일치, 끊긴 흐름)만 최소한으로 다듬는다. 새 사실을 더하지 않는다. 어긋나는 곳이 없으면 초안을 한 글자도 바꾸지 않고 changeSummary 에 "직접 고친 내용과 나머지가 어긋나는 곳이 없어 그대로 두었다"고 쓴다. 바꿨으면 무엇을 바꿨는지 구체적으로 쓴다.'
+      : String(req.body?.instruction || '').trim();
     if (!instruction) return res.status(400).json({ error: '지시를 적어 주세요.' });
     // 초안에서 드래그한 부분 (선택). 너무 길면 자른다
-    const selectedText = String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
+    const selectedText = reviewAfterEdit ? undefined : String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
     const { caseId, sectionId } = req.params;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
 
@@ -378,7 +382,11 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     const section = state.sections?.[sectionId];
     if (!section || !section.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
 
-    const revised = await runRevise({ caseData, state, section, instruction, selectedText });
+    // 전체 점검에는 마지막 AI 판(직접 수정 전)을 함께 준다. 직접 고친 곳을 모델이 알아보게
+    const previousDraft = reviewAfterEdit
+      ? [...section.history].reverse().find((item) => item.source !== 'manual' && item.text !== section.draftText)?.text
+      : undefined;
+    const revised = await runRevise({ caseData, state, section, instruction, selectedText, previousDraft });
     const changed = revised.draftText.trim() !== section.draftText.trim();
     const careCheck = changed ? await runCareCheck({ caseData, state, sectionId, draftText: revised.draftText }) : section.careCheck;
 
@@ -413,8 +421,12 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
           {
             id: `swc-${randomUUID()}`,
             role: 'user',
-            // 드래그로 고른 부분이 있으면 채팅에 함께 남긴다
-            text: selectedText ? `「${selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}」 ${instruction}` : instruction,
+            // 드래그로 고른 부분이 있으면 채팅에 함께 남긴다. 전체 점검은 짧은 표시로
+            text: reviewAfterEdit
+              ? '[직접 수정 후 전체 점검] 고친 내용은 지키고, 나머지와 어긋나는 곳만 다듬어 줘.'
+              : selectedText
+                ? `「${selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}」 ${instruction}`
+                : instruction,
             at: now
           },
           {
@@ -450,6 +462,16 @@ router.put('/cases/:caseId/sections/:sectionId/draft', async (req: Request, res:
   try {
     const { caseId, sectionId } = req.params;
     const draftText = String(req.body?.draftText ?? '');
+    // 초안 화면의 직접 수정은 CARE 점검도 다시 돌린다 (최종 화면의 자동 저장은 요청하지 않음)
+    const recheckCare = Boolean(req.body?.recheckCare);
+    const before = await loadCase(caseId);
+    if (!before) return res.status(404).json({ error: 'Case not found' });
+    const beforeState = normalizeStudyWriteState(before.studyWrite);
+    const beforeSection = beforeState.sections?.[sectionId];
+    const careCheck =
+      recheckCare && draftText.trim() && beforeSection && beforeSection.draftText !== draftText
+        ? await runCareCheck({ caseData: before, state: beforeState, sectionId, draftText })
+        : null;
     const result = await serialize(caseId, async () => {
       const latest = await loadCase(caseId);
       if (!latest) return null;
@@ -464,7 +486,8 @@ router.put('/cases/:caseId/sections/:sectionId/draft', async (req: Request, res:
         ...current,
         draftText,
         version: current.version + 1,
-        history: [...current.history, { version: current.version + 1, text: draftText, source: 'manual', at: now }]
+        history: [...current.history, { version: current.version + 1, text: draftText, source: 'manual', at: now }],
+        ...(careCheck ? { careCheck } : {})
       };
       const merged: StudyWriteState = { ...state, sections: { ...(state.sections || {}), [sectionId]: next }, updatedAt: now };
       await saveState(latest.id, merged);

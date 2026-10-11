@@ -18,8 +18,9 @@ import {
 } from '../llm/schemas/studyWrite_draft';
 import { StudyWriteCareCheck, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItemsText, careWritingRule } from './careItems';
-import { allQuestions, buildRecordText } from './interview';
+import { allQuestions, buildRecordText, isRecordTruncated } from './interview';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
+import { promptMeta } from '../llm/promptRegistry';
 import { applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
 import { answerTextForPrompt } from './answerChoices';
 
@@ -30,23 +31,24 @@ import { answerTextForPrompt } from './answerChoices';
 const DRAFT_CONCURRENCY = 3;
 
 // 한 번의 체인 호출 안에서는 같은 문맥을 써서 같은 식별자가 같은 표기를 받게 한다.
-const outboundContext = createOutboundDeidContext();
-async function deidentifyText(text: string): Promise<string> {
+// 문맥은 호출마다 새로 만든다 (프로세스 전역 공유 시 케이스 간 번호가 섞이고 원문 식별자가 메모리에 남는다).
+type OutboundContext = ReturnType<typeof createOutboundDeidContext>;
+async function deidentifyText(text: string, context: OutboundContext): Promise<string> {
   if (!text.trim()) return '';
   return (
-    await deidentifyOutboundText(text, { sharedContext: outboundContext, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
+    await deidentifyOutboundText(text, { sharedContext: context, dateMode: 'KEEP', detectionProfile: 'anonymized_record' })
   ).text;
 }
 
 /** 질의응답을 체인 입력용 텍스트로. 답은 비식별 처리한다. */
-export async function buildQaText(state: StudyWriteState, forSectionId?: string): Promise<string> {
+export async function buildQaText(state: StudyWriteState, forSectionId?: string, context: OutboundContext = createOutboundDeidContext()): Promise<string> {
   const lines: string[] = [];
   for (const question of allQuestions(state)) {
     if (question.status === 'pending') continue;
     const relevant = !forSectionId || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
     if (!relevant) continue;
     // 글로 답하지 않은 질문은 선택지별 처리 지시를 그대로 넣는다 (자료 확인 필요 = 정보 부재 아님)
-    const answer = question.status === 'answered' ? await deidentifyText(question.answer) : answerTextForPrompt(question) || '(아직 답하지 않음)';
+    const answer = question.status === 'answered' ? await deidentifyText(question.answer, context) : answerTextForPrompt(question) || '(아직 답하지 않음)';
     lines.push(`- id: ${question.id}\n  쓰이는 섹션: ${question.targetSectionIds.join(', ')}\n  Q: ${question.text}\n  A: ${answer}`);
   }
   return lines.join('\n');
@@ -71,6 +73,12 @@ function currentDraftOf(caseData: any, sectionId: string): string {
   return drafts.find((draft) => draft.sectionId === sectionId)?.draftText || '';
 }
 
+/** "9a", "9a.", "CARE 9a", "9-a" → "9a". 숫자만 있으면 그 숫자. 없으면 빈 문자열. */
+export function normalizeCareItemCode(code: string): string {
+  const match = String(code || '').toLowerCase().replace(/[\s\-_.]/g, '').match(/(\d{1,2})([a-d])?/);
+  return match ? `${match[1]}${match[2] || ''}` : '';
+}
+
 export function emptySectionState(sectionId: string): StudyWriteSectionState {
   return { sectionId, draftText: '', version: 0, history: [], chat: [], careCheck: null, attachmentIds: [] };
 }
@@ -82,9 +90,10 @@ export async function runDraftForSection(params: {
 }): Promise<{ draftText: string; usedQuestionIds: string[]; notes: string[]; model: string }> {
   const { caseData, state, sectionId } = params;
   const model = getModelForChain('chain6');
+  const context = createOutboundDeidContext();
   const recordText = buildRecordText(caseData);
   const currentDraft = currentDraftOf(caseData, sectionId);
-  const qaText = await buildQaText(state, sectionId);
+  const qaText = await buildQaText(state, sectionId, context);
   // 처방명·변증명 한자는 용어 사전 것을 쓴다 (기록·답변에 나온 것만 목록으로)
   const glossary = glossaryForTexts([recordText, currentDraft, qaText]);
   const output = await callLLMWithSchema(
@@ -127,23 +136,32 @@ export async function runCareCheck(params: {
       careItems: careItemsText(sectionId),
       recordText: buildRecordText(caseData),
       currentDraft: draftText,
-      qaText: await buildQaText(state, sectionId)
+      qaText: await buildQaText(state, sectionId, createOutboundDeidContext())
     }),
     { model: getModelForChain('chain4'), label: `SW-C ${sectionId}` }
   );
-  // 정의된 항목 순서대로 맞추고, 모델이 빠뜨린 항목은 not_in_record 로 둔다.
-  const byCode = new Map(output.items.map((item) => [item.code.trim().toLowerCase(), item]));
+  // 정의된 항목 순서대로 맞춘다. 코드 표기("9a.", "CARE 9a", "9-a")는 숫자+영문으로 정규화해 맞춘다.
+  // 모델이 빠뜨린 항목은 임시로 not_in_record 로 두되, 판정을 받지 못한 것임을 hint 에 밝힌다
+  // ("판정 없음" 상태를 따로 두는 일은 화면 쪽 작업과 함께 한다: docs/prompt_chain_review_v1.md §5-1 4번).
+  const byCode = new Map<string, (typeof output.items)[number]>();
+  for (const item of output.items) {
+    const key = normalizeCareItemCode(item.code);
+    if (key && !byCode.has(key)) byCode.set(key, item);
+  }
+  const missing = defs.filter((def) => !byCode.has(normalizeCareItemCode(def.code))).map((def) => def.code);
+  if (missing.length > 0) console.warn(`[SW-C ${sectionId}] no verdict for ${missing.join(', ')}`);
   return {
     checkedAt: new Date().toISOString(),
     promptVersion: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION,
+    promptTemplateHash: promptMeta('SW_C').promptTemplateHash,
     items: defs.map((def) => {
-      const found = byCode.get(def.code.toLowerCase());
+      const found = byCode.get(normalizeCareItemCode(def.code));
       return {
         code: def.code,
         label: def.label,
         required: def.required,
         status: found?.status || 'not_in_record',
-        hint: found?.hint || ''
+        hint: found?.hint || (found ? '' : '점검 결과를 받지 못한 항목입니다. 다시 점검하면 판정됩니다.')
       };
     })
   };
@@ -156,18 +174,22 @@ export async function runRevise(params: {
   instruction: string;
   /** 초안에서 드래그한 부분. 있으면 그 부분만 고친다 */
   selectedText?: string;
+  /** 직접 수정 뒤 전체 점검: 직접 수정 전(마지막 AI 판) 초안 */
+  previousDraft?: string;
 }): Promise<{ draftText: string; changeSummary: string; outOfRecordClaims: string[]; model: string }> {
   const { caseData, state, section, instruction } = params;
-  const selectedText = params.selectedText ? await deidentifyText(params.selectedText) : undefined;
+  const context = createOutboundDeidContext();
+  const selectedText = params.selectedText ? await deidentifyText(params.selectedText, context) : undefined;
   const model = getModelForChain('chain6');
-  const priorInstructions = section.chat
-    .filter((entry) => entry.role === 'user')
-    .slice(-5)
-    .map((entry) => `- ${entry.text}`)
-    .join('\n');
+  // 이전 지시도 참여자가 쓴 글이므로 이번 지시와 같은 기준으로 비식별 처리한다.
+  const priorInstructionTexts: string[] = [];
+  for (const entry of section.chat.filter((item) => item.role === 'user').slice(-5)) {
+    priorInstructionTexts.push(`- ${await deidentifyText(entry.text, context)}`);
+  }
+  const priorInstructions = priorInstructionTexts.join('\n');
   const recordText = buildRecordText(caseData);
-  const qaText = await buildQaText(state, section.sectionId);
-  const safeInstruction = await deidentifyText(instruction);
+  const qaText = await buildQaText(state, section.sectionId, context);
+  const safeInstruction = await deidentifyText(instruction, context);
   const glossary = glossaryForTexts([recordText, section.draftText, qaText, safeInstruction]);
   const output = await callLLMWithSchema(
     StudyWriteReviseOutputSchema,
@@ -183,7 +205,8 @@ export async function runRevise(params: {
       priorInstructions,
       instruction: safeInstruction,
       hanjaGlossary: formatHanjaGlossary(glossary),
-      selectedText
+      selectedText,
+      previousDraft: params.previousDraft
     }),
     { model, label: `SW-R ${section.sectionId}` }
   );
@@ -243,8 +266,9 @@ export async function generateDrafts(params: {
             at: now,
             model: draft.model,
             promptVersion: STUDY_WRITE_DRAFT_PROMPT_VERSION,
+            promptTemplateHash: promptMeta('SW_D').promptTemplateHash,
             usedQuestionIds: draft.usedQuestionIds,
-            notes: draft.notes
+            notes: isRecordTruncated(params.caseData) ? [...draft.notes, '기록 전문이 길어 뒷부분이 모델에 전달되지 않았습니다.'] : draft.notes
           }
         ],
         careCheck,
