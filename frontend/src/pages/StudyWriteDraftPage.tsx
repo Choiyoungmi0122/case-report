@@ -26,7 +26,7 @@ const POLL_MS = 3000;
 const STATUS_LABEL: Record<StudyWriteCareItemStatus, string> = {
   present: '있음',
   in_record_not_in_draft: '초안에 빠짐',
-  not_in_record: '기록에 없음',
+  not_in_record: '없음',
   not_applicable: '해당 없음'
 };
 
