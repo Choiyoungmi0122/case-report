@@ -23,9 +23,17 @@ const POLL_MS = 3000;
 
 const STATUS_LABEL: Record<StudyWriteCareItemStatus, string> = {
   present: '있음',
-  in_record_not_in_draft: '기록에는 있음',
+  in_record_not_in_draft: '초안에 빠짐',
   not_in_record: '기록에 없음',
   not_applicable: '해당 없음'
+};
+
+/** 상태 배지에 쓰는 기호와 한 줄 설명 */
+const STATUS_META: Record<StudyWriteCareItemStatus, { mark: string; note: string }> = {
+  present: { mark: '✓', note: '초안에 들어 있음' },
+  in_record_not_in_draft: { mark: '!', note: '기록에는 있는데 초안에 없음. 수정 요청으로 넣을 수 있음' },
+  not_in_record: { mark: '✕', note: '기록에도 답변에도 없음. 알고 있으면 내 답변에 보충' },
+  not_applicable: { mark: '–', note: '이 증례에는 해당 없음' }
 };
 
 function missingRequiredCount(section: StudyWriteSection) {
@@ -409,25 +417,74 @@ export default function StudyWriteDraftPage() {
           {tab === 'care' && section ? (
             <div className="sw-draft__care">
               {section.careCheck ? (
-                <>
-                  <p className="sw-draft__care-hint">
-                    이 섹션의 CARE 세부 항목입니다. "기록에는 있음"은 수정 요청으로 넣을 수 있고, "기록에 없음"은 확인이 필요합니다.
-                  </p>
-                  <ul>
-                    {section.careCheck.items.map((item) => (
-                      <li key={item.code} className={`is-${item.status}`}>
-                        <span className={`sw-draft__tag${item.required ? ' is-required' : ''}`}>
-                          {item.code} {item.required ? '필수' : '선택'}
-                        </span>
-                        <div>
+                (() => {
+                  const items = section.careCheck.items;
+                  const required = items.filter((item) => item.required);
+                  const optional = items.filter((item) => !item.required);
+                  const okCount = (list: typeof items) => list.filter((item) => item.status === 'present' || item.status === 'not_applicable').length;
+                  const renderItem = (item: (typeof items)[number]) => (
+                    <li key={item.code} className={`sw-care-item is-${item.status}`}>
+                      <div className="sw-care-item__status" aria-label={STATUS_LABEL[item.status]}>
+                        <span className="sw-care-item__mark">{STATUS_META[item.status].mark}</span>
+                        <span className="sw-care-item__state">{STATUS_LABEL[item.status]}</span>
+                      </div>
+                      <div className="sw-care-item__body">
+                        <div className="sw-care-item__head">
+                          <span className={`sw-draft__tag${item.required ? ' is-required' : ''}`}>
+                            {item.code} {item.required ? '필수' : '선택'}
+                          </span>
                           <strong>{item.label}</strong>
-                          <em>{STATUS_LABEL[item.status]}</em>
-                          {item.hint ? <p>{renderClinicalAnonymizedText(item.hint)}</p> : null}
                         </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                        <p className="sw-care-item__note">{STATUS_META[item.status].note}</p>
+                        {item.hint ? <p className="sw-care-item__hint">{renderClinicalAnonymizedText(item.hint)}</p> : null}
+                        {item.status === 'in_record_not_in_draft' && !locked ? (
+                          <button
+                            type="button"
+                            className="sw-care-item__action"
+                            onClick={() => {
+                              setInstruction(`${item.label.split('.')[0].split('(')[0].trim()} 내용을 기록에서 찾아 이 섹션에 넣어 줘.`);
+                              setTab('chat');
+                            }}
+                          >
+                            수정 요청으로 넣기
+                          </button>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                  return (
+                    <>
+                      <div className="sw-care-summary">
+                        <div className={`sw-care-summary__box${okCount(required) === required.length ? ' is-ok' : ' is-missing'}`}>
+                          <span>필수</span>
+                          <strong>
+                            {okCount(required)} / {required.length}
+                          </strong>
+                          <em>{okCount(required) === required.length ? '모두 있음' : `${required.length - okCount(required)}개 빠짐`}</em>
+                        </div>
+                        <div className="sw-care-summary__box">
+                          <span>선택</span>
+                          <strong>
+                            {okCount(optional)} / {optional.length}
+                          </strong>
+                          <em>{optional.length === 0 ? '없음' : `${optional.length - okCount(optional)}개 빠짐`}</em>
+                        </div>
+                      </div>
+                      {required.length > 0 ? (
+                        <>
+                          <h4 className="sw-care-group">필수 항목</h4>
+                          <ul>{required.map(renderItem)}</ul>
+                        </>
+                      ) : null}
+                      {optional.length > 0 ? (
+                        <>
+                          <h4 className="sw-care-group">선택 항목</h4>
+                          <ul>{optional.map(renderItem)}</ul>
+                        </>
+                      ) : null}
+                    </>
+                  );
+                })()
               ) : (
                 <p className="sw-draft__empty">아직 점검 결과가 없습니다.</p>
               )}
