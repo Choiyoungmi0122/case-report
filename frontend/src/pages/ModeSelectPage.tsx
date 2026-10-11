@@ -105,6 +105,22 @@ export default function ModeSelectPage() {
             >
               실험용 Scaffold 시작
             </button>
+            <button
+              type="button"
+              onClick={() => navigate('/study/scaffold-v2')}
+              style={{
+                border: '1px solid #23663a',
+                borderRadius: 6,
+                padding: '10px 16px',
+                background: '#eef8f1',
+                color: '#23663a',
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              실험용 Scaffold V2 시작
+            </button>
           </section>
 
           <section style={cardStyle}>

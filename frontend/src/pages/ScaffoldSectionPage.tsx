@@ -25,9 +25,9 @@ import {
   type ScaffoldType,
   CARE_SECTION_GUIDE,
   CARE_SECTION_ITEM_META,
-  CARE_WRITING_EXAMPLES,
-  STUDY_SECTION_IDS
+  CARE_WRITING_EXAMPLES
 } from '../utils/scaffoldUi';
+import { getStudySectionIds } from '../utils/scaffoldVersion';
 import './ScaffoldSectionPage.css';
 
 // ===== Types =====
@@ -626,7 +626,8 @@ export default function ScaffoldSectionPage() {
   const sectionOrder = useMemo(() => {
     const all = (scaffoldData?.sectionStates || []).map((item) => item.sectionId);
     // 실험용 경로에서는 정해진 항목만, 정해진 순서로 이동한다.
-    return studyMode ? STUDY_SECTION_IDS.filter((id) => all.includes(id as any)) as typeof all : all;
+    // V2 케이스(scaffoldVersion v3.0)는 치료 개입만 다루므로 다음 항목이 없다.
+    return studyMode ? getStudySectionIds(scaffoldData).filter((id) => all.includes(id as any)) as typeof all : all;
   }, [scaffoldData, studyMode]);
 
   const sectionIndex = useMemo(

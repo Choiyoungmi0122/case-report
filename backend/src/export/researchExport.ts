@@ -504,7 +504,11 @@ async function sanitizeScaffoldData(scaffoldState: any, sectionDrafts: any[], sa
             'targetSectionIds',
             'confidence',
             'createdAt',
-            'updatedAt'
+            'updatedAt',
+            // Scaffold V2 메모 필드(코드·id 값이라 비식별 처리 대상이 아님)
+            'origin',
+            'suggestionId',
+            'careItems'
           ])
         })
       : undefined,

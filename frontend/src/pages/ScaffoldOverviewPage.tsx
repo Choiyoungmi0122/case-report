@@ -23,9 +23,9 @@ import {
   type SectionGroup,
   CARE_EXAMPLE_RECORD,
   CARE_OVERVIEW,
-  CARE_WRITING_EXAMPLES,
-  STUDY_SECTION_IDS
+  CARE_WRITING_EXAMPLES
 } from '../utils/scaffoldUi';
+import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import './ScaffoldOverviewPage.css';
 
 type StudentSectionStatus = 'not_started' | 'in_progress' | 'ai_review' | 'completed';
@@ -250,7 +250,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   // 실험용 경로에서는 정해진 몇 개 항목만 다룬다.
   const studySectionIds = useMemo(
     () =>
-      STUDY_SECTION_IDS.filter((id) => (data?.sectionStates || []).some((state) => state.sectionId === id)),
+      getStudySectionIds(data).filter((id) => (data?.sectionStates || []).some((state) => state.sectionId === id)),
     [data]
   );
 
@@ -605,7 +605,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
       <main className="scaffold-v2">
         <header className="scaffold-v2__header">
           <div>
-            <div className="scaffold-v2__kicker">Scaffold v2</div>
+            <div className="scaffold-v2__kicker">{isScaffoldV2Data(data) ? 'Scaffold V2' : 'Scaffold v2'}</div>
             <h1>{data.title || '증례보고 작성'}</h1>
             <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '전체 증례의 근거와 핵심 메시지를 먼저 구성한 뒤 CARE 원고로 전환합니다.'}</p>
           </div>

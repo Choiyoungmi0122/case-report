@@ -11,6 +11,7 @@ import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import { getCompletedScaffoldSectionCount } from '../utils/scaffoldUi';
+import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const objectUrl = window.URL.createObjectURL(blob);
@@ -163,17 +164,18 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
   useEffect(() => {
     if (!data || viewedRef.current) return;
     viewedRef.current = true;
+    // V2 케이스는 실습 대상 섹션(치료 개입)만 세션 범위로 본다. 서버의 completedAt 계산과 같은 기준이다.
+    const totalSectionCount = isScaffoldV2Data(data)
+      ? getStudySectionIds(data).filter((id) => (data.sectionStates || []).some((state) => state.sectionId === id)).length
+      : (data.sectionStates || []).length;
     void logEvent('final_summary_viewed', {
       completedSectionCount: getCompletedScaffoldSectionCount(data),
-      totalSectionCount: (data.sectionStates || []).length
+      totalSectionCount
     });
-    if (
-      data.scaffoldState.completedAt ||
-      getCompletedScaffoldSectionCount(data) >= (data.sectionStates || []).length
-    ) {
+    if (data.scaffoldState.completedAt || getCompletedScaffoldSectionCount(data) >= totalSectionCount) {
       void logEvent('session_completed', {
         completedSectionCount: getCompletedScaffoldSectionCount(data),
-        totalSectionCount: (data.sectionStates || []).length
+        totalSectionCount
       });
     }
   }, [data]);

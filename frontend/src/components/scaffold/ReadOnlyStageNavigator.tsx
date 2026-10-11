@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import type { ScaffoldStateResponse } from '../../services/api';
 import { getReadOnlyViewCaseId } from '../../utils/readOnlyView';
-import { STUDY_SECTION_IDS, getSectionConfig } from '../../utils/scaffoldUi';
+import { getSectionConfig } from '../../utils/scaffoldUi';
+import { getStudySectionIds } from '../../utils/scaffoldVersion';
 
 export type ReadOnlyStage = 'pre' | 'post';
 
@@ -151,7 +152,7 @@ export function ReadOnlyNavigatorBar({
   if (!caseId || !data || getReadOnlyViewCaseId() !== caseId) return null;
 
   const available = (data.sectionStates || []).map((item) => item.sectionId as string);
-  const studied = STUDY_SECTION_IDS.filter((id) => available.includes(id));
+  const studied = getStudySectionIds(data).filter((id) => available.includes(id));
   const sectionIds = studied.length > 0 ? studied : available;
   const revealedSectionIds = (data.scaffoldState?.sectionProgress || [])
     .filter((item) => item.draftRevealed)

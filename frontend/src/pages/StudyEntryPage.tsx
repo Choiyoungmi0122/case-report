@@ -6,9 +6,12 @@ import {
   resetResearchSession,
   setResearchParticipantCode
 } from '../utils/research';
+import { STUDENT_V1_CODE_PATTERN, getResearchStorageScope, type ScaffoldEntryVersion } from '../utils/scaffoldVersion';
 
 type StudyEntryPageProps = {
   mode: CaseMode;
+  /** 실험용 Scaffold 진입 버전. 'v2'는 "실험용 Scaffold V2 시작"으로 들어온 경우. */
+  scaffoldVersion?: ScaffoldEntryVersion;
 };
 
 function normalizeScaffoldExperimentCode(value: string) {
@@ -27,7 +30,7 @@ function normalizeScaffoldExperimentCode(value: string) {
   return `SQ${String(number).padStart(3, '0')}`;
 }
 
-export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
+export default function StudyEntryPage({ mode, scaffoldVersion = 'v1' }: StudyEntryPageProps) {
   const navigate = useNavigate();
   const [participantCode, setParticipantCode] = useState(() => getStoredParticipantCode(mode));
   // 실험용 Write 참여자는 모두 전문가(본 실험, 1회차)라 화면에서 고르지 않고 고정한다.
@@ -39,6 +42,8 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   const isScaffold = mode === 'scaffold';
+  const isScaffoldV2 = isScaffold && scaffoldVersion === 'v2';
+  const storageScope = getResearchStorageScope(mode, scaffoldVersion);
   const codeLabel = isScaffold ? '실험번호' : '참가자 코드';
   const normalizedScaffoldCode = isScaffold
     ? normalizeScaffoldExperimentCode(participantCode)
@@ -49,6 +54,7 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
     const state = {
       participantCode: codeToUse,
       experimentCode: isScaffold ? codeToUse : undefined,
+      scaffoldVersion: isScaffold ? scaffoldVersion : undefined,
       studyMetadata: {
         studyGroup: isScaffold ? undefined : studyGroup || undefined,
         phase: isScaffold ? undefined : phase || undefined,
@@ -62,7 +68,8 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
     };
 
     if (isScaffold) {
-      navigate('/study/scaffold/input', { state });
+      // V2는 전용 입력 경로로 간다. 새로고침으로 라우터 state가 사라져도 경로가 버전을 보존한다.
+      navigate(isScaffoldV2 ? '/study/scaffold-v2/input' : '/study/scaffold/input', { state });
       return;
     }
 
@@ -78,6 +85,12 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
 
     if (isScaffold && !normalizedScaffoldCode) {
       setError('실험번호는 SQ005, SQ-005, test-01처럼 영문, 숫자, 하이픈, 언더스코어로 입력해 주세요.');
+      return;
+    }
+
+    // 학생 V1 코드(S1, S3-1 …)로 V2를 시작하면 unique 충돌 뒤 V1 참가자 기록으로 이어질 수 있어 막는다.
+    if (isScaffoldV2 && STUDENT_V1_CODE_PATTERN.test(normalizedScaffoldCode)) {
+      setError('S1, S3-1처럼 학생 V1 실험에서 쓴 형식의 코드는 Scaffold V2에서 쓸 수 없습니다. 배정받은 V2 코드(예: P01, F01)를 입력해 주세요.');
       return;
     }
 
@@ -97,7 +110,7 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
     // 같은 기기에서 다음 참여자가 시작하면 이전 참여자의 sessionId를 물려받지 않도록
     // 코드가 바뀔 때 세션을 새로 만든다. 같은 코드로 다시 들어오면 기존 세션을 유지한다.
     if (getStoredParticipantCode(mode) !== codeToStore) {
-      resetResearchSession(mode);
+      resetResearchSession(storageScope);
     }
     setResearchParticipantCode(mode, codeToStore);
     navigateToInput(codeToStore);
@@ -107,12 +120,14 @@ export default function StudyEntryPage({ mode }: StudyEntryPageProps) {
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f5f7fb', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 16, padding: 28, boxShadow: '0 10px 30px rgba(15, 23, 42, 0.08)' }}>
         <h1 style={{ marginTop: 0, marginBottom: 8, color: '#17324d' }}>
-          {isScaffold ? 'Study Scaffold' : 'Study Write'}
+          {isScaffoldV2 ? 'Study Scaffold V2' : isScaffold ? 'Study Scaffold' : 'Study Write'}
         </h1>
         <p style={{ marginTop: 0, marginBottom: 20, color: '#4a5d73', lineHeight: 1.7 }}>
-          {isScaffold
-            ? '배정받은 Scaffold 실험번호를 입력하고 시작하세요. SQ005 또는 test-01 같은 번호를 사용할 수 있습니다.'
-            : '참가자 코드를 입력하여 실험을 시작하세요.'}
+          {isScaffoldV2
+            ? '배정받은 Scaffold V2 실험번호를 입력하고 시작하세요. 이번 실습은 치료 개입 항목 하나를 진행합니다.'
+            : isScaffold
+              ? '배정받은 Scaffold 실험번호를 입력하고 시작하세요. SQ005 또는 test-01 같은 번호를 사용할 수 있습니다.'
+              : '참가자 코드를 입력하여 실험을 시작하세요.'}
         </p>
 
         <label style={{ display: 'block', fontWeight: 700, color: '#17324d', marginBottom: 8 }}>

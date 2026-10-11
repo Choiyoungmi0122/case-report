@@ -1,4 +1,5 @@
 import { CaseMode, LogResearchEventRequest, caseApi } from '../services/api';
+import type { ResearchStorageScope } from './scaffoldVersion';
 
 export function createResearchEventId(prefix: string) {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -47,7 +48,10 @@ export type ResearchSession = {
  */
 const PARTICIPANT_CODE_KEY = () => 'research-participant-code';
 const LEGACY_PARTICIPANT_CODE_KEY = (mode: CaseMode) => `research-participant-code:${mode}`;
-const SESSION_ID_KEY = (mode: CaseMode) => `research-session-id:${mode}`;
+// 세션 id는 범위(write / scaffold / scaffold-v2)별로 따로 둔다. V2 실험이 같은 기기의 V1 세션 id를
+// 물려받으면 두 실험 기록이 같은 sessionId로 묶이기 때문이다.
+const SESSION_ID_KEY = (scope: ResearchStorageScope) => `research-session-id:${scope}`;
+const ALL_STORAGE_SCOPES: ResearchStorageScope[] = ['write', 'scaffold', 'scaffold-v2'];
 
 function readStorage(key: string): string {
   if (typeof window === 'undefined') return '';
@@ -76,8 +80,8 @@ function clearStorage(key: string) {
   }
 }
 
-function createSessionId(mode: CaseMode) {
-  return `${mode}_session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+function createSessionId(scope: ResearchStorageScope) {
+  return `${scope.replace(/-/g, '_')}_session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function isResearchRoute(pathname: string) {
@@ -97,12 +101,12 @@ export function getStoredParticipantCode(mode: CaseMode) {
  * Re-entering the page reuses the same sessionId, so a refresh mid-session does
  * not split the participant's trajectory into two sessions.
  */
-export function getOrCreateResearchSessionId(mode: CaseMode) {
-  const existing = readStorage(SESSION_ID_KEY(mode));
+export function getOrCreateResearchSessionId(scope: ResearchStorageScope) {
+  const existing = readStorage(SESSION_ID_KEY(scope));
   if (existing) return existing;
 
-  const created = createSessionId(mode);
-  writeStorage(SESSION_ID_KEY(mode), created);
+  const created = createSessionId(scope);
+  writeStorage(SESSION_ID_KEY(scope), created);
   return created;
 }
 
@@ -123,11 +127,11 @@ export function setResearchParticipantCode(mode: CaseMode, participantCode: stri
  * machine. Clears BOTH mode sessions and the shared code, otherwise the next
  * participant could inherit the previous one's identifiers.
  */
-export function resetResearchSession(mode?: CaseMode) {
-  const modes: CaseMode[] = mode ? [mode] : ['write', 'scaffold'];
-  for (const item of modes) {
+export function resetResearchSession(scope?: ResearchStorageScope) {
+  const scopes: ResearchStorageScope[] = scope ? [scope] : ALL_STORAGE_SCOPES;
+  for (const item of scopes) {
     clearStorage(SESSION_ID_KEY(item));
-    clearStorage(LEGACY_PARTICIPANT_CODE_KEY(item));
+    if (item === 'write' || item === 'scaffold') clearStorage(LEGACY_PARTICIPANT_CODE_KEY(item));
   }
   clearStorage(PARTICIPANT_CODE_KEY());
 }

@@ -708,16 +708,21 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
           qnaHistory
         );
     // Page entry must not fail because the reviewer output was unparsable.
+    // 연구자 다시 보기(읽기 전용)에서는 저장된 검토만 보여 주고, 캐시·성능 로그 갱신이나
+    // LLM 호출처럼 참가자 문서를 바꾸는 일은 하지 않는다.
+    const readOnlyView = req.get('X-Read-Only-View') === '1';
     const adequacyReview = preRevealStudySection
       ? emptyAdequacyReview(section)
-      : await ensureAdequacyReviewSafe({
-          caseId: id,
-          caseData: anyCase,
-          sectionId: section,
-          currentDraft: draftEntry.draftText || '',
-          evidenceCards: relevantEvidence,
-          qnaHistory
-        });
+      : readOnlyView
+        ? getStoredAdequacyReview(anyCase, section) || emptyAdequacyReview(section)
+        : await ensureAdequacyReviewSafe({
+            caseId: id,
+            caseData: anyCase,
+            sectionId: section,
+            currentDraft: draftEntry.draftText || '',
+            evidenceCards: relevantEvidence,
+            qnaHistory
+          });
     const sectionMissingInfo = mergeReviewerMissingItems(uniqueStrings(state.missingInfoBullets || []), [
       ...(adequacyReview.missingRequiredItems || []),
       ...(adequacyReview.depthIssues || [])

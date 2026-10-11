@@ -27,8 +27,10 @@ function App() {
         <Route path="/scaffold" element={<ScaffoldEntryPage />} />
         <Route path="/study/write" element={<StudyEntryPage mode="write" />} />
         <Route path="/study/scaffold" element={<StudyEntryPage mode="scaffold" />} />
+        <Route path="/study/scaffold-v2" element={<StudyEntryPage mode="scaffold" scaffoldVersion="v2" />} />
         <Route path="/study/write/input" element={<CaseInputPage mode="write" />} />
         <Route path="/study/scaffold/input" element={<CaseInputPage mode="scaffold" />} />
+        <Route path="/study/scaffold-v2/input" element={<CaseInputPage mode="scaffold" scaffoldVersion="v2" />} />
         <Route path="/study/write/cases/:caseId" element={<CaseOverviewPage studyMode />} />
         <Route path="/study/write/cases/:caseId/interview" element={<StudyWriteInterviewPage />} />
         <Route path="/study/write/cases/:caseId/draft" element={<StudyWriteDraftPage />} />

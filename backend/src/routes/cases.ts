@@ -51,7 +51,14 @@ import {
 } from '../llm/chains';
 import { chain3SystemPrompt, buildChain3UserPrompt } from '../llm/prompts/chain3_draft';
 import { chain7SystemPrompt } from '../llm/prompts/chain7_final';
-import { buildGenerationMetadata, getVersionMetadata, hashPromptParts } from '../config/researchMetadata';
+import {
+  buildGenerationMetadata,
+  DEFAULT_SCAFFOLD_VERSION,
+  getVersionMetadata,
+  hashPromptParts,
+  STUDENT_V1_CODE_PATTERN,
+  STUDY_SCAFFOLD_V2_VERSION
+} from '../config/researchMetadata';
 import { DEFAULT_STUDY_CASE_ID, DEFAULT_STUDY_CASE_VERSION, getStudyCaseTemplate } from '../study/cases/defaultStudyCase';
 import { getFixedStudyCaseAnalysis } from '../study/cases/studyCaseSnapshot';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
@@ -2320,6 +2327,21 @@ router.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    // Scaffold V2(v3.0) 진입에서는 학생 V1 코드 형식을 거부한다. 같은 코드로 만들면 unique 충돌 뒤
+    // "이어서 하기"가 V1 참가자 기록을 열어 쓰게 되기 때문이다. 화면에서도 막지만 서버에서 한 번 더 막는다.
+    const requestedScaffoldVersion =
+      typeof metadata?.versionMetadata?.scaffoldVersion === 'string' ? metadata.versionMetadata.scaffoldVersion : undefined;
+    if (
+      mode === 'scaffold' &&
+      requestedScaffoldVersion === STUDY_SCAFFOLD_V2_VERSION &&
+      requestedExperimentCode &&
+      STUDENT_V1_CODE_PATTERN.test(requestedExperimentCode)
+    ) {
+      return res.status(400).json({
+        error: `"${requestedExperimentCode}"는 학생 V1 실험에서 쓴 코드 형식입니다. Scaffold V2에서는 다른 형식의 코드(예: P01, F01)를 쓰세요.`
+      });
+    }
+
     const processedVisits: Visit[] = normalizeIncomingVisits(visits);
     const studyMetadata = normalizeStudyMetadata(metadata?.studyMetadata);
     const metadataStudyCase = getStudyCaseTemplate(metadata?.studyConfig?.studyCaseId);
@@ -2393,6 +2415,20 @@ router.post('/', async (req: Request, res: Response) => {
       const existing: any = code
         ? (await caseModel.getAllCases()).find((item: any) => String(item.experiment_code || '').toUpperCase() === code.toUpperCase())
         : null;
+      // Scaffold 버전이 다른 기존 기록(예: 학생 V1)으로는 이어서 하지 못하게 한다.
+      const requestedMode = req.body?.mode === 'scaffold' ? 'scaffold' : 'write';
+      const requestedVersion = String(req.body?.metadata?.versionMetadata?.scaffoldVersion || DEFAULT_SCAFFOLD_VERSION);
+      const existingVersion = String(existing?.versionMetadata?.scaffoldVersion || DEFAULT_SCAFFOLD_VERSION);
+      if (existing && requestedMode === 'scaffold' && existing.mode === 'scaffold' && requestedVersion !== existingVersion) {
+        return res.status(409).json({
+          error: `"${code}"는 다른 버전의 Scaffold 실험(${existingVersion})에서 이미 쓴 코드입니다. 그 기록으로 이어서 할 수 없으니 새 코드를 쓰세요.`,
+          duplicateExperimentCode: code,
+          existingCaseId: null,
+          existingMode: existing.mode,
+          resumeStage: null,
+          versionConflict: true
+        });
+      }
       const studyWrite = existing?.studyWrite;
       const resumeStage = !existing
         ? null

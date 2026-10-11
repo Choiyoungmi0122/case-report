@@ -419,6 +419,114 @@ async function run() {
   assert.equal(completionGate.allDraftJudgmentsSaved, true);
   assert.equal(completionGate.postAiReflectionSaved, true);
 
+  // Scaffold V2(scaffoldVersion v3.0) 게이트. V1 게이트와 데이터는 그대로 두고 두 가지만 다르다:
+  // (1) 내 초안(learnerNotes)만 쓴 학습자도 AI 공개 가능, (2) 모든 문장 판정은 완료 조건이 아니다.
+  const v2CaseData = { ...baseCaseData, versionMetadata: { scaffoldVersion: 'v3.0' } };
+  const ownDraftOnlyState: any = {
+    ...revealReadyState,
+    sectionReflections: [
+      {
+        ...revealReadyState.sectionReflections[0],
+        selectedEvidenceIds: [],
+        selectedEvidence: [],
+        learnerKeyInformationItems: [],
+        learnerIdentifiedKeyInfo: [],
+        noRelevantEvidenceConfirmed: false,
+        learnerNotes: '내 초안만 썼다.'
+      }
+    ]
+  };
+  const v1OwnDraftGate = evaluateStudyRevealGate(baseCaseData, ownDraftOnlyState, CareSection.PATIENT_INFORMATION);
+  assert.equal(v1OwnDraftGate.canReveal, false);
+  assert.equal(v1OwnDraftGate.preAiEvidencePath, null);
+  const v2OwnDraftGate = evaluateStudyRevealGate(v2CaseData, ownDraftOnlyState, CareSection.PATIENT_INFORMATION);
+  assert.equal(v2OwnDraftGate.canReveal, true);
+  assert.equal(v2OwnDraftGate.preAiEvidencePath, 'own_draft');
+  const v2EmptyDraftGate = evaluateStudyRevealGate(
+    v2CaseData,
+    { ...ownDraftOnlyState, sectionReflections: [{ ...ownDraftOnlyState.sectionReflections[0], learnerNotes: '   ' }] },
+    CareSection.PATIENT_INFORMATION
+  );
+  assert.equal(v2EmptyDraftGate.canReveal, false);
+
+  const v2StateRevealedWithReflection: any = {
+    ...completionReadyWithReflection,
+    // 문장 판정은 하나도 저장하지 않은 상태
+    reviewItems: completionReadyWithReflection.reviewItems.filter((item: any) => item.sourceType !== 'draft_sentence')
+  };
+  const v1GateWithoutSentenceJudgments = evaluateStudyCompletionGate(
+    baseCaseData,
+    v2StateRevealedWithReflection,
+    CareSection.PATIENT_INFORMATION
+  );
+  assert.equal(v1GateWithoutSentenceJudgments.requireAllDraftJudgments, true);
+  assert.equal(v1GateWithoutSentenceJudgments.canComplete, false);
+  const v2GateWithoutSentenceJudgments = evaluateStudyCompletionGate(
+    v2CaseData,
+    v2StateRevealedWithReflection,
+    CareSection.PATIENT_INFORMATION
+  );
+  assert.equal(v2GateWithoutSentenceJudgments.requireAllDraftJudgments, false);
+  assert.equal(v2GateWithoutSentenceJudgments.allDraftJudgmentsSaved, false);
+  assert.equal(v2GateWithoutSentenceJudgments.canComplete, true);
+
+  // 충분성 판단 이유(note)는 스냅샷에 남고, 이유가 없으면 키 자체가 없다(V1 스냅샷 모양 유지).
+  const snapshotWithNote = buildPreRevealSnapshot(
+    {
+      ...completionReadyWithReflection,
+      reviewItems: completionReadyWithReflection.reviewItems.map((item: any, index: number) =>
+        index === 0 ? { ...item, note: '기록에 용량이 없어서' } : { ...item, note: undefined }
+      )
+    },
+    CareSection.PATIENT_INFORMATION
+  );
+  const judgmentsWithNote = snapshotWithNote.reviewItemJudgments.filter((item: any) => 'note' in item);
+  assert.equal(judgmentsWithNote.length, 1);
+  assert.equal((judgmentsWithNote[0] as any).note, '기록에 용량이 없어서');
+
+  // V2 메모 필드는 정규화를 통과하고, 없는 필드는 추가되지 않는다. 메모 상한은 100개.
+  const normalizedCaseMap = normalizeV2CaseMap({
+    caseNotes: [
+      { id: 'case-note-1', type: 'observation', text: 'V1 모양 메모', createdAt: '2026-10-11T00:00:00.000Z' },
+      {
+        id: 'case-note-ai-v2-1-2',
+        type: 'observation',
+        text: 'V2 메모',
+        createdAt: '2026-10-11T00:00:01.000Z',
+        visitIndex: 2,
+        careItems: ['9a', '9c'],
+        origin: 'ai_suggestion',
+        suggestionId: 'v2-1',
+        updatedAt: '2026-10-11T00:00:02.000Z'
+      },
+      { id: 'case-note-3', type: 'question', text: '잘못된 회차', createdAt: '2026-10-11T00:00:03.000Z', visitIndex: 0, origin: 'bogus' },
+      ...Array.from({ length: 120 }, (_, index) => ({
+        id: `case-note-bulk-${index}`,
+        type: 'observation',
+        text: `메모 ${index}`,
+        createdAt: '2026-10-11T00:01:00.000Z'
+      }))
+    ]
+  });
+  assert.ok(normalizedCaseMap);
+  assert.equal(normalizedCaseMap!.caseNotes.length, 100);
+  assert.equal('visitIndex' in normalizedCaseMap!.caseNotes[0], false);
+  assert.equal('origin' in normalizedCaseMap!.caseNotes[0], false);
+  assert.deepEqual(normalizedCaseMap!.caseNotes[1], {
+    id: 'case-note-ai-v2-1-2',
+    type: 'observation',
+    text: 'V2 메모',
+    sourceEvidenceIds: [],
+    createdAt: '2026-10-11T00:00:01.000Z',
+    visitIndex: 2,
+    careItems: ['9a', '9c'],
+    origin: 'ai_suggestion',
+    suggestionId: 'v2-1',
+    updatedAt: '2026-10-11T00:00:02.000Z'
+  });
+  assert.equal('visitIndex' in normalizedCaseMap!.caseNotes[2], false);
+  assert.equal('origin' in normalizedCaseMap!.caseNotes[2], false);
+
   const learningFeedback = buildLearningFeedback(
     baseCaseData,
     'supported_by_record',

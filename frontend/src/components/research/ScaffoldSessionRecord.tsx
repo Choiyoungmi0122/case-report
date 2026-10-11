@@ -2,9 +2,9 @@ import type { CSSProperties } from 'react';
 import {
   DRAFT_JUDGMENT_OPTIONS,
   INFORMATION_STATUS_JUDGMENT_OPTIONS,
-  STUDY_SECTION_IDS,
   getSectionConfig
 } from '../../utils/scaffoldUi';
+import { getStudySectionIdsForVersion } from '../../utils/scaffoldVersion';
 
 /**
  * 연구자용 조회 화면에서 Scaffold 세션 한 건을 지금의 진행 순서대로 보여준다:
@@ -190,11 +190,12 @@ export default function ScaffoldSessionRecord({ exportData, experimentCode }: { 
   const drafts = asArray<any>(exportData?.sectionDrafts);
   const caseNotes = asArray<any>(scaffoldData.caseMap?.caseNotes);
 
-  // 실습한 항목만, 실험 순서(치료 개입 → 추적 관찰 및 결과)를 앞에 두고 보여준다.
+  // 실습한 항목만, 그 버전의 실험 순서(V1: 치료 개입 → 추적 관찰 및 결과, V2: 치료 개입)를 앞에 두고 보여준다.
+  const studySectionIds = getStudySectionIdsForVersion(exportData?.versionMetadata?.scaffoldVersion);
   const workedIds = Array.from(
     new Set([...reflections.map((item) => item.sectionId), ...progressList.map((item) => item.sectionId)])
   ).sort((a, b) => {
-    const rank = (id: string) => (STUDY_SECTION_IDS.includes(id) ? STUDY_SECTION_IDS.indexOf(id) : 99);
+    const rank = (id: string) => (studySectionIds.includes(id) ? studySectionIds.indexOf(id) : 99);
     return rank(a) - rank(b);
   });
 

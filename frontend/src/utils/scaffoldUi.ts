@@ -217,6 +217,12 @@ export function buildScaffoldItemId(
 export const STUDY_SECTION_IDS = ['THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
 
 /**
+ * Scaffold V2(교수 평가·학생 후속) 실습 범위. 치료 개입만 실습하고, 실습하지 않는 항목으로는
+ * 이동하지 않는다. 어느 배열을 쓸지는 utils/scaffoldVersion.ts의 getStudySectionIds가 정한다.
+ */
+export const STUDY_SECTION_IDS_V2 = ['THERAPEUTIC_INTERVENTIONS'];
+
+/**
  * CARE 지침(Riley 등, 2017)의 13개 항목을 한 줄씩 풀어 쓴 것.
  * CARE를 처음 보는 학습자에게 증례보고의 전체 구성을 보여주는 데 쓴다.
  */

@@ -11,6 +11,11 @@ import {
   isResearchRoute,
   setResearchParticipantCode
 } from '../utils/research';
+import {
+  buildScaffoldV2CaseMetadata,
+  getResearchStorageScope,
+  type ScaffoldEntryVersion
+} from '../utils/scaffoldVersion';
 import './CaseInputPage.css';
 
 const INPUT_TAB = 'input';
@@ -23,6 +28,8 @@ const FILTER_TABS = [FILTER_ALL, FILTER_THIS_WEEK, FILTER_THIS_MONTH, FILTER_DRA
 
 type CaseInputPageProps = {
   mode?: CaseMode;
+  /** 실험용 Scaffold 진입 버전. 'v2'면 케이스를 Scaffold V2(v3.0, 공개 게이트 켬)로 만든다. */
+  scaffoldVersion?: ScaffoldEntryVersion;
 };
 
 type FilterTab = (typeof FILTER_TABS)[number];
@@ -754,10 +761,11 @@ function HistoryTabContent({
   );
 }
 
-export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
+export default function CaseInputPage({ mode = 'write', scaffoldVersion = 'v1' }: CaseInputPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isScaffold = mode === 'scaffold';
+  const isScaffoldV2 = isScaffold && scaffoldVersion === 'v2';
   const visitRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousVisitsLength = useRef(1);
   const pageCopy = useMemo(() => getPageCopy(mode), [mode]);
@@ -829,7 +837,9 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
     return (location.state as any)?.participantCode || getStoredParticipantCode(mode) || '';
   });
   // 새로고침이나 섹션 이동으로 sessionId가 바뀌지 않도록 localStorage에 고정한다.
-  const [researchSessionId] = useState(() => getOrCreateResearchSessionId(mode));
+  const [researchSessionId] = useState(() =>
+    getOrCreateResearchSessionId(getResearchStorageScope(mode, scaffoldVersion))
+  );
   const [currentDraftCaseId, setCurrentDraftCaseId] = useState<string | null>(null);
   // Live backend stage shown while a case is being processed. Processing takes
   // around two minutes, so a single static spinner would look like a freeze.
@@ -863,7 +873,9 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
           participantCode: participantCode.trim() || undefined,
           experimentCode: participantCode.trim() || undefined,
           studyMetadata: routeStudyMetadata,
-          sessionOutcome: { status: 'in_progress' }
+          sessionOutcome: { status: 'in_progress' },
+          // Scaffold V2: 버전 v3.0 저장 + 서버 공개 게이트(studyMode) 켬
+          ...(isScaffoldV2 ? buildScaffoldV2CaseMetadata(participantCode.trim() || undefined) : {})
         }
       : undefined;
 
@@ -1278,7 +1290,10 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
       const blockedCaseId = nextError?.response?.data?.caseId;
       const duplicate = nextError?.response?.data?.existingCaseId ? nextError.response.data : null;
 
-      if (duplicate && nextError?.response?.status === 409 && duplicate.existingMode && duplicate.existingMode !== mode) {
+      if (nextError?.response?.status === 409 && nextError?.response?.data?.versionConflict) {
+        // 다른 버전의 Scaffold 실험(예: 학생 V1)에서 쓴 코드. 그 기록으로 이어 가면 안 되므로 새 코드를 쓰게 한다.
+        setError(nextError.response.data.error || '다른 버전의 실험에서 이미 쓴 코드입니다. 새 코드를 쓰세요.');
+      } else if (duplicate && nextError?.response?.status === 409 && duplicate.existingMode && duplicate.existingMode !== mode) {
         // 다른 실험(예: Scaffold)에서 쓴 코드. 그쪽 화면으로 이어 가면 안 되므로 다른 코드를 쓰게 한다.
         const otherLabel = duplicate.existingMode === 'scaffold' ? 'Scaffold' : 'Write';
         setError(
@@ -1301,7 +1316,8 @@ export default function CaseInputPage({ mode = 'write' }: CaseInputPageProps) {
           setError(nextError.message || '개인정보 검토가 필요하여 AI 처리가 차단되었습니다.');
         }
       } else {
-        setError(nextError.message || '처리 중 오류가 발생했습니다.');
+        // 서버가 한국어 안내를 보냈으면(예: V1 코드 형식 거부) axios의 영문 메시지 대신 그것을 보여 준다.
+        setError(nextError?.response?.data?.error || nextError.message || '처리 중 오류가 발생했습니다.');
       }
     } finally {
       setIsSubmitting(false);

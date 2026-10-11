@@ -129,6 +129,8 @@ export interface ScaffoldPreRevealSnapshot {
     itemId: string;
     sourceType: ScaffoldReviewSourceType;
     judgment: ScaffoldReviewJudgment;
+    /** 판단 이유(선택 입력). Scaffold V2부터 기록된다. */
+    note?: string;
   }>;
   questionTaskResults: ScaffoldQuestionTaskResult[];
 }
@@ -167,12 +169,26 @@ export interface ScaffoldV2LearnerEvidence {
 
 export type ScaffoldV2CaseNoteType = 'observation' | 'question';
 
+export type ScaffoldV2CaseNoteOrigin = 'own' | 'ai_suggestion';
+
 export interface ScaffoldV2CaseNote {
   id: string;
   type: ScaffoldV2CaseNoteType;
   text: string;
   sourceEvidenceIds: string[];
   createdAt: string;
+  /**
+   * Scaffold V2(v3.0)에서 추가된 필드. V1 기록에는 없으며, 없는 값은 유추해 채우지 않는다.
+   * visitIndex는 1부터 시작하는 방문 회차. 출처가 불확실하면 비워 둔다.
+   */
+  visitIndex?: number;
+  /** CARE 세부 항목 코드(9a, 9b, 9c …) 또는 치료 유형 분류 라벨. */
+  careItems?: string[];
+  /** 직접 쓴 메모인지 AI 추천에서 채택한 메모인지. V1 기록은 id 접두어로만 구분된다. */
+  origin?: ScaffoldV2CaseNoteOrigin;
+  /** origin이 ai_suggestion일 때 추천 id. */
+  suggestionId?: string;
+  updatedAt?: string;
 }
 
 export interface ScaffoldV2Claim {

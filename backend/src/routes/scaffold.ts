@@ -19,7 +19,12 @@ import {
   buildPerformanceLog,
   hashJoinedParts
 } from '../optimization/chainRuntime';
-import { buildGenerationMetadata, hashPromptParts } from '../config/researchMetadata';
+import {
+  buildGenerationMetadata,
+  hashPromptParts,
+  isStudyScaffoldV2Case,
+  STUDY_SCAFFOLD_V2_SECTION_IDS
+} from '../config/researchMetadata';
 import {
   ScaffoldInteractionEvent,
   ScaffoldInteractionEventType,
@@ -35,6 +40,7 @@ import {
   ScaffoldState,
   ScaffoldV2CaseMap,
   ScaffoldV2CaseNote,
+  ScaffoldV2CaseNoteOrigin,
   ScaffoldV2CaseNoteType,
   ScaffoldV2Claim,
   ScaffoldV2ClaimConfidence,
@@ -405,6 +411,18 @@ function normalizeV2CaseNote(value: any): ScaffoldV2CaseNote | null {
   const text = normalizeLimitedText(value.text, 4000);
   if (!id || !text) return null;
 
+  const visitIndex =
+    Number.isInteger(value.visitIndex) && Number(value.visitIndex) > 0 && Number(value.visitIndex) <= 200
+      ? Number(value.visitIndex)
+      : undefined;
+  const careItems = normalizeStringArray(value.careItems)
+    .map((item) => normalizeLimitedText(item, 40))
+    .filter(Boolean)
+    .slice(0, 10);
+  const origin: ScaffoldV2CaseNoteOrigin | undefined =
+    value.origin === 'own' || value.origin === 'ai_suggestion' ? value.origin : undefined;
+  const suggestionId = normalizeLimitedText(value.suggestionId, 120) || undefined;
+
   return {
     id,
     type: VALID_V2_CASE_NOTE_TYPES.has(value.type)
@@ -412,7 +430,13 @@ function normalizeV2CaseNote(value: any): ScaffoldV2CaseNote | null {
       : 'observation',
     text,
     sourceEvidenceIds: normalizeStringArray(value.sourceEvidenceIds).slice(0, 10),
-    createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString()
+    createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date().toISOString(),
+    // V2 필드. 값이 없으면 키 자체를 넣지 않아 V1 기록과 같은 모양을 유지한다.
+    ...(visitIndex !== undefined ? { visitIndex } : {}),
+    ...(careItems.length > 0 ? { careItems } : {}),
+    ...(origin ? { origin } : {}),
+    ...(suggestionId ? { suggestionId } : {}),
+    ...(typeof value.updatedAt === 'string' ? { updatedAt: value.updatedAt } : {})
   };
 }
 
@@ -452,7 +476,8 @@ export function normalizeV2CaseMap(value: any): ScaffoldV2CaseMap | undefined {
       ? value.caseNotes
           .map((item: any) => normalizeV2CaseNote(item))
           .filter((item: ScaffoldV2CaseNote | null): item is ScaffoldV2CaseNote => Boolean(item))
-          .slice(0, 30)
+          // V1은 30개에서 조용히 잘렸다. V2에서 메모를 회차·항목별로 나눠 쓰므로 여유를 둔다.
+          .slice(0, 100)
       : [],
     noteFeedbackRevealedAt:
       typeof value.noteFeedbackRevealedAt === 'string'
@@ -762,6 +787,8 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
     scaffoldState: responseScaffoldState,
     researchState: (caseData as any).researchState || null,
     studyConfig: (caseData as any).studyConfig || null,
+    // 화면이 Scaffold V2(v3.0) 여부를 판단하는 데 쓴다. 저장값 그대로 돌려준다.
+    versionMetadata: (caseData as any).versionMetadata || null,
     // 고정 실험 사례일 때만 질문별 원기록 구절과 방문별 메모 추천을 내려준다.
     recordPointers: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
       ? DEFAULT_STUDY_RECORD_POINTERS
@@ -1087,13 +1114,18 @@ export function evaluateStudyRevealGate(caseData: any, scaffoldState: ScaffoldSt
   const hasDirectEntry =
     (reflection?.learnerKeyInformationItems || reflection?.learnerIdentifiedKeyInfo || []).length > 0;
   const noRelevantEvidenceConfirmed = Boolean(reflection?.noRelevantEvidenceConfirmed);
+  // Scaffold V2: 학습자가 내 초안(learnerNotes)을 직접 쓴 것도 AI 공개 전 활동으로 인정한다.
+  // V1 게이트는 핵심 정보 입력란만 인정했는데 화면에 그 입력란이 없어 초안만 쓴 학습자가 막혔다.
+  const hasOwnDraft = isStudyScaffoldV2Case(caseData) && String(reflection?.learnerNotes || '').trim().length > 0;
   const preAiEvidencePath = hasSelectedEvidence
     ? 'selected_evidence'
     : hasDirectEntry
       ? 'direct_entry'
       : noRelevantEvidenceConfirmed
         ? 'no_relevant_evidence'
-        : null;
+        : hasOwnDraft
+          ? 'own_draft'
+          : null;
   const validPreAiEvidencePath = Boolean(preAiEvidencePath && evidenceValidation.valid);
   const reflectionSaved = validPreAiEvidencePath;
   const sectionProgress = (scaffoldState.sectionProgress || []).find((item) => item.sectionId === sectionId);
@@ -1153,16 +1185,20 @@ export function evaluateStudyCompletionGate(caseData: any, scaffoldState: Scaffo
   const sectionReflection = getSectionReflection(scaffoldState, sectionId);
   const postAiReflectionSaved =
     draftSentences.length === 0 || isPostAiReflectionComplete(sectionReflection?.postAiReflection);
+  // Scaffold V2는 "의심되는 문장만 표시"하는 검토 방식이라 모든 문장의 판정을 요구하지 않는다.
+  // 표시하지 않은 문장은 수용으로 해석하지 않고, 판정 레코드도 만들지 않는다.
+  const requireAllDraftJudgments = !isStudyScaffoldV2Case(caseData);
 
   return {
     ...revealGate,
     draftRevealed: Boolean(sectionProgress?.draftRevealed),
     allDraftJudgmentsSaved,
+    requireAllDraftJudgments,
     postAiReflectionSaved,
     canComplete:
       revealGate.canReveal &&
       Boolean(sectionProgress?.draftRevealed) &&
-      allDraftJudgmentsSaved &&
+      (!requireAllDraftJudgments || allDraftJudgmentsSaved) &&
       postAiReflectionSaved
   };
 }
@@ -1254,7 +1290,9 @@ export function buildPreRevealSnapshot(
       sourceType: item.sourceType,
       judgment: item.judgment,
       evidenceIds: item.evidenceIds || [],
-      sourceEvidenceIds: item.sourceEvidenceIds || item.evidenceIds || []
+      sourceEvidenceIds: item.sourceEvidenceIds || item.evidenceIds || [],
+      // 판단 이유(선택). 없으면 키를 넣지 않아 V1 스냅샷과 같은 모양을 유지한다.
+      ...(typeof item.note === 'string' && item.note.trim() ? { note: item.note } : {})
     }));
   const questionTaskResults = (scaffoldState.questionTaskResults || []).filter((item) => item.itemId.startsWith(`${sectionId}::`));
   const selectedEvidenceSource = Array.isArray(selectedEvidence)
@@ -1951,7 +1989,11 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
     if (req.body?.draftReviewCompleted === true) {
       const gate = evaluateStudyCompletionGate(caseData, scaffoldState, sectionId);
       // 일반 흐름에서는 의심되는 문장만 표시하므로 모든 문장의 판단을 요구하지 않는다.
-      if (!gate.draftRevealed || !gate.postAiReflectionSaved || (studyMode && !gate.allDraftJudgmentsSaved)) {
+      if (
+        !gate.draftRevealed ||
+        !gate.postAiReflectionSaved ||
+        (studyMode && gate.requireAllDraftJudgments && !gate.allDraftJudgmentsSaved)
+      ) {
         return res.status(409).json({
           error: 'Scaffold draft review requirements are not complete.',
           completionGate: gate
@@ -1983,7 +2025,12 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
           : undefined
     });
 
-    const allSections = (caseData.sectionStates || []).map((item: any) => item.sectionId);
+    const allSectionIds = (caseData.sectionStates || []).map((item: any) => item.sectionId);
+    // Scaffold V2는 실습 대상 섹션(치료 개입)만 끝나면 세션 완료로 본다. V1처럼 12개 섹션을
+    // 모두 요구하면 실험 세션의 completedAt이 절대 채워지지 않는다.
+    const allSections = isStudyScaffoldV2Case(caseData)
+      ? allSectionIds.filter((id: string) => STUDY_SCAFFOLD_V2_SECTION_IDS.includes(id))
+      : allSectionIds;
     const completedSections = nextProgressItems.filter(
       (item) =>
         item.recordReviewCompleted &&
