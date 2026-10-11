@@ -45,9 +45,15 @@ async function run() {
   assert.equal(strongSemantic.decision, 'KEEP_ORIGINAL');
   assert.equal(semanticResolverCalled, false);
 
-  const invalidSelection = await resolveRetrievedTerminology({
+  const partialKept = await resolveRetrievedTerminology({
     original: '귀비',
-    candidates: [makeCandidate('term_001', 0.81, 'partial'), makeCandidate('term_002', 0.79, 'partial')],
+    candidates: [makeCandidate('term_001', 0.81, 'partial'), makeCandidate('term_002', 0.79, 'partial')]
+  });
+  assert.equal(partialKept.decision, 'KEEP_ORIGINAL');
+
+  const invalidSelection = await resolveRetrievedTerminology({
+    original: '귀비탕가',
+    candidates: [makeCandidate('term_001', 0.9, 'fuzzy'), makeCandidate('term_002', 0.88, 'fuzzy')],
     llmResolver: {
       resolve: () => ({
         decision: 'USE_CANDIDATE',
@@ -78,8 +84,8 @@ async function run() {
   assert.equal(resolverCalled, false);
 
   const llmFailureFallback = await resolveRetrievedTerminology({
-    original: 'ambiguous partial',
-    candidates: [makeCandidate('term_001', 0.81, 'partial'), makeCandidate('term_002', 0.79, 'partial')],
+    original: 'ambiguous fuzzy',
+    candidates: [makeCandidate('term_001', 0.9, 'fuzzy'), makeCandidate('term_002', 0.88, 'fuzzy')],
     llmResolver: {
       resolve: () => {
         throw new Error('resolver unavailable');

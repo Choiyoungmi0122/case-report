@@ -71,6 +71,16 @@ export async function resolveRetrievedTerminology(params: {
     };
   }
 
+  // 부분 일치("귀비" ⊂ "귀비탕", "심장" ⊂ "심장이 뜀")도 같은 용어라는 근거가 못 된다. 사전이 커지면서
+  // 이런 후보가 늘어 판정 LLM 호출이 두 배가 됐다. 묻지 않고 원문을 둔다 (사용자 결정 2026-10-11).
+  if (primary.matchType === 'partial') {
+    return {
+      decision: 'KEEP_ORIGINAL',
+      confidence: primary.score,
+      reason: 'Partial string overlap is not evidence of the same term; original text is kept.'
+    };
+  }
+
   const clearlyWeak =
     primary.matchType === 'fuzzy'
       ? primary.score < primary.term.confidenceThreshold

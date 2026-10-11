@@ -47,10 +47,9 @@ async function run() {
   const noMatch = await normalizeSurfaceTerm(UNKNOWN_TERM);
   assert.equal(noMatch, null);
 
+  // "귀비"처럼 부분 일치만 되는 표현은 묻지 않고 원문을 둔다 (2026-10-11)
   const ambiguous = await normalizeSurfaceTerm(GUIBI);
-  assert.ok(ambiguous);
-  assert.equal(ambiguous?.needsUserConfirmation, true);
-  assert.ok((ambiguous?.candidates || []).length >= 2);
+  assert.equal(ambiguous, null);
 
   const genericTreatment = await normalizeSurfaceTerm(GENERIC_TREATMENT);
   assert.equal(genericTreatment, null);

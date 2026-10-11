@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { callLLMWithSchema } from '../llm/client';
 import { RetrievedTermResolver } from './resolver';
 
+// 오타·약어 인지는 빠른 모델로 충분하다. 호출이 많아(기록당 수십 회) 비용·시간을 줄인다 (사용자 결정 2026-10-11).
 const DEFAULT_RESOLVER_MODEL =
   process.env.TERMINOLOGY_RESOLVER_MODEL ||
-  process.env.REVIEW_MODEL ||
-  process.env.LLM_MODEL ||
-  'gpt-4.1';
+  process.env.FAST_LLM_MODEL ||
+  'gpt-4.1-mini';
 
 const ResolverDecisionSchema = z.object({
   decision: z.enum(['USE_CANDIDATE', 'ASK_USER', 'KEEP_ORIGINAL']),
