@@ -2,12 +2,13 @@ import { randomUUID } from 'crypto';
 import { callLLMWithSchema, LLMUsageMetrics } from './client';
 import { Chain1OutputSchema, EvidenceCard } from './schemas/chain1_splitTag';
 import { Chain2OutputSchema, SectionAssessment } from './schemas/chain2_assess';
-import { Chain3OutputSchema, SectionDraft } from './schemas/chain3_draft';
+import { Chain3ModelOutputSchema, SectionDraft } from './schemas/chain3_draft';
 import { Chain4MissingOutputSchema, CommonMissingItem, SectionMissing } from './schemas/chain4_missing';
 import { Chain5QuestionOutputSchema, CommonQuestionSet, SectionQuestionSet } from './schemas/chain5_questions';
-import { Chain6SectionUpdateOutputSchema, Chain6SectionUpdateOutput } from './schemas/chain6_update';
-import { FinalDraftSchema, FinalDraft } from './schemas/chain5_final';
+import { Chain6ModelOutputSchema, Chain6SectionUpdateOutput } from './schemas/chain6_update';
+import { FinalDraftModelOutputSchema, FinalDraft } from './schemas/chain5_final';
 import { CareSection, CareSectionEnum } from './schemas/common';
+import { cardMatchesSection } from './evidenceScope';
 import {
   SectionAdequacyReviewOutput,
   SectionAdequacyReviewOutputSchema
@@ -260,6 +261,11 @@ function characterBigrams(text: string): Set<string> {
 const UNSUPPORTED_COVERAGE_THRESHOLD = 0.4;
 const EVIDENCE_LINK_THRESHOLD = 0.4;
 
+/**
+ * 문장별 근거 연결(evidenceLinks)·미지원 문장(unsupportedClaims)은 **휴리스틱**이다.
+ * 모델에게 문장별 인용을 요구하지 않고, 초안 문장과 근거 카드 본문의 문자 2-gram 겹침으로 추정한다
+ * (연결 임계 0.4, 미지원 판정은 겹침 비율 0.4 미만·12자 이상 문장). 화면·DOCX 부록에도 이 성격을 밝힌다.
+ */
 function buildDraftTraceability(params: {
   draftText: string;
   evidenceCards: EvidenceCard[];
@@ -307,7 +313,7 @@ function buildDraftTraceability(params: {
     .filter((item) => item.sentence.length >= 12 && item.coverage < UNSUPPORTED_COVERAGE_THRESHOLD)
     .map((item) => ({
       sentence: item.sentence,
-      reason: '이 문장을 뒷받침할 만큼 유사한 기록 근거를 찾지 못했습니다.'
+      reason: '자동 문자 일치 검사에서 이 문장과 충분히 겹치는 기록 근거를 찾지 못했습니다. 실제 근거 여부는 기록을 확인해 판단하세요.'
     }));
 
   return { evidenceLinks, unsupportedClaims };
@@ -910,10 +916,7 @@ function buildSectionAssessmentSummary(
 }
 
 function getEvidenceForSection(evidenceCards: EvidenceCard[], sectionId: CareSection): EvidenceCard[] {
-  return evidenceCards.filter((card) => {
-    const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
-    return hints.includes(sectionId);
-  });
+  return evidenceCards.filter((card) => cardMatchesSection(card, sectionId));
 }
 
 function hasMeaningfulText(cards: EvidenceCard[], minLength = 12): boolean {
@@ -1616,7 +1619,7 @@ export async function runInitialSectionDrafts(
     .join('\n\n');
 
   const result = await callLLMWithSchema(
-    Chain3OutputSchema,
+    Chain3ModelOutputSchema,
     chain3SystemPrompt,
     buildChain3UserPrompt(
       buildTaggedEvidenceSummary(evidenceCards),
@@ -1730,7 +1733,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<Chain6SectionUpdateOutput> {
       : '(none)';
 
   const result = await callLLMWithSchema(
-    Chain6SectionUpdateOutputSchema,
+    Chain6ModelOutputSchema,
     chain6UpdateSystemPrompt,
     buildChain6UpdateUserPrompt({
       sectionId: params.sectionId,
@@ -1756,7 +1759,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<Chain6SectionUpdateOutput> {
   });
 
   return {
-    ...result,
+    updatedDraftText: result.updatedDraftText,
     evidenceLinks: traceability.evidenceLinks,
     unsupportedClaims: traceability.unsupportedClaims
   };
@@ -1811,7 +1814,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
       : '(none)';
 
   const result = await callLLMWithSchema(
-    FinalDraftSchema,
+    FinalDraftModelOutputSchema,
     chain7SystemPrompt,
     buildChain7UserPrompt({
       sectionDraftSummary: buildDraftSummary(params.sectionDrafts),
@@ -1844,6 +1847,11 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
   const normalizedKeywordLine =
     String(result.fullTextBySection.KEYWORDS || '').trim() ||
     keywordSuggestions.join(', ');
+  // 제목 후보를 하나도 내지 않았으면 본문 TITLE 을 후보로 쓴다(내보내기·화면이 첫 후보를 제목 대체로 쓴다).
+  const titleSuggestions =
+    result.titleSuggestions.length > 0
+      ? result.titleSuggestions
+      : [String(result.fullTextBySection.TITLE || '').trim()].filter(Boolean);
 
   // The model sometimes skips sections it left empty; an empty section is
   // MISSING by definition, so that much can be filled in without guessing.
@@ -1859,6 +1867,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
 
   return {
     ...result,
+    titleSuggestions,
     careChecklistEvaluation,
     fullTextBySection: {
       ...result.fullTextBySection,
@@ -1867,7 +1876,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
     keywordSuggestions:
       keywordSuggestions.length > 0
         ? keywordSuggestions
-        : uniqueStrings(normalizedKeywordLine.split(',').map((item) => item.trim())),
+        : uniqueStrings(normalizedKeywordLine.split(',').map((item) => item.trim())).slice(0, 7),
     sectionTraceability
   };
 }

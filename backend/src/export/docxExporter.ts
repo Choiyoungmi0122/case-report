@@ -782,6 +782,16 @@ export async function exportCaseToDocx(caseData: Case, mode: ExportMode, layout:
     bodyChildren.push(
       makeSectionHeading('Evidence Traceability')
     );
+    // 근거 연결의 성격을 밝힌다: 모델·저자가 지정한 인용이 아니라 문자 일치로 자동 추정한 것.
+    bodyChildren.push(
+      new Paragraph({
+        children: [
+          makeTextRun(
+            '아래 문장별 근거 연결은 초안 문장과 근거 카드 본문의 문자 일치(2-gram)로 자동 추정한 것이며, 모델이나 저자가 지정한 인용이 아닙니다. 실제 근거 여부는 기록을 확인해 판단하십시오.'
+          )
+        ]
+      })
+    );
     bodyChildren.push(...buildTraceabilityAppendix(caseData));
   }
 

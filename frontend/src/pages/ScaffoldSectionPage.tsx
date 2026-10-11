@@ -843,7 +843,7 @@ export default function ScaffoldSectionPage() {
         id: buildScaffoldItemId(sectionId, 'unsupported_claim', item.sentence, index),
         sourceType: 'unsupported_claim',
         sourceText: item.sentence,
-        helperText: item.reason || '기록 근거가 충분하지 않은 문장입니다.'
+        helperText: item.reason || '자동 문자 일치 검사에서 기록 근거를 찾지 못한 문장입니다. 실제 근거 여부는 기록을 확인해 판단하세요.'
       });
     });
 

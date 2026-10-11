@@ -21,7 +21,16 @@ export type CareSection = z.infer<typeof CareSectionEnum>;
 const CARE_SECTION_ALIASES: Record<string, CareSection> = {
   clinical_finding: 'CLINICAL_FINDINGS',
   therapeutic_intervention: 'THERAPEUTIC_INTERVENTIONS',
-  follow_up_outcome: 'FOLLOW_UP_OUTCOMES'
+  follow_up_outcome: 'FOLLOW_UP_OUTCOMES',
+  patient_info: 'PATIENT_INFORMATION',
+  diagnostic: 'DIAGNOSTIC_ASSESSMENT',
+  diagnosis: 'DIAGNOSTIC_ASSESSMENT',
+  treatment: 'THERAPEUTIC_INTERVENTIONS',
+  follow_up: 'FOLLOW_UP_OUTCOMES',
+  followup: 'FOLLOW_UP_OUTCOMES',
+  discussion: 'DISCUSSION_CONCLUSION',
+  conclusion: 'DISCUSSION_CONCLUSION',
+  consent: 'INFORMED_CONSENT'
 };
 
 export function coerceCareSection(raw: unknown): CareSection | undefined {
@@ -30,9 +39,11 @@ export function coerceCareSection(raw: unknown): CareSection | undefined {
   if (!s) return undefined;
   const direct = CareSectionEnum.safeParse(s);
   if (direct.success) return direct.data;
-  const alias = CARE_SECTION_ALIASES[s.toLowerCase()];
+  // "Therapeutic Interventions", "follow-up_outcomes" → FOLLOW_UP_OUTCOMES
+  const normalized = s.replace(/[\s\-]+/g, '_').replace(/_+/g, '_').toLowerCase();
+  const alias = CARE_SECTION_ALIASES[normalized];
   if (alias) return alias;
-  const upper = CareSectionEnum.safeParse(s.toUpperCase());
+  const upper = CareSectionEnum.safeParse(normalized.toUpperCase());
   if (upper.success) return upper.data;
   return undefined;
 }
@@ -57,3 +68,18 @@ export const CareSectionCoerced = z.union([
  */
 export const CareSectionHintList = z.array(z.string()).default([]);
 
+/**
+ * 모델이 낸 섹션 id 목록(relatedSectionIds, targetSectionIds). 변형은 정규화하고 알아볼 수 없는 값은 버린다.
+ * 목록 하나의 오타로 응답 전체가 실패하지 않게 한다.
+ */
+export const CareSectionListCoerced = z
+  .array(z.unknown())
+  .default([])
+  .transform((items) => {
+    const out: CareSection[] = [];
+    for (const item of items) {
+      const section = coerceCareSection(item);
+      if (section && !out.includes(section)) out.push(section);
+    }
+    return out;
+  });

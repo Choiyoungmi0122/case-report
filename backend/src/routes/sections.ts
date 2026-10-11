@@ -14,36 +14,19 @@ import { applyDraftUpdateResultToEntry, buildStaleState } from './cases';
 import { integrateImportedTimelineIntoDrafts } from '../timelineImport/integration';
 import {
   createOutboundDeidContext,
-  deidentifyDraftsForOutbound,
   deidentifyOutboundField,
   deidentifyQnaForOutbound,
   deidentifyTimelineEventsForOutbound
 } from '../deid/outbound';
 import { summarizeError } from '../utils/errorSummary';
 import { normalizeQuestionComparisonKey, normalizeQuestionText } from '../questions/questionTemplates';
-import {
-  runQuestionGeneration,
-  runSectionAdequacyReview,
-  runSectionDraftUpdate,
-  runSectionMissingDetection
-} from '../llm/chains';
+import { runSectionAdequacyReview, runSectionDraftUpdate } from '../llm/chains';
+import { getRelevantEvidence } from '../llm/evidenceScope';
+import { refreshQuestionState } from '../questions/questionState';
 
 const router = express.Router();
 const caseModel = new CaseModel();
 const ALL_CARE_SECTIONS = Object.values(CareSection) as CareSection[];
-const CORE_AI_SECTIONS: CareSection[] = [
-  CareSection.PATIENT_INFORMATION,
-  CareSection.CLINICAL_FINDINGS,
-  CareSection.TIMELINE,
-  CareSection.DIAGNOSTIC_ASSESSMENT,
-  CareSection.THERAPEUTIC_INTERVENTIONS,
-  CareSection.FOLLOW_UP_OUTCOMES,
-  CareSection.PATIENT_PERSPECTIVE
-];
-const COMMON_QUESTION_SECTIONS: CareSection[] = [
-  ...CORE_AI_SECTIONS,
-  CareSection.DISCUSSION_CONCLUSION
-];
 
 function isCareSection(value: string): value is CareSection {
   return ALL_CARE_SECTIONS.includes(value as CareSection);
@@ -252,49 +235,6 @@ function buildReviewInputHash(params: {
     ),
     '::history::',
     ...((params.qnaHistory || []).map((item) => `${item.question || ''}|${item.answer || ''}`))
-  ]);
-}
-
-function getQuestionScopeEvidence(sectionDrafts: any[], evidenceCards: any[]) {
-  const relevantSections = new Set(
-    (sectionDrafts || [])
-      .filter((draft) => COMMON_QUESTION_SECTIONS.includes(draft.sectionId))
-      .map((draft) => draft.sectionId)
-  );
-
-  return (evidenceCards || []).filter((card) =>
-    (card.tags || []).some((tag: string) => relevantSections.has(tag))
-  );
-}
-
-function buildQuestionStateInputHash(params: {
-  sectionDrafts: any[];
-  sectionStates: any[];
-  evidenceCards: any[];
-  caseTitle?: string;
-}) {
-  const scopedEvidence = getQuestionScopeEvidence(params.sectionDrafts, params.evidenceCards);
-  return hashJoinedParts([
-    params.caseTitle || '',
-    '::drafts::',
-    ...(params.sectionDrafts || [])
-      .filter((draft) => COMMON_QUESTION_SECTIONS.includes(draft.sectionId))
-      .map((draft) =>
-        [
-          draft.sectionId || '',
-          draft.draftText || '',
-          JSON.stringify(draft.openIssues || []),
-          JSON.stringify(draft.timelineEventIdsUsed || [])
-        ].join('|')
-      ),
-    '::states::',
-    ...(params.sectionStates || [])
-      .filter((state) => COMMON_QUESTION_SECTIONS.includes(state.sectionId))
-      .map((state) => [state.sectionId || '', state.status || '', state.rationaleText || ''].join('|')),
-    '::evidence::',
-    ...scopedEvidence.map((card) =>
-      [card.id || '', card.normalizedText || card.sourceText || '', JSON.stringify(card.tags || [])].join('|')
-    )
   ]);
 }
 
@@ -533,130 +473,6 @@ function buildSectionUiHints(params: {
   };
 }
 
-async function refreshGlobalQuestionState(params: {
-  sectionDrafts: any[];
-  sectionStates: any[];
-  evidenceCards: any[];
-  caseTitle?: string;
-  caseData?: any;
-  onChain4Usage?: (usage: any) => void;
-  onChain5Usage?: (usage: any) => void;
-}) {
-  const inputHash = buildQuestionStateInputHash(params);
-  const canReuse =
-    params.caseData &&
-    hasChainCacheHit(params.caseData, 'CHAIN4', inputHash) &&
-    hasChainCacheHit(params.caseData, 'CHAIN5', inputHash) &&
-    Array.isArray(params.caseData.sectionStates) &&
-    Array.isArray(params.caseData.commonQuestionSets);
-
-  if (canReuse) {
-    const stateBySection = new Map<string, any>(
-      (params.caseData.sectionStates || []).map((state: any) => [state.sectionId, state])
-    );
-    const nextSectionStates = params.sectionStates.map((state) => {
-      const stored = stateBySection.get(state.sectionId);
-      if (!stored) return state;
-      return {
-        ...state,
-        missingInfoBullets: stored.missingInfoBullets || [],
-        recommendedQuestions: stored.recommendedQuestions || [],
-        status: stored.status || state.status,
-        rationaleText: stored.rationaleText || state.rationaleText
-      };
-    });
-
-    return {
-      commonMissingItems: params.caseData.commonMissingItems || [],
-      commonQuestionSets: params.caseData.commonQuestionSets || [],
-      sectionStates: nextSectionStates,
-      cacheMeta: {
-        chain4InputHash: inputHash,
-        chain5InputHash: inputHash,
-        chain4CacheHit: true,
-        chain5CacheHit: true
-      }
-    };
-  }
-
-  const startedAt = new Date().toISOString();
-  const commonQuestionDrafts = params.sectionDrafts.filter((draft) =>
-    COMMON_QUESTION_SECTIONS.includes(draft.sectionId)
-  );
-  const scopedEvidenceCards = getQuestionScopeEvidence(params.sectionDrafts, params.evidenceCards);
-
-  // User-authored title and front-matter drafts cross the boundary here.
-  const outboundContext = createOutboundDeidContext();
-  const outboundTitle = await deidentifyOutboundField(params.caseTitle, outboundContext);
-  const outboundDrafts = await deidentifyDraftsForOutbound(commonQuestionDrafts, outboundContext);
-
-  const missingResult = await runSectionMissingDetection({
-    sectionDrafts: outboundDrafts,
-    evidenceCards: scopedEvidenceCards,
-    caseTitle: outboundTitle
-  }, {
-    onUsage: params.onChain4Usage
-  });
-  const questionResult = await runQuestionGeneration({
-    sectionDrafts: outboundDrafts,
-    sectionMissing: missingResult.sectionMissing,
-    commonMissing: missingResult.commonMissing,
-    caseTitle: outboundTitle
-  }, {
-    onUsage: params.onChain5Usage
-  });
-
-  const missingBySection = new Map(
-    missingResult.sectionMissing.map((item) => [item.sectionId, item.missingItems || []])
-  );
-  const questionsBySection = new Map(
-    questionResult.sectionQuestions.map((item) => [item.sectionId, item.questions || []])
-  );
-
-  for (const state of params.sectionStates) {
-    state.missingInfoBullets = uniqueStrings(missingBySection.get(state.sectionId) || state.missingInfoBullets || []);
-    state.recommendedQuestions = uniqueStrings(questionsBySection.get(state.sectionId) || state.recommendedQuestions || []);
-
-    if (CORE_AI_SECTIONS.includes(state.sectionId)) {
-      const draftEntry = params.sectionDrafts.find((draft) => draft.sectionId === state.sectionId);
-      const hasDraft = Boolean(draftEntry?.draftText?.trim());
-      const hasMissing = state.missingInfoBullets.length > 0;
-
-      if (!hasDraft) {
-        state.status = 'IMPOSSIBLE';
-        state.rationaleText = '현재 기록만으로는 이 항목의 초안을 작성하기 어렵습니다.';
-      } else if (hasMissing) {
-        state.status = 'INCOMPLETE';
-        state.rationaleText = '초안은 있으나 보완이 필요한 정보가 남아 있습니다.';
-      } else {
-        state.status = 'READY';
-        state.rationaleText = '현재 기록으로 이 항목의 초안을 작성할 수 있습니다.';
-      }
-    }
-  }
-
-  return {
-    commonMissingItems: (missingResult.commonMissing || []).map((item) => ({
-      item: item.item,
-      relatedSectionIds: item.relatedSectionIds as CareSection[],
-      category: item.category
-    })),
-    commonQuestionSets: (questionResult.commonQuestions || []).map((item) => ({
-      question: item.question,
-      targetSectionIds: item.targetSectionIds as CareSection[],
-      category: item.category
-    })),
-    sectionStates: params.sectionStates,
-    cacheMeta: {
-      chain4InputHash: inputHash,
-      chain5InputHash: inputHash,
-      chain4CacheHit: false,
-      chain5CacheHit: false,
-      startedAt
-    }
-  };
-}
-
 router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
   try {
     const { id, sectionId } = req.params;
@@ -694,7 +510,7 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
       evidenceLinks: [],
       unsupportedClaims: []
     };
-    const relevantEvidence = evidenceCards.filter((card) => (card.tags || []).includes(section));
+    const relevantEvidence = getRelevantEvidence(evidenceCards, section);
     const preRevealStudySection = isStudyScaffoldSectionUnrevealed(anyCase, section);
     const interaction = preRevealStudySection
       ? null
@@ -831,7 +647,7 @@ router.post('/:id/sections/:sectionId/review', async (req: Request, res: Respons
       evidenceCardIdsUsed: [],
       openIssues: []
     };
-    const relevantEvidence = evidenceCards.filter((card) => (card.tags || []).includes(section));
+    const relevantEvidence = getRelevantEvidence(evidenceCards, section);
     const interaction = await caseModel.getSectionInteraction(id, section);
     const qnaHistory = interaction?.qnaHistory || [];
     const sectionQuestions = filterAnsweredQuestions(
@@ -965,7 +781,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         sectionDrafts.push(nextDraft);
         return nextDraft;
       })();
-    const relevantEvidence = evidenceCards.filter((card) => (card.tags || []).includes(section));
+    const relevantEvidence = getRelevantEvidence(evidenceCards, section);
     const interaction = await caseModel.getSectionInteraction(id, section);
     const qnaHistory: QnAPair[] = interaction?.qnaHistory || [];
 
@@ -1086,7 +902,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
 
     let chain4Usage: any = null;
     let chain5Usage: any = null;
-    const globalState = await refreshGlobalQuestionState({
+    const globalState = await refreshQuestionState({
       sectionDrafts,
       sectionStates,
       evidenceCards,
@@ -1099,6 +915,8 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         chain5Usage = usage;
       }
     });
+    // 캐시 적중 시 새 배열이 돌아온다. 저장은 돌아온 상태로 한다.
+    sectionStates = globalState.sectionStates;
 
     await caseModel.updateCase(id, {
       sectionDrafts,

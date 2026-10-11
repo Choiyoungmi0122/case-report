@@ -8,6 +8,7 @@ import {
 } from '../llm/chains';
 import { EvidenceCard } from '../llm/schemas/chain1_splitTag';
 import { SectionDraft } from '../llm/schemas/chain3_draft';
+import { cardMatchesSection } from '../llm/evidenceScope';
 import {
   ManuscriptReviewDocument,
   ManuscriptReviewRunResult,
@@ -114,7 +115,7 @@ function buildImportedSectionDrafts(
   return REVIEW_WRAPPER_SECTIONS.filter((sectionId) => String(sectionTextsBySection[sectionId] || '').trim())
     .map((sectionId) => {
       const supportingIds = evidenceCards
-        .filter((card) => (card.tags || []).includes(sectionId))
+        .filter((card) => cardMatchesSection(card, sectionId))
         .map((card) => card.id);
 
       return {
@@ -202,7 +203,7 @@ export async function runImportedManuscriptReview(
     : { commonQuestions: [], sectionQuestions: [] };
 
   const adequacyPairs = await mapWithConcurrency(sectionDrafts, 3, async (draft) => {
-    const relevantCards = referenceCards.filter((card) => (card.tags || []).includes(draft.sectionId));
+    const relevantCards = referenceCards.filter((card) => cardMatchesSection(card, draft.sectionId));
     const reviewResult = await runSectionAdequacyReview({
       sectionId: draft.sectionId,
       currentDraft: draft.draftText,

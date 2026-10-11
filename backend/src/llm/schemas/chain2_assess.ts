@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CareSectionEnum } from './common';
+import { CareSectionCoerced } from './common';
 
 export const SectionStatusEnum = z.enum([
   'IMPOSSIBLE',
@@ -8,13 +8,13 @@ export const SectionStatusEnum = z.enum([
 ]);
 
 export const SectionAssessmentSchema = z.object({
-  sectionId: CareSectionEnum,
+  sectionId: CareSectionCoerced,
   status: SectionStatusEnum,
-  rationaleText: z.string()
+  rationaleText: z.string().default('')
 });
 
 export const Chain2OutputSchema = z.object({
-  sectionAssessments: z.array(SectionAssessmentSchema)
+  sectionAssessments: z.array(SectionAssessmentSchema).default([])
 });
 
 export type SectionAssessment = z.infer<typeof SectionAssessmentSchema>;

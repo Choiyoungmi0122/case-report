@@ -42,10 +42,8 @@ import {
   preprocessVisitsForChain1,
   runEvidenceSplit,
   runInitialSectionDrafts,
-  runQuestionGeneration,
   runSectionAssessment,
   runSectionDraftUpdate,
-  runSectionMissingDetection,
   runFinalManuscriptCompose,
   getModelForChain
 } from '../llm/chains';
@@ -60,6 +58,8 @@ import {
   STUDY_SCAFFOLD_V2_VERSION
 } from '../config/researchMetadata';
 import { promptMeta } from '../llm/promptRegistry';
+import { getRelevantEvidence } from '../llm/evidenceScope';
+import { refreshQuestionState, RefreshQuestionStateParams } from '../questions/questionState';
 import { DEFAULT_STUDY_CASE_ID, DEFAULT_STUDY_CASE_VERSION, getStudyCaseTemplate } from '../study/cases/defaultStudyCase';
 import { getFixedStudyCaseAnalysis } from '../study/cases/studyCaseSnapshot';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
@@ -72,19 +72,7 @@ const runningPendingTermReprocessJobs = new Map<string, Promise<void>>();
 const queuedPendingTermReprocessCaseIds = new Set<string>();
 
 const ALL_CARE_SECTIONS = Object.values(CareSection) as CareSection[];
-const CORE_AI_SECTIONS: CareSection[] = [
-  CareSection.PATIENT_INFORMATION,
-  CareSection.CLINICAL_FINDINGS,
-  CareSection.TIMELINE,
-  CareSection.DIAGNOSTIC_ASSESSMENT,
-  CareSection.THERAPEUTIC_INTERVENTIONS,
-  CareSection.FOLLOW_UP_OUTCOMES,
-  CareSection.PATIENT_PERSPECTIVE
-];
-const COMMON_QUESTION_SECTIONS: CareSection[] = [
-  ...CORE_AI_SECTIONS,
-  CareSection.DISCUSSION_CONCLUSION
-];
+// CORE_AI_SECTIONS / COMMON_QUESTION_SECTIONS 는 questions/questionState.ts 로 옮겼다.
 const NON_CORE_GENERATED_SECTIONS: CareSection[] = [
   CareSection.TITLE,
   CareSection.ABSTRACT,
@@ -967,49 +955,6 @@ function attachDraftGenerationMetadata(params: {
   }));
 }
 
-function getQuestionScopeEvidence(sectionDrafts: any[], evidenceCards: any[]) {
-  const relevantSections = new Set(
-    (sectionDrafts || [])
-      .filter((draft) => COMMON_QUESTION_SECTIONS.includes(draft.sectionId))
-      .map((draft) => draft.sectionId)
-  );
-
-  return (evidenceCards || []).filter((card) =>
-    (card.tags || []).some((tag: string) => relevantSections.has(tag))
-  );
-}
-
-function buildQuestionStateInputHash(params: {
-  sectionDrafts: any[];
-  sectionStates: any[];
-  evidenceCards: any[];
-  caseTitle?: string;
-}) {
-  const scopedEvidence = getQuestionScopeEvidence(params.sectionDrafts, params.evidenceCards);
-  return hashJoinedParts([
-    params.caseTitle || '',
-    '::drafts::',
-    ...(params.sectionDrafts || [])
-      .filter((draft) => COMMON_QUESTION_SECTIONS.includes(draft.sectionId))
-      .map((draft) =>
-        [
-          draft.sectionId || '',
-          draft.draftText || '',
-          JSON.stringify(draft.openIssues || []),
-          JSON.stringify(draft.timelineEventIdsUsed || [])
-        ].join('|')
-      ),
-    '::states::',
-    ...(params.sectionStates || [])
-      .filter((state) => COMMON_QUESTION_SECTIONS.includes(state.sectionId))
-      .map((state) => [state.sectionId || '', state.status || '', state.rationaleText || ''].join('|')),
-    '::evidence::',
-    ...scopedEvidence.map((card) =>
-      [card.id || '', card.normalizedText || card.sourceText || '', JSON.stringify(card.tags || [])].join('|')
-    )
-  ]);
-}
-
 function buildChain7InputHash(params: {
   sectionDrafts: any[];
   evidenceCards: any[];
@@ -1037,10 +982,6 @@ function buildChain7InputHash(params: {
     '::contrib::',
     ...((params.contributionAnswers || []).map((item) => `${item.question || ''}|${item.answer || ''}`))
   ]);
-}
-
-function getRelevantEvidence(evidenceCards: any[], sectionId: CareSection) {
-  return (evidenceCards || []).filter((card) => (card.tags || []).includes(sectionId));
 }
 
 function ensureAllSectionStates(sectionStates: any[]) {
@@ -1078,160 +1019,9 @@ function ensureAllSectionDrafts(sectionDrafts: any[]) {
   });
 }
 
-function applyQuestionState(params: {
-  sectionStates: any[];
-  sectionDrafts: any[];
-  sectionMissing: Array<{ sectionId: string; missingItems: string[] }>;
-  commonMissing: Array<{ item: string; relatedSectionIds: string[]; category?: string }>;
-  commonQuestions: Array<{ question: string; targetSectionIds: string[]; category?: string }>;
-  sectionQuestions: Array<{ sectionId: string; questions: string[] }>;
-}) {
-  const missingBySection = new Map(params.sectionMissing.map((item) => [item.sectionId, item.missingItems || []]));
-  const questionsBySection = new Map(params.sectionQuestions.map((item) => [item.sectionId, item.questions || []]));
-
-  for (const state of params.sectionStates) {
-    const missingItems = missingBySection.get(state.sectionId) || [];
-    const questions = questionsBySection.get(state.sectionId) || [];
-    const hasDraft = Boolean(
-      params.sectionDrafts.find((draft) => draft.sectionId === state.sectionId)?.draftText?.trim()
-    );
-
-    state.missingInfoBullets = uniqueStrings(missingItems);
-    state.recommendedQuestions = uniqueStrings(questions);
-
-    if (CORE_AI_SECTIONS.includes(state.sectionId)) {
-      if (hasDraft && missingItems.length === 0) {
-        state.status = 'READY';
-      } else if (hasDraft) {
-        state.status = 'INCOMPLETE';
-      }
-    }
-  }
-
-  return {
-    commonMissingItems: params.commonMissing.map((item) => ({
-      item: item.item,
-      relatedSectionIds: item.relatedSectionIds as CareSection[],
-      category: item.category
-    })),
-    commonQuestionSets: params.commonQuestions.map((item) => ({
-      question: item.question,
-      targetSectionIds: item.targetSectionIds as CareSection[],
-      category: item.category
-    }))
-  };
-}
-
-async function recomputeQuestionState(params: {
-  sectionDrafts: any[];
-  sectionStates: any[];
-  evidenceCards: any[];
-  caseTitle?: string;
-  caseData?: any;
-  onChain4Usage?: (usage: any) => void;
-  onChain5Usage?: (usage: any) => void;
-}) {
-  const inputHash = buildQuestionStateInputHash(params);
-  const canReuse =
-    params.caseData &&
-    hasChainCacheHit(params.caseData, 'CHAIN4', inputHash) &&
-    hasChainCacheHit(params.caseData, 'CHAIN5', inputHash) &&
-    Array.isArray(params.caseData.sectionStates) &&
-    Array.isArray(params.caseData.commonQuestionSets);
-
-  if (canReuse) {
-    const stateBySection = new Map<string, any>(
-      (params.caseData.sectionStates || []).map((state: any) => [state.sectionId, state])
-    );
-    const nextSectionStates = params.sectionStates.map((state) => {
-      const stored = stateBySection.get(state.sectionId);
-      if (!stored) return state;
-      return {
-        ...state,
-        missingInfoBullets: stored.missingInfoBullets || [],
-        recommendedQuestions: stored.recommendedQuestions || [],
-        status: stored.status || state.status,
-        rationaleText: stored.rationaleText || state.rationaleText
-      };
-    });
-
-    return {
-      sectionStates: nextSectionStates,
-      sectionDrafts: params.sectionDrafts,
-      commonMissingItems: params.caseData.commonMissingItems || [],
-      commonQuestionSets: params.caseData.commonQuestionSets || [],
-      cacheMeta: {
-        chain4InputHash: inputHash,
-        chain5InputHash: inputHash,
-        chain4CacheHit: true,
-        chain5CacheHit: true,
-        chain4DurationMs: 0,
-        chain5DurationMs: 0
-      }
-    };
-  }
-
-  const commonQuestionDrafts = params.sectionDrafts.filter((draft) =>
-    COMMON_QUESTION_SECTIONS.includes(draft.sectionId)
-  );
-  const scopedEvidenceCards = getQuestionScopeEvidence(params.sectionDrafts, params.evidenceCards);
-
-  // caseTitle and the front-matter sections of sectionDrafts are user-authored
-  // and never passed through the SOAP pipeline, so they are de-identified here
-  // before CHAIN4/CHAIN5 send them out.
-  const outboundContext = createOutboundDeidContext();
-  const outboundTitle = await deidentifyOutboundField(params.caseTitle, outboundContext);
-  const outboundDrafts = await deidentifyDraftsForOutbound(commonQuestionDrafts, outboundContext);
-
-  const chain4StartedAt = performance.now();
-  const missingResult = await runSectionMissingDetection(
-    {
-      sectionDrafts: outboundDrafts,
-      evidenceCards: scopedEvidenceCards,
-      caseTitle: outboundTitle
-    },
-    {
-      onUsage: params.onChain4Usage
-    }
-  );
-  const chain4DurationMs = Math.round((performance.now() - chain4StartedAt) * 100) / 100;
-  const chain5StartedAt = performance.now();
-  const questionResult = await runQuestionGeneration(
-    {
-      sectionDrafts: outboundDrafts,
-      sectionMissing: missingResult.sectionMissing,
-      commonMissing: missingResult.commonMissing,
-      caseTitle: outboundTitle
-    },
-    {
-      onUsage: params.onChain5Usage
-    }
-  );
-  const chain5DurationMs = Math.round((performance.now() - chain5StartedAt) * 100) / 100;
-
-  const commonState = applyQuestionState({
-    sectionStates: params.sectionStates,
-    sectionDrafts: params.sectionDrafts,
-    sectionMissing: missingResult.sectionMissing,
-    commonMissing: missingResult.commonMissing,
-    commonQuestions: questionResult.commonQuestions,
-    sectionQuestions: questionResult.sectionQuestions
-  });
-
-  return {
-    sectionStates: params.sectionStates,
-    sectionDrafts: params.sectionDrafts,
-    commonMissingItems: commonState.commonMissingItems,
-    commonQuestionSets: commonState.commonQuestionSets,
-    cacheMeta: {
-      chain4InputHash: inputHash,
-      chain5InputHash: inputHash,
-      chain4CacheHit: false,
-      chain5CacheHit: false,
-      chain4DurationMs,
-      chain5DurationMs
-    }
-  };
+/** CHAIN4→5 갱신. 구현은 questions/questionState.ts 하나다(sections.ts 와 공유). 이름은 테스트의 의존성 주입을 위해 유지. */
+async function recomputeQuestionState(params: RefreshQuestionStateParams) {
+  return refreshQuestionState(params);
 }
 
 export async function reprocessCaseFromStoredTerms(params: {

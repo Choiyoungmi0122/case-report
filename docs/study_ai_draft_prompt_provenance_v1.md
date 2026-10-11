@@ -28,7 +28,8 @@ git show c18c6e5:backend/src/llm/prompts/chain3_draft.ts
 
 - 2026-10-11 `0a56cfa`: CHAIN1~7·검토 프롬프트를 공통 원칙(P1~P7) 구조로 다시 씀. 프롬프트 레지스트리에서 이 상태를 **v2**로 소급 표기했다(`backend/src/llm/promptRegistry.ts`). 현재 chain3 템플릿 해시는 `b43305e0…`으로 고정 초안의 해시와 다르다.
 - 2026-10-11: CHAIN6 충돌 정책 통일(v3), 실험용 Write 프롬프트 공통 원칙 통일(SW-Q2 v3, SW-D v3, SW-R v3, SW-C v2).
-- 고정 결과는 EMR 본문 해시로만 선택되므로 위 변경과 무관하게 그대로 쓰인다.
+- 2026-10-12: 프롬프트 본문 변경 없음(버전 그대로). 모델 출력 **검증**을 관대하게 바꾸고(섹션 id 변형 정규화, 배열 상한 잘라내기), 형식 오류 시 같은 프롬프트 재시도 대신 수정 호출 1회, 체인별 시간·토큰 상한, 근거 범위 `tags ∪ sectionHints` 통일(`docs/prompt_chain_review_v1.md` §5-3). 실시간 체인(일반 Write, 실험용 Write)에만 해당한다.
+- 고정 결과는 EMR 본문 해시로만 선택되므로 위 변경과 무관하게 그대로 쓰인다. 고정 파일의 `unsupportedClaims.reason` 문구도 저장된 그대로다.
 
 ## 4. 지켜야 할 것
 

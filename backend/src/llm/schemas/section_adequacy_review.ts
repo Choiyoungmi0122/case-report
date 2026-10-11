@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CareSectionEnum } from './common';
+import { CareSectionCoerced, CareSectionEnum } from './common';
 
 // A section the record cannot support at all (e.g. PATIENT_PERSPECTIVE with no
 // patient statement recorded) makes the model answer NOT_APPLICABLE / N/A.
@@ -60,15 +60,15 @@ export type SectionAdequacyReviewOutput = {
 
 export const SectionAdequacyReviewOutputSchema: z.ZodType<SectionAdequacyReviewOutput, z.ZodTypeDef, unknown> =
   z.object({
-    sectionId: CareSectionEnum,
+    sectionId: CareSectionCoerced,
     adequacyStatus: SectionAdequacyStatusEnum,
     sectionCompleteness: ReviewScoreEnum,
     contentCompleteness: ReviewScoreEnum,
     naturalness: ReviewScoreEnum,
     evidenceGrounding: EvidenceGroundingEnum,
-    summary: z.string(),
-    missingRequiredItems: z.array(z.string()),
-    depthIssues: z.array(z.string()),
-    shouldAskMore: z.boolean(),
-    questionFocus: z.string()
+    summary: z.string().default(''),
+    missingRequiredItems: z.array(z.string()).default([]),
+    depthIssues: z.array(z.string()).default([]),
+    shouldAskMore: z.boolean().default(false),
+    questionFocus: z.string().default('')
   });

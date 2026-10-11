@@ -123,6 +123,19 @@
 
 남은 것: 4번의 "판정 없음(unchecked)" 상태(백엔드 타입·프론트 라벨), SW-R 고쳐 쓰기 이력의 `promptTemplateHash`(`routes/studyWrite.ts`, 다른 세션 작업 종료 후). 2순위 이후는 §5-1.
 
+## 5-3. 진행 상태 (2026-10-12, 2순위 작업)
+
+프롬프트 본문은 바꾸지 않았다(레지스트리 버전 그대로). 바뀐 것은 검증(스키마)·호출 정책·근거 범위·갱신 구현이다. 고정 연구 사례(학생 V1, Scaffold V2)는 LLM을 돌리지 않으므로 영향이 없다.
+
+| # | 항목 | 상태 | 내용 |
+|---|---|---|---|
+| 6 | 관대한 스키마·수정 호출 | 완료 | CHAIN2/3/4/5/7·검토의 모델 출력 `sectionId`에 `CareSectionCoerced`("therapeutic_intervention", "Follow-up Outcomes", "discussion" 등 정규화), 섹션 id **목록**(`relatedSectionIds`·`targetSectionIds`)은 `CareSectionListCoerced`로 알아볼 수 없는 값만 버림, 허용 밖 `category`는 버림(코드가 뒤에서 추정). 빠진 배열은 빈 배열. CHAIN7 `titleSuggestions`·`keywordSuggestions`는 `min(1)` 모순을 없애고 3개·7개로 잘라냄, 섹션 키 변형 정규화·모르는 키 제거. SW-Q2 `questions.max(3)`·`targetSectionIds.min(1)` 제거(회차 예산만큼 잘라 쓰고, 빈 섹션은 careItem으로 찾음). `llm/client.ts`: 형식 오류(JSON 구문·zod)는 같은 프롬프트 재시도 대신 **모델 응답 + 검증 오류(경로·메시지만)를 덧붙인 수정 호출 1회**, 그래도 실패하면 `LLMOutputError(llm_output_invalid)` |
+| 7 | 근거 범위 통일·CHAIN4→5 단일화 | 완료 | `llm/evidenceScope.ts` 신설: `cardSections`(tags ∪ sectionHints), `getRelevantEvidence`, `getEvidenceForSections`. CHAIN3·CHAIN4/5 범위·CHAIN6·검토·원고 검토 어댑터가 모두 이것을 쓴다(`cases.ts`·`sections.ts`·`adapters.ts`의 tags 전용 필터 7곳 교체). CHAIN4→5 갱신은 `questions/questionState.ts` 하나로 합침(`cases.ts`의 `recomputeQuestionState`는 테스트 의존성 주입을 위해 이름만 남겨 위임, `sections.ts`의 `refreshGlobalQuestionState` 삭제). 동작 결정: 누락·질문은 모델 결과 그대로(섹션을 내지 않으면 "없음" — CHAIN4 프롬프트 규칙 2와 일치, 이전 값을 유지하면 답한 항목이 영원히 남음), 핵심 AI 섹션 상태는 초안 없음→IMPOSSIBLE / 누락 있음→INCOMPLETE / 없음→READY, `rationaleText`는 **상태가 바뀔 때만** 일반 문구로 바꾸고 그대로면 CHAIN2 설명 유지. 입력 해시에 `sectionHints`를 넣어 기존 케이스는 다음 답변에서 CHAIN4/5가 한 번 다시 돈다 |
+| 8 | 재시도·시간·토큰 상한 | 완료 | `new OpenAI({ maxRetries: 0, timeout })` — 재시도는 앱에서만(전송 오류 2회, 지수 백오프 0.5→1→2초). 체인별 상한표 `CHAIN_LIMITS`(라벨 접두어: CHAIN1 180s/8k, CHAIN2 90s/3k, CHAIN3 240s/8k, CHAIN4·5 120s/4k, CHAIN6 120s/6k, CHAIN7 300s/16k, SECTION 90s/3k, SW-Q2 90s/3k, SW-D·SW-R 180s/6k, SW-C 90s/4k, TERMINOLOGY 30s/1k), 요청마다 `max_completion_tokens`와 request `timeout` 전달. `finish_reason=length`는 재시도 없이 `llm_output_truncated`. `shouldRetryLLMError`는 ZodError·SyntaxError·LLMOutputError를 제외. 토큰 사용량은 수정 호출까지 합산해 `onUsage`로 보고, 사용량 JSONL에는 `(repair)` 표시 |
+| 9 | 스키마와 프롬프트 일치·휴리스틱 표기 | 완료 | 모델 출력 스키마를 분리: `Chain3ModelOutputSchema`(evidenceLinks·unsupportedClaims 없음), `Chain6ModelOutputSchema`(updatedDraftText만), `FinalDraftModelOutputSchema`(sectionTraceability 없음). 저장 형태(`SectionDraftSchema`, `Chain6SectionUpdateOutputSchema`, `FinalDraftSchema`)는 그대로 두고 `buildDraftTraceability`가 덧붙인다. 그 성격(문자 2-gram 겹침, 임계 0.4)을 코드 주석, 미지원 문장 `reason` 문구("자동 문자 일치 검사에서 … 찾지 못했습니다. 실제 근거 여부는 기록을 확인해 판단하세요."), Scaffold 섹션 화면의 대체 문구, DOCX "Evidence Traceability" 부록 머리말에 밝힘. 고정 사례의 저장된 `reason`은 바뀌지 않는다 |
+
+검증: `npm run test:llm-client`(신설: 스키마 정규화, 수정 호출 1회·전송 재시도·400 즉시 실패·잘린 출력, 체인 상한, 근거 범위, 갱신 상태 규칙), `test:prompt-registry`, `test:study`, `test:study-integration`, `test:study-write`, `test:research-export`, `test:export`, `test:optimization`, `test:common-questions`, `test:workflow`, `test:privacy-outbound`, `test:privacy-payload`, `test:timeline-import` 통과. 백엔드·프론트 `tsc` 통과. 실제 LLM 호출로 수정 호출의 성공률은 재지 않았다.
+
 ## 6. 점검 방법
 
 - 프롬프트·스키마 본문 전부를 직접 읽었다. 오케스트레이션(호출 순서, 모델, 캐시, 검증, 비식별)은 코드 탐색으로 정리했고 핵심 지점은 파일:줄로 표시했다.
