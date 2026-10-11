@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { caseApi, StudyWriteDraftsResponse, StudyWriteSection } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
+import { careCompliance, complianceLevel } from '../utils/studyWriteCare';
 import './StudyWriteFinalPage.css';
 
 /**
@@ -121,6 +122,14 @@ export default function StudyWriteFinalPage() {
             <div className="sw-final__section-head">
               <h2>{section.name}</h2>
               <span>
+                {(() => {
+                  const c = careCompliance(section);
+                  return c ? (
+                    <i className={`sw-final__pct is-${complianceLevel(c)}`} title={`CARE 세부 항목 ${c.ok}/${c.total} 충족 · 필수 ${c.requiredOk}/${c.requiredTotal}`}>
+                      CARE {c.pct}%
+                    </i>
+                  ) : null;
+                })()}
                 버전 {section.version}
                 {savingId === section.sectionId ? ' · 저장 중…' : ''}
               </span>

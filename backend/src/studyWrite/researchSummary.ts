@@ -58,6 +58,19 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
       finalDraftChars: finalText.length,
       /** 처음 초안 대비 최종 글자 수 변화 비율 */
       changeRatio: firstText ? Math.round((Math.abs(finalText.length - firstText.length) / firstText.length) * 1000) / 1000 : null,
+      /** CARE 세부 항목 준수율(%). "있음"·"해당 없음"을 충족으로 본다 */
+      careTotal: careItems.length,
+      careOk: careItems.filter((item) => item.status === 'present' || item.status === 'not_applicable').length,
+      carePct: careItems.length
+        ? Math.round((careItems.filter((item) => item.status === 'present' || item.status === 'not_applicable').length / careItems.length) * 100)
+        : null,
+      careRequiredPct: careItems.some((item) => item.required)
+        ? Math.round(
+            (careItems.filter((item) => item.required && (item.status === 'present' || item.status === 'not_applicable')).length /
+              careItems.filter((item) => item.required).length) *
+              100
+          )
+        : null,
       careRequiredMissing: careItems.filter((item) => item.required && item.status !== 'present' && item.status !== 'not_applicable').length,
       careOptionalMissing: careItems.filter((item) => !item.required && item.status !== 'present' && item.status !== 'not_applicable').length,
       careInRecordNotInDraft: careItems.filter((item) => item.status === 'in_record_not_in_draft').length
@@ -114,6 +127,13 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
       }))
     },
     sections,
+    /** 전체 CARE 준수율: 점검된 모든 섹션의 세부 항목 합산 */
+    careCompliance: (() => {
+      const checked = sections.filter((item: any) => typeof item.careTotal === 'number' && item.careTotal > 0) as any[];
+      const total = checked.reduce((sum, item) => sum + item.careTotal, 0);
+      const ok = checked.reduce((sum, item) => sum + item.careOk, 0);
+      return { sectionsChecked: checked.length, total, ok, pct: total ? Math.round((ok / total) * 100) : null };
+    })(),
     totals: {
       reviseCount: sumOf(sections, 'reviseCount'),
       manualEditCount: sumOf(sections, 'manualEditCount'),

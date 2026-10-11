@@ -163,5 +163,30 @@
   margin-top: 6px;
   border-radius: 6px;
 }
+.sw-final__pct {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-style: normal;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.sw-final__pct.is-good {
+  background: #e4f3e7;
+  color: #1f6b35;
+}
+
+.sw-final__pct.is-mid {
+  background: #fde9bf;
+  color: #7a4b00;
+}
+
+.sw-final__pct.is-bad {
+  background: #fadcd5;
+  color: #a93b24;
+}
+
 .sw-final__timeline-preview { margin-top: 8px; }
 .sw-final__timeline-preview p { margin: 0 0 6px; font-size: 12px; color: #5b6b82; }

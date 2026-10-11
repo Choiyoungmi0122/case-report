@@ -487,6 +487,92 @@
   margin-bottom: 14px;
 }
 
+/* 준수율 상자는 두 칸을 다 쓴다 */
+.sw-care-summary__box--pct {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sw-care-summary__box--pct strong {
+  font-size: 30px;
+}
+
+.sw-care-summary__box--pct.is-good {
+  border-color: #bfdcc5;
+  background: #eef8f0;
+}
+
+.sw-care-summary__box--pct.is-good strong {
+  color: #1f6b35;
+}
+
+.sw-care-summary__box--pct.is-mid {
+  border-color: #efd9a8;
+  background: #fff8e8;
+}
+
+.sw-care-summary__box--pct.is-mid strong {
+  color: #8a5a00;
+}
+
+.sw-care-summary__box--pct.is-bad {
+  border-color: #f0c9bf;
+  background: #fdf1ee;
+}
+
+.sw-care-summary__box--pct.is-bad strong {
+  color: #a93b24;
+}
+
+/* 섹션 목록의 준수율 배지 */
+.sw-draft__nav-pct {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-draft__nav-pct.is-good {
+  background: #e4f3e7;
+  color: #1f6b35;
+}
+
+.sw-draft__nav-pct.is-mid {
+  background: #fde9bf;
+  color: #7a4b00;
+}
+
+.sw-draft__nav-pct.is-bad {
+  background: #fadcd5;
+  color: #a93b24;
+}
+
+/* 머리글의 전체 준수율 */
+.sw-draft__meta .sw-draft__overall {
+  font-weight: 800;
+}
+
+.sw-draft__meta .sw-draft__overall.is-good {
+  background: #e4f3e7;
+  color: #1f6b35;
+}
+
+.sw-draft__meta .sw-draft__overall.is-mid {
+  background: #fde9bf;
+  color: #7a4b00;
+}
+
+.sw-draft__meta .sw-draft__overall.is-bad {
+  background: #fadcd5;
+  color: #a93b24;
+}
+
 .sw-care-summary__box {
   padding: 10px 12px;
   border-radius: 10px;

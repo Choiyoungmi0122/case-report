@@ -12,6 +12,7 @@ import {
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import { ANSWER_CHOICES, answerStatusLabel, choiceToBody, AnswerChoiceValue } from '../utils/studyWriteAnswers';
+import { careCompliance, complianceLevel, overallCareCompliance } from '../utils/studyWriteCare';
 import './StudyWriteDraftPage.css';
 
 /**
@@ -249,6 +250,14 @@ export default function StudyWriteDraftPage() {
         </div>
         <div className="sw-draft__meta">
           {data?.experimentCode ? <span>실험번호 {data.experimentCode}</span> : null}
+          {(() => {
+            const all = data ? overallCareCompliance(data.sections) : null;
+            return all ? (
+              <span className={`sw-draft__overall is-${complianceLevel(all)}`} title={`CARE 세부 항목 ${all.ok}/${all.total} 충족 · 필수 ${all.requiredOk}/${all.requiredTotal}`}>
+                CARE 준수율 {all.pct}% · 필수 {all.requiredPct ?? '-'}%
+              </span>
+            ) : null;
+          })()}
           {running ? (
             <span className="is-busy">
               초안 생성 중 {generation?.doneSectionIds.length} / {generation?.targetSectionIds.length}
@@ -291,7 +300,17 @@ export default function StudyWriteDraftPage() {
                 <span>{item.name}</span>
                 {pending ? <em>쓰는 중</em> : null}
                 {!pending && !item.draftText ? <em>없음</em> : null}
-                {missing > 0 ? <b title="빠진 필수 요소">{missing}</b> : null}
+                {(() => {
+                  const c = careCompliance(item);
+                  return c ? (
+                    <i
+                      className={`sw-draft__nav-pct is-${complianceLevel(c)}`}
+                      title={`CARE 준수 ${c.ok}/${c.total} (필수 ${c.requiredOk}/${c.requiredTotal}${missing > 0 ? `, 필수 ${missing}개 빠짐` : ''})`}
+                    >
+                      {c.pct}%
+                    </i>
+                  ) : null;
+                })()}
               </button>
             );
           })}
@@ -516,6 +535,18 @@ export default function StudyWriteDraftPage() {
                   return (
                     <>
                       <div className="sw-care-summary">
+                        {(() => {
+                          const c = careCompliance(section);
+                          return c ? (
+                            <div className={`sw-care-summary__box sw-care-summary__box--pct is-${complianceLevel(c)}`}>
+                              <span>이 섹션 CARE 준수율</span>
+                              <strong>{c.pct}%</strong>
+                              <em>
+                                세부 항목 {c.ok} / {c.total} 충족 · 필수 {c.requiredOk} / {c.requiredTotal}
+                              </em>
+                            </div>
+                          ) : null;
+                        })()}
                         <div className={`sw-care-summary__box${okCount(required) === required.length ? ' is-ok' : ' is-missing'}`}>
                           <span>필수</span>
                           <strong>
