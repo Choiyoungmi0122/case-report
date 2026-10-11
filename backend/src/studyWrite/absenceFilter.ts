@@ -8,6 +8,7 @@
  * 남기는 문장: 검사·진찰의 음성 소견("이상 소견은 없었다"), 환자가 말한 내용("~라고 하였다"),
  * 이상반응 문장, "[확인 필요 …]" 표시가 있는 문장. 타임라인 표의 행(| 가 있는 줄)은 건드리지 않는다.
  * 한 문장 안에 소견과 부재가 함께 있으면("입마름은 없었고, … 기록은 없었다") 부재 절만 뺀다.
+ * 다만 "~으나"로 이은 앞 절 뒤의 부재 절을 빼면 앞 절이 반쪽이 되므로 그때는 문장째 뺀다.
  */
 
 const ABSENCE_SUBJECT = /(기록|언급|정보|내용|자료)/;
@@ -30,6 +31,9 @@ function closeClause(clause: string): string {
   return /[.!?]$/.test(c) ? c : `${c}.`;
 }
 
+/** "~나"로 끝난 절: "있으나", "하였으나", "하거나". 끝맺어도 뒤 절 없이는 뜻이 서지 않는다 */
+const CONTRAST_END = /나$/;
+
 /** 한 문장 안에서 부재 절만 뺀다. 남길 절이 없으면 null */
 function dropAbsenceClauses(sentence: string, removed: string[]): string | null {
   if (!isAbsenceSentence(sentence)) return sentence;
@@ -38,9 +42,19 @@ function dropAbsenceClauses(sentence: string, removed: string[]): string | null 
     removed.push(sentence.trim());
     return null;
   }
+  const absent = clauses.map((clause) => isAbsenceSentence(clause));
+  // "~으나, ~는 기록되어 있지 않다"처럼 대비(~나)로 이은 앞 절만 남으면 뜻이 반쪽이 되고("…언급되어 있으나."),
+  // 끝맺어도 뒤 절을 전제로 한 말이라 어색하다. 이때는 문장째 뺀다 (사용자 결정 2026-10-12). "~거나"도 같다
+  const contrastBroken = clauses.some(
+    (clause, index) => index > 0 && absent[index] && !absent[index - 1] && CONTRAST_END.test(clauses[index - 1].trim())
+  );
+  if (contrastBroken) {
+    removed.push(sentence.trim());
+    return null;
+  }
   const kept: string[] = [];
-  clauses.forEach((clause) => {
-    if (isAbsenceSentence(clause)) removed.push(clause.trim());
+  clauses.forEach((clause, index) => {
+    if (absent[index]) removed.push(clause.trim());
     else kept.push(clause);
   });
   if (kept.length === 0) return null;

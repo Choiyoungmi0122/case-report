@@ -34,6 +34,22 @@ function run() {
   assert.equal(dropAbsenceSentences('입마름은 없었고, 식욕 및 소화, 대변에 대한 추가 기록은 확인되지 않았다.').text, '입마름은 없었다.');
   assert.equal(dropAbsenceSentences('맥은 활삭하였으며, 복진 소견에 대한 기록은 없었다.').text, '맥은 활삭하였다.');
   assert.equal(dropAbsenceSentences('가족력에 대한 정보는 없고, 음주는 주 1회였다.').text, '음주는 주 1회였다.');
+  // 대비(~으나)로 이은 앞 절 뒤의 부재 절: 앞 절이 반쪽이 되므로 문장째 뺀다 (임교수 테스트 6 치료 개입에서 나온 문장)
+  {
+    const broken = dropAbsenceSentences(
+      '5. 기타\n생활 지도, 식이 조절 등은 증상 경과 기록에서 식단 조절, 수면 습관 안내 등이 언급되어 있으나, 구체적인 지도 내용과 빈도는 명시되어 있지 않다.'
+    );
+    assert.equal(broken.text, '5. 기타');
+    assert.equal(broken.removed.length, 1);
+    assert.match(broken.removed[0], /언급되어 있으나, 구체적인/);
+  }
+  assert.equal(dropAbsenceSentences('침 치료를 시행하였으나, 유침 시간은 기록되지 않았다.').text, '', '"~으나" 뒤 부재 절이면 문장째');
+  // "~거나"도 끝맺으면 "복용하거나."처럼 반쪽이 되므로 문장째 뺀다
+  assert.equal(dropAbsenceSentences('식후 복용하거나, 복용 시점에 대한 기록은 없었다.').text, '');
+  // 부재 절이 앞에 있고 "~으나"로 이으면 뒤 소견은 남긴다
+  assert.equal(dropAbsenceSentences('가족력에 대한 정보는 없으나, 음주는 주 1회였다.').text, '음주는 주 1회였다.');
+  // 앞 절이 "~고"·"~며"면 지금처럼 앞 절만 끝맺어 남긴다
+  assert.equal(dropAbsenceSentences('침 치료를 주 2회 시행하였고, 유침 시간은 기록되지 않았다.').text, '침 치료를 주 2회 시행하였다.');
   assert.equal(dropAbsenceSentences('유침 시간, 자극 방법 등은 기록에 명시되어 있지 않다.').text, '');
   assert.equal(
     dropAbsenceSentences('부항은 유관법으로 시행하였으며, 부위는 기록상 명확히 구분되어 있지 않으나, 반복적으로 병행되었다.').text,
