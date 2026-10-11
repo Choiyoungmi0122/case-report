@@ -504,10 +504,16 @@
   background: transparent;
 }
 
+/* 섹션이 길어 패널이 길어져도 입력창은 화면 아래에 붙어 보인다 */
 .sw-draft__chat-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   padding: 12px 18px 16px;
   border-top: 1px solid #e3e8ee;
+  border-radius: 0 0 12px 12px;
   background: #fff;
+  box-shadow: 0 -6px 12px -10px rgba(15, 23, 42, 0.25);
 }
 
 .sw-draft__chat-box {

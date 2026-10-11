@@ -72,6 +72,21 @@ export default function StudyWriteDraftPage() {
   useEffect(() => {
     if (!instruction && composerRef.current) composerRef.current.style.height = 'auto';
   }, [instruction]);
+  // CARE 점검의 "수정 요청으로 넣기": 채팅 탭으로 넘어간 뒤 입력창으로 스크롤하고 커서를 끝에 둔다
+  const [focusComposerAt, setFocusComposerAt] = useState(0);
+  useEffect(() => {
+    if (!focusComposerAt) return;
+    const timer = window.setTimeout(() => {
+      const box = composerRef.current;
+      if (!box) return;
+      box.style.height = 'auto';
+      box.style.height = `${box.scrollHeight}px`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      box.focus({ preventScroll: true });
+      box.setSelectionRange(box.value.length, box.value.length);
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [focusComposerAt]);
   const [revising, setRevising] = useState(false);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -727,6 +742,7 @@ export default function StudyWriteDraftPage() {
                             onClick={() => {
                               setInstruction(`${item.label.split('.')[0].split('(')[0].trim()} 내용을 기록에서 찾아 이 섹션에 넣어 줘.`);
                               setTab('chat');
+                              setFocusComposerAt(Date.now());
                             }}
                           >
                             수정 요청으로 넣기
