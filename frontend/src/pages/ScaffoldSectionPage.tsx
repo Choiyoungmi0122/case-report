@@ -14,13 +14,15 @@ import {
   type EmrAnchor
 } from '../components/scaffold/emrSearch';
 import { PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
+import StageGuide from '../components/scaffold/StageGuide';
 import {
   DRAFT_FLAG_GUIDE_V2,
   REFLECTION_PROMPTS_V2,
   REVIEW_NOT_FLAGGED_NOTE_V2,
   REVIEW_STEPS_V2,
   SUFFICIENCY_OPTION_GUIDE_V2,
-  TI_GUIDE_V2
+  TI_GUIDE_V2,
+  V2_STAGE_GUIDES
 } from '../utils/scaffoldV2Guide';
 import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
@@ -2124,10 +2126,15 @@ export default function ScaffoldSectionPage() {
               {/* STEP 1: Evidence Selection */}
           {(currentStep === 'step1' || !sectionProgress.draftRevealed) && (
             <ScaffoldPanel
-              title="Step 1: 내 초안 써 보기"
-              description="왼쪽 환자 기록을 보고 이 항목을 두세 문장으로 직접 써 보세요. 잘 쓰려고 하지 않아도 됩니다. 위의 CARE 기준과 작성 예를 참고하세요."
+              title={isV2 ? 'Step 1: 내 초안 써 보기 (4단계)' : 'Step 1: 내 초안 써 보기'}
+              description={
+                isV2
+                  ? '잘 쓰려고 하지 않아도 됩니다. 기록에 있는 것만, 내 말로 두세 문장이면 충분합니다.'
+                  : '왼쪽 환자 기록을 보고 이 항목을 두세 문장으로 직접 써 보세요. 잘 쓰려고 하지 않아도 됩니다. 위의 CARE 기준과 작성 예를 참고하세요.'
+              }
             >
               <div style={{ display: 'grid', gap: 20 }}>
+                {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.step1} compact /> : null}
                 <div className="scaffold-own-draft">
                   <label htmlFor="own-draft-input">내 초안</label>
                   <textarea
@@ -2453,10 +2460,15 @@ export default function ScaffoldSectionPage() {
           {/* STEP 2: Confirmation Questions */}
           {(currentStep === 'step2' || !sectionProgress.draftRevealed) && confirmationQuestions.length > 0 && (
             <ScaffoldPanel
-              title="Step 2: 이 정보만으로 충분한지 확인하기"
-              description="증례보고를 작성하기 전에, 필요한 정보가 충분한지 확인해보세요."
+              title={isV2 ? 'Step 2: 이 정보만으로 충분한지 확인하기 (4단계)' : 'Step 2: 이 정보만으로 충분한지 확인하기'}
+              description={
+                isV2
+                  ? '내 초안을 쓰면서 느낀 대로 판단하면 됩니다. 판단은 AI 초안을 보기 전에 고정됩니다.'
+                  : '증례보고를 작성하기 전에, 필요한 정보가 충분한지 확인해보세요.'
+              }
             >
               <div style={{ display: 'grid', gap: 20 }}>
+                {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.step2} compact /> : null}
                 {confirmationQuestions.map((question) => (
                   <div
                     key={question.id}
@@ -2655,8 +2667,9 @@ export default function ScaffoldSectionPage() {
 
           {/* STEP 4: AI Draft Review (Post-reveal) */}
           {sectionProgress.draftRevealed && (
-            <ScaffoldPanel title="Step 3: AI 초안과 비교하기">
+            <ScaffoldPanel title={isV2 ? 'Step 3: AI 초안과 비교하기 (5·6단계)' : 'Step 3: AI 초안과 비교하기'}>
               <div style={{ display: 'grid', gap: 16 }}>
+                {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.step3} compact /> : null}
                 {/* 공개 전 내 판단은 오른쪽 패널에 얼려진 상태로 계속 보이므로
                     여기서 다시 보여주지 않는다. 세 영역을 나란히 두는 것이
                     원기록 ↔ AI ↔ 내 판단 비교의 목적이다. */}

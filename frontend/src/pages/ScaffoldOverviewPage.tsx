@@ -4,6 +4,8 @@ import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyOverviewPhase } from '../components/scaffold/ReadOnlyStageNavigator';
 import CaseNotesV2, { EMPTY_CASE_NOTE_DRAFT, type CaseNoteDraft } from '../components/scaffold/CaseNotesV2';
+import StageGuide from '../components/scaffold/StageGuide';
+import { V2_INTRO, V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 import {
   EmrSearchBox,
   HighlightedText,
@@ -580,7 +582,65 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     .slice(0, 3);
 
   // 진행 방법과 CARE 설명. 실험용 경로의 시작 화면에서 먼저 보여주고, 이후 단계에서는 접어 둔다.
-  const renderHowTo = (open: boolean) => (
+  // V2(v3.0) 시작 화면: 목적 → 방식 → 6가지 교육 요소 흐름 → 짧은 비교 예시. 다른 환자 작성 예 표는 치료 개입 화면의
+  // 기준·예시 상자로 옮겨졌으므로 여기서는 보여 주지 않는다.
+  const renderHowToV2 = (open: boolean) => (
+    <details className="scaffold-v2__howto scaffold-v2__howto--v2" open={open}>
+      <summary>오늘 무엇을 어떻게 하나요</summary>
+      <div className="scaffold-v2__intro-purpose">
+        <p>
+          <strong>무엇을 위한 연습인가요?</strong> {V2_INTRO.purpose}
+        </p>
+        <p>
+          <strong>어떤 방식으로 하나요?</strong> {V2_INTRO.method}
+        </p>
+        <p>
+          <strong>오늘 범위</strong> {V2_INTRO.today}
+        </p>
+      </div>
+      <div className="scaffold-v2__intro-flow">
+        <div className="scaffold-v2__howto-example-title">진행 순서 (6단계)</div>
+        <ol>
+          {V2_INTRO.flow.map((item) => (
+            <li key={item.step}>
+              <span className="scaffold-v2__intro-flow-num">{item.step}</span>
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.what}</span>
+                <em>{item.where}</em>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div className="scaffold-v2__howto-example">
+        <div className="scaffold-v2__howto-example-title">5단계 "AI 초안과 비교"는 이렇게 합니다 (다른 환자 예)</div>
+        <div className="scaffold-v2__howto-grid">
+          <div className="scaffold-v2__howto-box is-record">
+            <em>원기록</em>
+            <p>1차: 3일 전 요통 발생. NRS 7. 침 치료 시작(주 2회).</p>
+            <p>2차 (1주 뒤): NRS 4. 아침 뻣뻣함 남아 있음. 온열 치료 추가.</p>
+          </div>
+          <div className="scaffold-v2__howto-box is-ai">
+            <em>AI가 쓴 초안</em>
+            <p>
+              침 치료를 주 2회 시행하였다. <mark>내원 당시 통증은 NRS 5였다.</mark>
+            </p>
+          </div>
+          <div className="scaffold-v2__howto-box is-mine">
+            <em>내가 하는 일</em>
+            <p><b>표시한 문장</b>: “내원 당시 통증은 NRS 5였다.” → 기록과 다름 (1차 기록에는 NRS 7)</p>
+            <p><b>돌아보기</b>: 내 초안에는 온열 치료를 추가한 시점을 쓰지 않았다는 것을 알았다.</p>
+          </div>
+        </div>
+        <p className="scaffold-v2__howto-note">
+          표시할 문장이 없다고 판단하면 표시하지 않아도 됩니다. 표시하지 않은 문장은 "맞다"고 기록되지 않습니다.
+        </p>
+      </div>
+    </details>
+  );
+
+  const renderHowToV1 = (open: boolean) => (
     <details className="scaffold-v2__howto" open={open}>
       <summary>진행 방법과 예시</summary>
       <ol className="scaffold-v2__howto-steps">
@@ -648,6 +708,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
       </div>
     </details>
   );
+
+  const renderHowTo = (open: boolean) => (isV2 ? renderHowToV2(open) : renderHowToV1(open));
 
   const renderCareMap = (open: boolean) => (
     <details className="scaffold-v2__care-map" open={open}>
@@ -736,8 +798,12 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             <div className="scaffold-v2__stage-heading">
               <div>
                 <span>시작하기 전에</span>
-                <h2 id="intro-title">오늘 진행 방법</h2>
-                <p>아래 내용을 읽은 뒤 시작해 주세요. 진행하는 동안 언제든 다시 볼 수 있습니다.</p>
+                <h2 id="intro-title">{isV2 ? '오늘 실습의 목적과 진행 방법' : '오늘 진행 방법'}</h2>
+                <p>
+                  {isV2
+                    ? '2~3분이면 읽을 수 있습니다. 읽은 뒤 시작하고, 진행하는 동안 "진행 방법 다시 보기"로 언제든 돌아올 수 있습니다.'
+                    : '아래 내용을 읽은 뒤 시작해 주세요. 진행하는 동안 언제든 다시 볼 수 있습니다.'}
+                </p>
               </div>
             </div>
             {renderHowTo(true)}
@@ -756,7 +822,13 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <div>
                 <span>1단계</span>
                 <h2 id="case-understanding-title">기록을 읽고 내 말로 메모하기</h2>
-                <p>{studyMode ? '이 환자를 증례보고로 쓴다면 중요하다고 생각하는 점과 더 확인하고 싶은 점을 짧게 적어 보세요. 메모는 추가하는 즉시 저장되고, 마지막 학습 기록에 함께 실립니다.' : '정답을 고르거나 분류하지 않아도 됩니다. 눈에 띈 점과 더 확인하고 싶은 점을 짧게 남겨보세요.'}</p>
+                <p>
+                  {isV2
+                    ? '6단계 가운데 2단계입니다. 메모는 추가하는 즉시 저장되고, 치료 개입을 쓸 때 오른쪽에 다시 보입니다.'
+                    : studyMode
+                      ? '이 환자를 증례보고로 쓴다면 중요하다고 생각하는 점과 더 확인하고 싶은 점을 짧게 적어 보세요. 메모는 추가하는 즉시 저장되고, 마지막 학습 기록에 함께 실립니다.'
+                      : '정답을 고르거나 분류하지 않아도 됩니다. 눈에 띈 점과 더 확인하고 싶은 점을 짧게 남겨보세요.'}
+                </p>
               </div>
               <strong>
                 {caseNotes.length}개 메모
@@ -767,6 +839,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 ) : null}
               </strong>
             </div>
+
+            {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.read} /> : null}
 
             <div className={`scaffold-v2__memo-workspace${isV2 ? ' is-v2' : ''}`}>
               <section className="scaffold-v2__record-column" aria-labelledby="record-column-title">
@@ -1153,10 +1227,17 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <div>
                 <span>{studyMode ? '2단계' : '4단계'}</span>
                 <h2 id="section-drafting-title">{studyMode ? 'CARE 항목별로 정리하고 AI 초안과 비교하기' : 'CARE 섹션별 원고 작성'}</h2>
-                <p>{studyMode ? '위에서부터 차례로 진행하세요. 내 생각을 먼저 적은 뒤 AI 초안을 확인합니다. 시간 안에 모두 하지 않아도 됩니다.' : '앞에서 만든 증례지도에 따라 각 섹션을 작성하고 AI 초안과 자신의 판단을 비교합니다.'}</p>
+                <p>
+                  {isV2
+                    ? '6단계 가운데 3~6단계를 치료 개입 항목 안에서 진행합니다. 내 생각을 먼저 적은 뒤 AI 초안을 봅니다.'
+                    : studyMode
+                      ? '위에서부터 차례로 진행하세요. 내 생각을 먼저 적은 뒤 AI 초안을 확인합니다. 시간 안에 모두 하지 않아도 됩니다.'
+                      : '앞에서 만든 증례지도에 따라 각 섹션을 작성하고 AI 초안과 자신의 판단을 비교합니다.'}
+                </p>
               </div>
               <strong>{completedCount} / {totalSections} 완료</strong>
             </div>
+            {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.sections} /> : null}
 
             <div className="scaffold-v2__section-progress" aria-hidden="true">
               <span style={{ width: `${totalSections ? Math.round((completedCount / totalSections) * 100) : 0}%` }} />

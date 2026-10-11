@@ -2181,3 +2181,73 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Scaffold V2 (v3.0) 시작 화면: 목적·방식·6단계 흐름 */
+.scaffold-v2__intro-purpose {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.scaffold-v2__intro-purpose p {
+  margin: 0;
+  color: #243b53;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.scaffold-v2__intro-purpose strong {
+  margin-right: 6px;
+  color: #17324d;
+}
+
+.scaffold-v2__intro-flow ol {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.scaffold-v2__intro-flow li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.scaffold-v2__intro-flow li > div {
+  display: grid;
+  gap: 2px;
+  color: #243b53;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.scaffold-v2__intro-flow li strong {
+  color: #17324d;
+  font-size: 15px;
+}
+
+.scaffold-v2__intro-flow li em {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.scaffold-v2__intro-flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #2f8055;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}

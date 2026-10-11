@@ -12,6 +12,8 @@ import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import { getCompletedScaffoldSectionCount } from '../utils/scaffoldUi';
 import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
+import StageGuide from '../components/scaffold/StageGuide';
+import { V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const objectUrl = window.URL.createObjectURL(blob);
@@ -313,6 +315,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     <ScaffoldPageFrame>
       {studyMode ? <SessionTimer startedAt={data.scaffoldState.startedAt} /> : null}
       <ReadOnlyNavigatorBar caseId={caseId} data={data} currentKey="summary" />
+      {isScaffoldV2Data(data) ? <StageGuide guide={V2_STAGE_GUIDES.summary} /> : null}
       <ScaffoldHero
         title="내 학습 기록"
         description="AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."
