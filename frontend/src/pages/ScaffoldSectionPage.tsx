@@ -6,7 +6,15 @@ import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldProgressHeader from '../components/scaffold/ScaffoldProgressHeader';
 import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyStage } from '../components/scaffold/ReadOnlyStageNavigator';
-import { EmrSearchBox, HighlightedText, revealInContainer, useEmrSearch } from '../components/scaffold/emrSearch';
+import {
+  EmrSearchBox,
+  HighlightedText,
+  revealInContainer,
+  useEmrSearch,
+  type EmrAnchor
+} from '../components/scaffold/emrSearch';
+import { PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
+import { SUFFICIENCY_OPTION_GUIDE_V2, TI_GUIDE_V2 } from '../utils/scaffoldV2Guide';
 import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
@@ -844,6 +852,13 @@ export default function ScaffoldSectionPage() {
 
     // 화면에서 방금 고른 값이 서버 응답보다 우선한다.
     setConfirmationQuestionJudgments(restored);
+    // 저장된 이유도 함께 복원한다 (V2에서만 입력하지만 어떤 기록이든 note가 있으면 보여 준다).
+    const restoredNotes: Record<string, string> = {};
+    confirmationQuestions.forEach((question) => {
+      const stored = existingReviewMap.get(buildScaffoldItemId(sectionId || '', 'custom', question.id, 0));
+      if (stored?.note) restoredNotes[question.id] = stored.note;
+    });
+    setConfirmationQuestionNotes((prev) => ({ ...restoredNotes, ...prev }));
   }, [sectionId, existingReviewMap, confirmationQuestions]);
 
   const draftJudgmentCount = draftSentences.filter((sentence, index) => {
@@ -889,6 +904,36 @@ export default function ScaffoldSectionPage() {
   const visitTexts = useMemo(() => visits.map((visit: any) => String(visit?.soapText || '')), [visits]);
   const emrSearch = useEmrSearch(visitTexts);
   const sourcePaneBodyRef = useRef<HTMLDivElement | null>(null);
+  // V2: 작성 예시·충분성 질문의 원문 인용에서 "원문 보기"를 누르면 왼쪽 원기록의 그 구절을 강조한다.
+  const [sourceAnchor, setSourceAnchor] = useState<EmrAnchor | null>(null);
+  const showSourceAnchor = (visitIndex: number, quote: string) => {
+    setSourceAnchor({ visitIndex, quote });
+    setExpandedVisits((prev) => (prev.has(visitIndex) ? prev : new Set(prev).add(visitIndex)));
+    logUiAction('record_quote_opened', { visit: visitIndex + 1 });
+  };
+  useEffect(() => {
+    if (!sourceAnchor) return;
+    const timer = window.setTimeout(() => {
+      const visit = sourcePaneBodyRef.current?.querySelector<HTMLElement>(`[data-visit-index="${sourceAnchor.visitIndex}"]`);
+      const mark = visit?.querySelector<HTMLElement>('[data-anchor="1"]');
+      if (mark) revealInContainer(sourcePaneBodyRef.current, mark);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [sourceAnchor]);
+  // V2: CARE 기준·예시 상자는 접었다 펼 수 있고, 머리말 버튼으로 언제든 다시 연다.
+  const [careGuideOpen, setCareGuideOpen] = useState(true);
+  const careGuideRef = useRef<HTMLDetailsElement | null>(null);
+  const reopenCareGuide = () => {
+    setCareGuideOpen(true);
+    window.setTimeout(() => careGuideRef.current?.scrollIntoView({ block: 'start' }), 0);
+    logUiAction('care_guide_reopened');
+  };
+  // V2: 3열 폭 조절 (이 브라우저에만 기억, 연구 데이터 아님)
+  const workspaceGridRef = useRef<HTMLDivElement | null>(null);
+  const paneResize = usePaneResize(isV2, workspaceGridRef);
+  // V2: 충분성 판단 이유(선택). 질문별로 멈추면 저장한다.
+  const [confirmationQuestionNotes, setConfirmationQuestionNotes] = useState<Record<string, string>>({});
+  const noteSaveTimersRef = useRef<Record<string, number>>({});
   useEffect(() => {
     const active = emrSearch.active;
     if (!active) return;
@@ -1303,14 +1348,16 @@ export default function ScaffoldSectionPage() {
     setMissingInformationItems((prev) => prev.filter((i) => i !== item));
   };
 
-  const handleConfirmationQuestionJudgment = async (questionId: string, judgment: string) => {
+  const handleConfirmationQuestionJudgment = async (questionId: string, judgment: string, noteOverride?: string) => {
     setConfirmationQuestionJudgments((prev) => ({ ...prev, [questionId]: judgment }));
 
     const question = confirmationQuestions.find((item) => item.id === questionId);
     if (!caseId || !sectionId || !question) return;
 
     // 판단을 서버에 저장한다. 저장하지 않으면 새로고침 시 사라지고
-    // preRevealSnapshot에도 남지 않는다.
+    // preRevealSnapshot에도 남지 않는다. 서버는 note가 없는 요청에서 기존 note를 지우므로
+    // 판단만 바꿀 때도 입력해 둔 이유를 함께 보낸다.
+    const note = (noteOverride ?? confirmationQuestionNotes[questionId] ?? '').trim();
     setSavingConfirmationQuestionIds((prev) => new Set(prev).add(questionId));
     try {
       const nextState = await caseApi.upsertScaffoldReviewItem(
@@ -1320,13 +1367,15 @@ export default function ScaffoldSectionPage() {
           sectionId,
           sourceType: 'custom',
           sourceText: question.question,
-          judgment: toInformationStatusJudgment(judgment)
+          judgment: toInformationStatusJudgment(judgment),
+          ...(note ? { note } : {})
         }
       );
       patchScaffoldState(nextState.scaffoldState);
       await logScaffoldEvent('information_status_judgment_saved', {
         questionId,
-        judgment
+        judgment,
+        ...(noteOverride !== undefined ? { hasNote: Boolean(note) } : {})
       });
     } catch (err: any) {
       setError(err.message || '확인 항목 판단을 저장하지 못했습니다.');
@@ -1337,6 +1386,23 @@ export default function ScaffoldSectionPage() {
         return next;
       });
     }
+  };
+
+  // V2: 판단 이유(선택). 입력이 1.2초 멈추거나 입력란을 떠나면 현재 판단과 함께 저장한다.
+  // 판단을 아직 고르지 않았으면 저장할 레코드가 없으므로 화면에만 둔다.
+  const handleConfirmationQuestionNoteChange = (questionId: string, value: string, flush = false) => {
+    setConfirmationQuestionNotes((prev) => ({ ...prev, [questionId]: value }));
+    const judgment = confirmationQuestionJudgments[questionId];
+    if (!judgment) return;
+    if (noteSaveTimersRef.current[questionId]) window.clearTimeout(noteSaveTimersRef.current[questionId]);
+    if (flush) {
+      void handleConfirmationQuestionJudgment(questionId, judgment, value);
+      return;
+    }
+    noteSaveTimersRef.current[questionId] = window.setTimeout(() => {
+      delete noteSaveTimersRef.current[questionId];
+      void handleConfirmationQuestionJudgment(questionId, judgment, value);
+    }, 1200);
   };
 
   const handleProceedToStep3 = async () => {
@@ -1607,7 +1673,11 @@ export default function ScaffoldSectionPage() {
         </div>
       ) : null}
 
-      <div className="scaffold-workspace__grid">
+      <div
+        className={`scaffold-workspace__grid${paneResize.active ? ' is-resizable' : ''}`}
+        ref={workspaceGridRef}
+        style={paneResize.gridStyle}
+      >
       {/* PANEL 1: SOURCE RECORD */}
       <section className="scaffold-pane scaffold-pane--source" aria-label="환자 원기록">
         <div className="scaffold-pane__head">
@@ -1652,6 +1722,7 @@ export default function ScaffoldSectionPage() {
             return (
               <div
                 key={index}
+                data-visit-index={index}
                 style={{
                   border: '1px solid #d7e0e8',
                   borderRadius: 6,
@@ -1719,6 +1790,7 @@ export default function ScaffoldSectionPage() {
                         text={visit.soapText || '기록 없음'}
                         matches={emrSearch.matches.filter((item) => item.visitIndex === index)}
                         activeMatchId={emrSearch.active?.id ?? null}
+                        anchorQuote={sourceAnchor && sourceAnchor.visitIndex === index ? sourceAnchor.quote : null}
                       />
                     ) : (
                       visit.soapText || '기록 없음'
@@ -1760,20 +1832,40 @@ export default function ScaffoldSectionPage() {
         </div>
       </section>
 
+      {paneResize.active ? (
+        <PaneResizeHandle side="left" label="원기록 영역 폭 조절" onPointerDown={paneResize.startDrag} onNudge={paneResize.nudge} />
+      ) : null}
+
       {/* PANEL 2: CURRENT WORK (post-reveal: AI draft review) */}
       <section
         className="scaffold-pane scaffold-pane--work"
         aria-label={sectionProgress.draftRevealed ? 'AI 초안과 비교' : '현재 작업'}
       >
         <div className="scaffold-pane__head">
-          <h2 className="scaffold-pane__title">
-            {sectionProgress.draftRevealed ? 'AI 초안과 비교' : '현재 작업'}
-          </h2>
-          <p className="scaffold-pane__hint">
-            {sectionProgress.draftRevealed
-              ? '내가 쓴 초안, 왼쪽 원기록과 비교하며 읽어 보세요.'
-              : '왼쪽 환자 원기록을 확인하면서 진행하세요.'}
-          </p>
+          <div className="scaffold-pane__head-row">
+            <div>
+              <h2 className="scaffold-pane__title">
+                {sectionProgress.draftRevealed ? 'AI 초안과 비교' : '현재 작업'}
+              </h2>
+              <p className="scaffold-pane__hint">
+                {sectionProgress.draftRevealed
+                  ? '내가 쓴 초안, 왼쪽 원기록과 비교하며 읽어 보세요.'
+                  : '왼쪽 환자 원기록을 확인하면서 진행하세요.'}
+              </p>
+            </div>
+            {isV2 && !isAdditionalAuthoring ? (
+              <div className="scaffold-pane__head-actions">
+                <button type="button" className="scaffold-pane__head-button" onClick={reopenCareGuide}>
+                  CARE 기준·작성 예 보기
+                </button>
+                {paneResize.active && !paneResize.isDefault ? (
+                  <button type="button" className="scaffold-pane__head-button is-quiet" onClick={paneResize.reset} title="영역 폭을 기본 배치로 되돌립니다">
+                    기본 배치
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="scaffold-pane__body">
@@ -1869,7 +1961,63 @@ export default function ScaffoldSectionPage() {
             </div>
           ) : (
             <>
-              {sectionGuide ? (
+              {isV2 && sectionId === 'THERAPEUTIC_INTERVENTIONS' ? (
+                <details
+                  className="scaffold-care-guide scaffold-care-guide--v2"
+                  ref={careGuideRef}
+                  open={careGuideOpen}
+                  onToggle={(event) => setCareGuideOpen(event.currentTarget.open)}
+                >
+                  <summary>
+                    <span className="scaffold-care-guide__badge">CARE 기준</span>
+                    <span className="scaffold-care-guide__summary-title">‘치료 개입’에 들어가는 내용과 작성 예</span>
+                    <span className="scaffold-care-guide__summary-hint">{careGuideOpen ? '접기' : '펼치기'}</span>
+                  </summary>
+                  <p>{TI_GUIDE_V2.goal}</p>
+                  <div className="scaffold-care-guide__elements">
+                    {TI_GUIDE_V2.elements.map((element) => (
+                      <section key={element.code} className="scaffold-care-element" aria-label={`${element.code} ${element.label}`}>
+                        <h4>
+                          <span className={`scaffold-care-tag${element.required ? ' is-required' : ''}`}>
+                            {element.code} {element.required ? '필수' : '선택'}
+                          </span>
+                          {element.label}
+                        </h4>
+                        <p>{element.criteria}</p>
+                        <ul>
+                          {element.howTo.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                        <div className={`scaffold-care-guide__example${element.example.kind === 'this_case' ? ' is-this-case' : ''}`}>
+                          <strong>{element.example.kind === 'this_case' ? '작성 예 (이 환자)' : '작성 예 (다른 환자)'}</strong>
+                          <span className="scaffold-care-guide__example-sentence">{element.example.sentence}</span>
+                          {element.example.kind === 'this_case' ? (
+                            <span className="scaffold-care-guide__example-source">
+                              <em>근거 · {element.example.visitIndex}회차</em>
+                              “{element.example.quote}”
+                              <button
+                                type="button"
+                                className="scaffold-link-button"
+                                onClick={() =>
+                                  element.example.kind === 'this_case' &&
+                                  showSourceAnchor(element.example.visitIndex - 1, element.example.quote)
+                                }
+                              >
+                                원문 보기
+                              </button>
+                            </span>
+                          ) : null}
+                          <small>{element.example.note}</small>
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                  <p className="scaffold-care-guide__closing">
+                    예시는 요소마다 한 문장씩만 보여 줍니다. 이 사례의 전체 내용은 왼쪽 기록에서 직접 찾아 내 말로 적어 보세요. AI 초안은 내 초안을 저장한 뒤에 볼 수 있습니다.
+                  </p>
+                </details>
+              ) : sectionGuide ? (
                 <div className="scaffold-care-guide">
                   <div className="scaffold-care-guide__badge">CARE 기준</div>
                   <h3>‘{scaffoldConfig?.displayName || sectionTitle}’에 들어가는 내용</h3>
@@ -2263,32 +2411,61 @@ export default function ScaffoldSectionPage() {
                     </div>
 
                     <div style={{ display: 'grid', gap: 8 }}>
-                      {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => (
-                        <label
-                          key={option.value}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            fontSize: 15,
-                            cursor: 'pointer',
-                            color: '#17324d'
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${question.id}`}
-                            value={option.value}
-                            checked={confirmationQuestionJudgments[question.id] === option.value}
-                            onChange={(e) =>
-                              void handleConfirmationQuestionJudgment(question.id, e.target.value)
-                            }
-                            style={{ cursor: 'pointer' }}
-                          />
-                          {option.label}
-                        </label>
-                      ))}
+                      {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => {
+                        const guide = isV2 ? SUFFICIENCY_OPTION_GUIDE_V2[option.value] : undefined;
+                        return (
+                          <label
+                            key={option.value}
+                            className={guide ? 'scaffold-sufficiency-option' : undefined}
+                            style={{
+                              display: 'flex',
+                              alignItems: guide ? 'flex-start' : 'center',
+                              gap: 8,
+                              fontSize: 15,
+                              cursor: 'pointer',
+                              color: '#17324d'
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={`question-${question.id}`}
+                              value={option.value}
+                              checked={confirmationQuestionJudgments[question.id] === option.value}
+                              onChange={(e) =>
+                                void handleConfirmationQuestionJudgment(question.id, e.target.value)
+                              }
+                              style={{ cursor: 'pointer', marginTop: guide ? 4 : 0 }}
+                            />
+                            {guide ? (
+                              <span className="scaffold-sufficiency-option__text">
+                                <strong>{option.label}</strong>
+                                <span>{guide.description}</span>
+                                <small>{guide.example}</small>
+                              </span>
+                            ) : (
+                              option.label
+                            )}
+                          </label>
+                        );
+                      })}
                     </div>
+
+                    {/* V2-07: 판단 이유(선택). 정답 피드백은 주지 않고, 적은 이유를 판단과 함께 저장한다. */}
+                    {isV2 && confirmationQuestionJudgments[question.id] ? (
+                      <label className="scaffold-sufficiency-reason">
+                        <span>
+                          그렇게 판단한 이유 (선택)
+                          {savingConfirmationQuestionIds.has(question.id) ? <em> 저장 중…</em> : null}
+                        </span>
+                        <textarea
+                          rows={2}
+                          value={confirmationQuestionNotes[question.id] || ''}
+                          onChange={(event) => handleConfirmationQuestionNoteChange(question.id, event.target.value)}
+                          onBlur={(event) => handleConfirmationQuestionNoteChange(question.id, event.target.value, true)}
+                          placeholder="예: 처방란에 약 이름과 용량은 있는데 복용이 끝난 날짜는 없다."
+                        />
+                      </label>
+                    ) : null}
 
                     {/* 답을 고른 뒤에만 보인다. 판정이 아니라 원기록 구절을 그대로 보여준다. */}
                     {confirmationQuestionJudgments[question.id] &&
@@ -2311,6 +2488,15 @@ export default function ScaffoldSectionPage() {
                             <li key={`${question.id}-${index}`}>
                               <em>{item.visitIndex}회차</em>
                               {item.quote}
+                              {isV2 ? (
+                                <button
+                                  type="button"
+                                  className="scaffold-link-button"
+                                  onClick={() => showSourceAnchor(item.visitIndex - 1, item.quote)}
+                                >
+                                  원문 보기
+                                </button>
+                              ) : null}
                             </li>
                           ))}
                         </ul>
@@ -2689,6 +2875,10 @@ export default function ScaffoldSectionPage() {
           </div>
         </div>
       </section>
+
+      {paneResize.active ? (
+        <PaneResizeHandle side="right" label="내가 정리한 내용 영역 폭 조절" onPointerDown={paneResize.startDrag} onNudge={paneResize.nudge} />
+      ) : null}
 
       {/* PANEL 3: THE LEARNER'S OWN SUMMARY - read-only, never AI-generated */}
       <section

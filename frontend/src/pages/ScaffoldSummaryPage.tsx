@@ -59,6 +59,18 @@ function judgmentName(judgment: string) {
   return JUDGMENT_LABELS[judgment] || judgment || '-';
 }
 
+/** 충분성 판단(Step 2)의 화면 라벨. V2에서는 Step 2 선택지와 같은 말을 쓴다. */
+const SUFFICIENCY_LABELS_V2: Record<string, string> = {
+  available_in_record: '기록에서 확인 가능',
+  needs_additional_confirmation: '추가 확인 필요',
+  needs_instructor_review: '교수자에게 확인 필요',
+  unavailable: '현재 기록으로 확인할 수 없음'
+};
+
+function sufficiencyJudgmentName(judgment: string, isV2: boolean) {
+  return (isV2 && SUFFICIENCY_LABELS_V2[judgment]) || judgmentName(judgment);
+}
+
 const recordHeadingStyle = { display: 'block', color: '#17324d', fontSize: 17 } as const;
 const recordLabelStyle = { color: '#32647f', fontSize: 14, fontWeight: 700 } as const;
 const recordThStyle = {
@@ -434,7 +446,12 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
                     <div style={{ marginTop: 10 }}>
                       <span style={recordLabelStyle}>정보가 충분한지에 대한 판단</span>
                       {renderList(
-                        sufficiencyItems.map((item) => `${item.sourceText} → ${judgmentName(item.judgment)}`),
+                        sufficiencyItems.map(
+                          (item) =>
+                            `${item.sourceText} → ${sufficiencyJudgmentName(item.judgment, isScaffoldV2Data(data))}${
+                              item.note ? ` — 이유: ${item.note}` : ''
+                            }`
+                        ),
                         ''
                       )}
                     </div>
