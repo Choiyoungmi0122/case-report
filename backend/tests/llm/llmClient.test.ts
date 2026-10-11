@@ -130,6 +130,11 @@ async function run() {
   assert.deepEqual(resolveChainLimits('SW-D THERAPEUTIC_INTERVENTIONS'), CHAIN_LIMITS['SW-D']);
   assert.deepEqual(resolveChainLimits('SECTION review'), CHAIN_LIMITS.SECTION);
   assert.equal(resolveChainLimits('LLM').timeoutMs > 0, true);
+  // 실제 최대 출력보다 상한이 작으면 잘려서 실패한다 (CHAIN3 실제 최대 18,281토큰, 2026-10-11)
+  assert.ok(CHAIN_LIMITS.CHAIN3.maxOutputTokens >= 20_000);
+  assert.ok(CHAIN_LIMITS.CHAIN7.maxOutputTokens >= 20_000);
+  assert.ok(CHAIN_LIMITS.CHAIN1.maxOutputTokens >= 4_000);
+  assert.ok(CHAIN_LIMITS['SW-D'].maxOutputTokens >= 4_000);
 
   // ---------- 재시도 분류
   assert.equal(shouldRetryLLMError({ status: 503 }), true);

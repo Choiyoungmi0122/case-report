@@ -37,15 +37,21 @@ export interface ChainLimits {
   maxOutputTokens: number;
 }
 
-/** 라벨 접두어별 상한. 없는 접두어는 기본값. */
+/**
+ * 라벨 접두어별 상한. 없는 접두어는 기본값.
+ * 2026-10-12 실제 호출 기록(llm_usage.jsonl) 기준 최대 출력: CHAIN1 2,629 · CHAIN2 169 · CHAIN3 18,281 · CHAIN4 503 · CHAIN5 602 ·
+ * 검토 443 · SW-C 258 · SW-D 1,989 · SW-Q2 368 · SW-R 708 · 판정기 135. 상한은 이보다 넉넉해야 한다(잘리면 실패).
+ */
 export const CHAIN_LIMITS: Record<string, ChainLimits> = {
   CHAIN1: { timeoutMs: 180_000, maxOutputTokens: 8_000 },
   CHAIN2: { timeoutMs: 90_000, maxOutputTokens: 3_000 },
-  CHAIN3: { timeoutMs: 240_000, maxOutputTokens: 8_000 },
+  // CHAIN3 는 7개 섹션을 한 번에 쓴다. 실제 출력 최대 18,281토큰(2026-10-11 기록). gpt-4.1 출력 상한 32,768.
+  CHAIN3: { timeoutMs: 240_000, maxOutputTokens: 32_000 },
   CHAIN4: { timeoutMs: 120_000, maxOutputTokens: 4_000 },
   CHAIN5: { timeoutMs: 120_000, maxOutputTokens: 4_000 },
   CHAIN6: { timeoutMs: 120_000, maxOutputTokens: 6_000 },
-  CHAIN7: { timeoutMs: 300_000, maxOutputTokens: 16_000 },
+  // CHAIN7 은 원고 전체를 쓴다. CHAIN3 보다 짧지 않을 수 있어 같은 수준으로 둔다.
+  CHAIN7: { timeoutMs: 300_000, maxOutputTokens: 32_000 },
   SECTION: { timeoutMs: 90_000, maxOutputTokens: 3_000 },
   'SW-Q2': { timeoutMs: 90_000, maxOutputTokens: 3_000 },
   'SW-D': { timeoutMs: 180_000, maxOutputTokens: 6_000 },
