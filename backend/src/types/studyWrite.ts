@@ -78,8 +78,8 @@ export interface StudyWriteQuestionBudget {
 export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
 /**
- * 항목 아래 하위 요소의 판정 (체크리스트 v2, studyWrite/careSubElements.ts). 2026-10-12부터
- * 환자 정보·진단 평가·치료 개입·추적 관찰 및 결과에만 붙는다. 항목 판정과 따로 매긴다.
+ * 항목 아래 하위 요소의 판정 (체크리스트 v2, studyWrite/careSubElements.ts). 2026-10-12부터 모든 섹션에 붙는다
+ * (그날 먼저 네 섹션, 이어 나머지 여덟 섹션). 항목 판정과 따로 매긴다.
  */
 export interface StudyWriteCareSubItem {
   id: string;

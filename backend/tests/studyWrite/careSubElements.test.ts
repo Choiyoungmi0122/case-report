@@ -32,7 +32,10 @@ async function run() {
       ids.add(element.id);
     }
   }
-  assert.equal(ids.size, 97, '네 섹션 하위 요소 수 (문서 표: 18 + 12 + 53 + 14)');
+  assert.equal(ids.size, 132, '전체 하위 요소 수 (문서 표 합계)');
+  for (const [sectionId, items] of Object.entries(CARE_ITEMS_BY_SECTION)) {
+    for (const item of items) assert.ok(CARE_SUB_ELEMENTS[item.code]?.length, `${sectionId} ${item.code} 에 하위 요소가 있음`);
+  }
 
   // ---------------------------------------------------------------- 묶음 후보
   assert.deepEqual(detectModalities('귀비탕 1일 2첩 3회 복용. 침 치료 LI4, ST36 유침 15분.'), ['herbal', 'acupuncture']);
@@ -49,11 +52,14 @@ async function run() {
   assert.ok(ti.some((sub) => sub.id === '9b-H4'));
   assert.ok(!ti.some((sub) => sub.group === 'acupuncture'), '후보에 없는 침 묶음은 빠짐');
   assert.ok(ti.some((sub) => sub.id === '9a-1') && ti.some((sub) => sub.id === '9c-3'), '묶음 없는 요소는 늘 들어감');
-  assert.equal(subElementsForSection('TITLE', ['1', '2'], ['herbal']).length, 0, '네 섹션 밖은 없음');
-  assert.equal(subElementsForSection('CLINICAL_FINDINGS', ['6'], []).length, 0, '임상 소견은 이번 범위 밖');
+  assert.equal(subElementsForSection('TITLE', ['1', '2'], ['herbal']).length, 5, '제목: 1-1~1-3, 2-1~2-2');
+  assert.equal(subElementsForSection('CLINICAL_FINDINGS', ['6'], []).length, 4);
+  assert.equal(subElementsForSection('UNKNOWN', ['6'], []).length, 0, '모르는 섹션은 없음');
+  assert.equal(findSubElement('TIMELINE', '7-2')?.condition, '기록·답변에 발병 시점이나 관련 과거력이 있을 때');
+  assert.equal(findSubElement('TIMELINE', '6-1'), null, '임상 소견 요소는 타임라인에서 못 찾음');
   const text = subElementsText(ti);
   assert.match(text, /\[9b 한약\] 적용: /);
-  assert.match(text, /- 9b-H7 \(선택\) 가감 내용과 이유: .*\(조건: 가감방일 때\)/);
+  assert.match(text, /- 9b-H7 \(선택\) 가감 내용과 이유: .*\(조건: 가감방일 때\. conditionMet 을 반드시/);
   assert.equal(findSubElement('FOLLOW_UP_OUTCOMES', '10d-2')?.condition, '이상반응이 있었을 때');
   assert.equal(findSubElement('PATIENT_INFORMATION', '9b-H1'), null, '다른 섹션의 요소는 못 찾음');
 
@@ -134,7 +140,7 @@ async function run() {
   assert.equal(a['9a-2'].conditionMet, false);
   assert.equal(sub['9b-H7'].status, 'not_in_record', 'conditionMet true 면 판정 그대로');
 
-  // 하위 요소가 없는 섹션은 v1 그대로
+  // 묶음이 없는 섹션: 하위 요소는 붙고 modalities 는 없음. 모델이 하위 요소를 빠뜨리면 판정 없음
   __setOpenAIClientForTests({
     chat: {
       completions: {
@@ -152,8 +158,9 @@ async function run() {
     draftText: '맥은 침세하였다.'
   });
   __setOpenAIClientForTests(null);
-  assert.equal(cf.checklistVersion, 'care-checklist:v1');
-  assert.equal(cf.items[0].subItems, undefined);
+  assert.equal(cf.checklistVersion, 'care-checklist:v2');
+  assert.equal(cf.items[0].subItems?.length, 4);
+  assert.ok(cf.items[0].subItems!.every((sub) => sub.status === 'unchecked'));
   assert.equal(cf.modalities, undefined);
   assert.equal(findSubElement('PATIENT_INFORMATION', '5a-1')?.label, '나이');
 

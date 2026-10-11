@@ -854,7 +854,7 @@ export interface StudyWriteState {
 /** unchecked: 점검 응답에 그 항목의 판정이 없었음(없음이 아님). backend/src/types/studyWrite.ts 참고 */
 export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
-/** 항목 아래 하위 요소 판정 (체크리스트 v2: 환자 정보·진단 평가·치료 개입·추적 관찰) */
+/** 항목 아래 하위 요소 판정 (체크리스트 v2, 모든 섹션) */
 export interface StudyWriteCareSubItem {
   id: string;
   label: string;

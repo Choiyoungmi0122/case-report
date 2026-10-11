@@ -53,9 +53,6 @@ const STATUS_META: Record<StudyWriteCareItemStatus, { mark: string; note: string
   unchecked: { mark: '?', note: '점검 결과를 받지 못함(없다는 뜻이 아님). 위의 "전체 점검하기"로 다시 점검' }
 };
 
-/** 하위 요소를 붙인 섹션 (backend careSubElements.CARE_SUB_ELEMENT_SECTIONS) */
-const SUB_ELEMENT_SECTIONS = ['PATIENT_INFORMATION', 'DIAGNOSTIC_ASSESSMENT', 'THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
-
 /** 9b 개입 묶음 이름 (backend/src/studyWrite/careSubElements.ts 의 MODALITY_LABELS 와 같다) */
 const MODALITY_LABEL: Record<string, string> = {
   herbal: '한약',
@@ -955,7 +952,7 @@ export default function StudyWriteDraftPage() {
                       </div>
                       {!data?.submittedAt ? (
                         <div className="sw-care-recheck">
-                          {SUB_ELEMENT_SECTIONS.includes(section.sectionId) && section.careCheck.checklistVersion !== 'care-checklist:v2' ? (
+                          {section.careCheck.checklistVersion !== 'care-checklist:v2' ? (
                             <span>이 점검은 하위 요소 기준이 생기기 전 결과입니다.</span>
                           ) : null}
                           <button
