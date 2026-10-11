@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
+import { answerTextForPrompt } from './answerChoices';
 import { callLLMWithSchema } from '../llm/client';
 import { getModelForChain } from '../llm/chains';
 import {
@@ -114,10 +115,12 @@ export function startInterview(state: StudyWriteState): StudyWriteState {
   return { ...state, rounds: [round], interviewStartedAt: now, updatedAt: now };
 }
 
+const SKIP_REASONS: ReadonlyArray<StudyWriteQuestion['skipReason']> = ['not_in_record', 'cannot_confirm', 'needs_follow_up'];
+
 export function answerQuestion(
   state: StudyWriteState,
   questionId: string,
-  params: { answer?: string; skipped?: boolean }
+  params: { answer?: string; skipped?: boolean; skipReason?: string; deferred?: boolean }
 ): StudyWriteState {
   if (state.answersLockedAt) {
     throw new Error('최종 수정 단계에 들어가 답을 더 바꿀 수 없습니다.');
@@ -128,16 +131,24 @@ export function answerQuestion(
     const questions = round.questions.map((question) => {
       if (question.id !== questionId) return question;
       found = true;
-      const nextStatus = params.skipped ? 'skipped' : 'answered';
-      const nextAnswer = params.skipped ? '' : String(params.answer || '').trim();
-      if (!params.skipped && !nextAnswer) {
-        throw new Error('답을 적거나 "모름 / 기록에 없음"을 눌러 주세요.');
+      // deferred(자료 확인 필요) > skipped(이유 있음) > answered(글)
+      const nextStatus: StudyWriteQuestion['status'] = params.deferred ? 'deferred' : params.skipped ? 'skipped' : 'answered';
+      const nextAnswer = nextStatus === 'answered' ? String(params.answer || '').trim() : '';
+      if (nextStatus === 'answered' && !nextAnswer) {
+        throw new Error('답을 적거나 선택지(기록 없음 · 확인할 수 없음 · 추후 확인 필요 · 자료 확인 필요) 중 하나를 골라 주세요.');
       }
+      const skipReason =
+        nextStatus === 'skipped'
+          ? (SKIP_REASONS.includes(params.skipReason as any) ? (params.skipReason as StudyWriteQuestion['skipReason']) : 'not_in_record')
+          : undefined;
       const editHistory =
         question.status === 'pending'
           ? question.editHistory
           : [...question.editHistory, { previousAnswer: question.answer, previousStatus: question.status, editedAt: now }];
-      return { ...question, status: nextStatus as StudyWriteQuestion['status'], answer: nextAnswer, answeredAt: now, editHistory };
+      const next: StudyWriteQuestion = { ...question, status: nextStatus, answer: nextAnswer, answeredAt: now, editHistory };
+      if (skipReason) next.skipReason = skipReason;
+      else delete next.skipReason;
+      return next;
     });
     const completed = questions.every((question) => question.status !== 'pending');
     return { ...round, questions, completedAt: completed ? round.completedAt || now : undefined };
@@ -236,12 +247,7 @@ async function deidentifyAnswer(answer: string): Promise<string> {
 export async function buildPriorQaSummary(state: StudyWriteState): Promise<string> {
   const lines: string[] = [];
   for (const question of allQuestions(state)) {
-    const answer =
-      question.status === 'skipped'
-        ? '(모름 / 기록에 없음)'
-        : question.status === 'answered'
-          ? await deidentifyAnswer(question.answer)
-          : '(아직 답하지 않음)';
+    const answer = question.status === 'answered' ? await deidentifyAnswer(question.answer) : answerTextForPrompt(question) || '(아직 답하지 않음)';
     lines.push(`Q${question.order} [${question.roundNo}회차, ${question.careItem || '-'}] ${question.text}\nA: ${answer}`);
   }
   return lines.join('\n\n');

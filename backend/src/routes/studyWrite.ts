@@ -144,14 +144,16 @@ router.post('/cases/:caseId/interview/start', async (req: Request, res: Response
 
 router.post('/cases/:caseId/interview/answer', async (req: Request, res: Response) => {
   try {
-    const { questionId, answer, skipped } = req.body || {};
+    const { questionId, answer, skipped, skipReason, deferred } = req.body || {};
     if (!questionId) return res.status(400).json({ error: 'questionId is required' });
     const result = await serialize(req.params.caseId, async () => {
       const caseData = await loadCase(req.params.caseId);
       if (!caseData) return null;
       const state = answerQuestion(normalizeStudyWriteState(caseData.studyWrite), String(questionId), {
         answer: typeof answer === 'string' ? answer : '',
-        skipped: Boolean(skipped)
+        skipped: Boolean(skipped),
+        skipReason: typeof skipReason === 'string' ? skipReason : undefined,
+        deferred: Boolean(deferred)
       });
       await saveState(caseData.id, state);
       return buildInterviewResponse(caseData, state);

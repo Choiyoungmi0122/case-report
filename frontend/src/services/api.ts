@@ -790,7 +790,8 @@ export type StudyWriteInspectResult =
       warnings?: string[];
     };
 
-export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped';
+export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped' | 'deferred';
+export type StudyWriteSkipReason = 'not_in_record' | 'cannot_confirm' | 'needs_follow_up';
 
 export interface StudyWriteQuestion {
   id: string;
@@ -802,6 +803,7 @@ export interface StudyWriteQuestion {
   careItem?: string;
   priority: 'required' | 'optional' | 'case';
   status: StudyWriteAnswerStatus;
+  skipReason?: StudyWriteSkipReason;
   answer: string;
   askedAt: string;
   answeredAt?: string;
@@ -1580,7 +1582,10 @@ export const caseApi = {
     return response.data;
   },
 
-  answerStudyWriteQuestion: async (caseId: string, body: { questionId: string; answer?: string; skipped?: boolean }) => {
+  answerStudyWriteQuestion: async (
+    caseId: string,
+    body: { questionId: string; answer?: string; skipped?: boolean; skipReason?: StudyWriteSkipReason; deferred?: boolean }
+  ) => {
     const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/answer`, body);
     return response.data;
   },

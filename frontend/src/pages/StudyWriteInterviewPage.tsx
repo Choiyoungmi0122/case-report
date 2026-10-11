@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { caseApi, PendingTermConfirmation, StudyWriteInterviewResponse, StudyWriteQuestion } from '../services/api';
 import TermReviewPanel from '../components/studyWrite/TermReviewPanel';
+import { ANSWER_CHOICES, answerStatusLabel, choiceToBody, AnswerChoiceValue } from '../utils/studyWriteAnswers';
 import type { Visit } from '../services/api';
 import { getProcessStageMessage } from '../utils/uiLabels';
 import './StudyWriteInterviewPage.css';
@@ -38,6 +39,8 @@ export default function StudyWriteInterviewPage() {
   const [generating, setGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
+  // 글 대신 고르는 선택지 목록 열림 여부
+  const [choicesOpen, setChoicesOpen] = useState(false);
   const [stopReason, setStopReason] = useState<string | null>(null);
   const [generationFailed, setGenerationFailed] = useState(false);
   const [pendingTerms, setPendingTerms] = useState<PendingTermConfirmation[]>([]);
@@ -155,16 +158,19 @@ export default function StudyWriteInterviewPage() {
 
   const pendingTermCount = pendingTerms.filter((item) => item.status === 'PENDING').length;
 
-  const submitAnswer = async (skipped: boolean) => {
+  /** 글로 답하거나(choice 없음) 선택지로 답한다 */
+  const submitAnswer = async (choice: AnswerChoiceValue | false) => {
     if (!caseId || !pendingQuestion || sending) return;
     const answer = draft.trim();
-    if (!skipped && !answer) return;
+    if (!choice && !answer) return;
     setSending(true);
     setError(null);
     try {
-      const next = await caseApi.answerStudyWriteQuestion(caseId, { questionId: pendingQuestion.id, answer, skipped });
+      const body = choice ? choiceToBody(pendingQuestion.id, choice) : { questionId: pendingQuestion.id, answer };
+      const next = await caseApi.answerStudyWriteQuestion(caseId, body);
       setData(next);
       setDraft('');
+      setChoicesOpen(false);
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
     } finally {
@@ -172,15 +178,16 @@ export default function StudyWriteInterviewPage() {
     }
   };
 
-  const saveEdit = async (question: StudyWriteQuestion) => {
+  /** 수정: 글을 쓰면 답으로, 비우고 선택지를 고르면 그 선택으로 저장 */
+  const saveEdit = async (question: StudyWriteQuestion, choice?: AnswerChoiceValue) => {
     if (!caseId) return;
     const answer = editDraft.trim();
+    if (!choice && !answer) {
+      setError('답을 적거나 선택지를 골라 주세요.');
+      return;
+    }
     try {
-      const next = await caseApi.answerStudyWriteQuestion(caseId, {
-        questionId: question.id,
-        answer,
-        skipped: !answer
-      });
+      const next = await caseApi.answerStudyWriteQuestion(caseId, choice ? choiceToBody(question.id, choice) : { questionId: question.id, answer });
       setData(next);
       setEditingId(null);
     } catch (nextError: any) {
@@ -192,7 +199,7 @@ export default function StudyWriteInterviewPage() {
   items.push({
     kind: 'system',
     id: 'intro',
-    text: '기록을 바탕으로 증례보고 초안을 쓰기 전에 몇 가지만 여쭙겠습니다. 한두 문장이면 충분하고, 모르거나 기록에 없으면 "모름 / 기록에 없음"을 눌러 주세요.'
+    text: '기록을 바탕으로 증례보고 초안을 쓰기 전에 몇 가지만 여쭙겠습니다. 한두 문장이면 충분합니다. 답하기 어려우면 입력창 아래 "답하기 어려우면"에서 기록 없음 · 확인할 수 없음 · 추후 확인 필요 · 자료 확인 필요(보류) 중 하나를 고르세요. 보류한 질문은 기록을 본 뒤 다시 답할 수 있습니다.'
   });
   for (const round of interview?.rounds || []) {
     if (round.roundNo > 1) {
@@ -262,7 +269,14 @@ export default function StudyWriteInterviewPage() {
               <div className="sw-bubble sw-bubble--user">
               {isEditing ? (
                 <div className="sw-bubble__edit">
-                  <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={3} />
+                  <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={3} placeholder="답을 적거나 아래 선택지를 고르세요" />
+                  <div className="sw-bubble__edit-choices">
+                    {ANSWER_CHOICES.map((choice) => (
+                      <button key={choice.value} type="button" className="is-secondary" title={choice.description} onClick={() => void saveEdit(question, choice.value)}>
+                        {choice.label}
+                      </button>
+                    ))}
+                  </div>
                   <div>
                     <button type="button" onClick={() => void saveEdit(question)}>
                       저장
@@ -274,7 +288,11 @@ export default function StudyWriteInterviewPage() {
                 </div>
               ) : (
                 <>
-                  {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
+                  {question.status === 'answered' ? (
+                    question.answer
+                  ) : (
+                    <em className={question.status === 'deferred' ? 'is-deferred' : ''}>{answerStatusLabel(question)}</em>
+                  )}
                   {!locked ? (
                     <button
                       type="button"
@@ -284,7 +302,7 @@ export default function StudyWriteInterviewPage() {
                         setEditDraft(question.answer);
                       }}
                     >
-                      수정
+                      {question.status === 'deferred' ? '기록 확인 후 답하기' : '수정'}
                     </button>
                   ) : null}
                 </>
@@ -347,11 +365,23 @@ export default function StudyWriteInterviewPage() {
               </button>
             </div>
             <div className="sw-interview__composer-row">
-              <button type="button" className="is-secondary" disabled={sending} onClick={() => void submitAnswer(true)}>
-                모름 / 기록에 없음
+              <button type="button" className="is-secondary" disabled={sending} onClick={() => setChoicesOpen((value) => !value)}>
+                {choicesOpen ? '선택지 닫기' : '답하기 어려우면 ▾'}
               </button>
               <p>Enter 보내기 · Shift+Enter 줄바꿈</p>
             </div>
+            {choicesOpen ? (
+              <ul className="sw-interview__choices">
+                {ANSWER_CHOICES.map((choice) => (
+                  <li key={choice.value}>
+                    <button type="button" className="is-secondary" disabled={sending} onClick={() => void submitAnswer(choice.value)}>
+                      <strong>{choice.label}</strong>
+                      <span>{choice.description}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </>
         ) : finished ? (
           <div className="sw-interview__actions">

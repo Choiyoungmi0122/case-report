@@ -149,6 +149,62 @@
   color: #5a6c81;
 }
 
+.sw-bubble--user em.is-deferred {
+  color: #8a5a00;
+  font-weight: 700;
+}
+
+.sw-bubble__edit-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sw-interview .sw-bubble__edit-choices button {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  border-radius: 999px;
+}
+
+/* 글 대신 고르는 선택지: 이름 + 뜻 */
+.sw-interview__choices {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sw-interview .sw-interview__choices button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.sw-interview .sw-interview__choices button strong {
+  font-size: 14px;
+}
+
+.sw-interview .sw-interview__choices button span {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: #5a6c81;
+  line-height: 1.4;
+}
+
+@media (max-width: 700px) {
+  .sw-interview__choices {
+    grid-template-columns: 1fr;
+  }
+}
+
 .sw-bubble__edit-link {
   display: block;
   margin-top: 6px;

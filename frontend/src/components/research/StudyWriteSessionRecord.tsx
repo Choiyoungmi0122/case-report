@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { renderClinicalAnonymizedText } from '../../utils/publicationRenderer';
+import { answerStatusLabel } from '../../utils/studyWriteAnswers';
 
 /**
  * 연구자용 조회 화면에서 실험용 Write 세션 한 건을 보여준다:
@@ -87,7 +88,7 @@ export default function StudyWriteSessionRecord({ data }: { data: any }) {
               </span>
               <div>{question.text}</div>
               <div style={styles.answer}>
-                {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer || <em>답하지 않음</em>}
+                {question.status === 'answered' ? question.answer : <em>{answerStatusLabel(question) || '답하지 않음'}</em>}
                 {question.editHistory?.length ? <span style={styles.sub}> (수정 {question.editHistory.length}회)</span> : null}
               </div>
             </li>

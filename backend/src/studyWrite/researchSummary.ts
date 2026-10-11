@@ -23,6 +23,12 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
   const questions = state.rounds.flatMap((round) => round.questions);
   const answered = questions.filter((question) => question.status === 'answered');
   const skipped = questions.filter((question) => question.status === 'skipped');
+  const deferred = questions.filter((question) => question.status === 'deferred');
+  const skipReasons = {
+    not_in_record: skipped.filter((question) => (question.skipReason || 'not_in_record') === 'not_in_record').length,
+    cannot_confirm: skipped.filter((question) => question.skipReason === 'cannot_confirm').length,
+    needs_follow_up: skipped.filter((question) => question.skipReason === 'needs_follow_up').length
+  };
   const edits = questions.reduce((sum, question) => sum + question.editHistory.length, 0);
   const answerSeconds = questions
     .map((question) => seconds(question.askedAt, question.answeredAt))
@@ -92,6 +98,9 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
       questionsAsked: questions.length,
       answered: answered.length,
       skipped: skipped.length,
+      /** "자료 확인 필요"로 보류된 채 남은 질문 수 (제출 시점 기준) */
+      deferred: deferred.length,
+      skipReasons,
       answerEdits: edits,
       medianAnswerSeconds: answerSeconds.length ? answerSeconds.sort((a, b) => a - b)[Math.floor(answerSeconds.length / 2)] : null,
       byRound: state.rounds.map((round) => ({

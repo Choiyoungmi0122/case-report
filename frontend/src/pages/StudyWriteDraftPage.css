@@ -773,6 +773,24 @@
   font-style: normal;
 }
 
+.sw-answer__text em.is-deferred {
+  color: #8a5a00;
+  font-weight: 700;
+}
+
+.sw-answer__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sw-draft__side .sw-answer__choices button {
+  padding: 5px 10px;
+  font-size: 12.5px;
+  border-radius: 999px;
+}
+
 .sw-draft__answer-edit textarea {
   width: 100%;
   padding: 10px 12px;

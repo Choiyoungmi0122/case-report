@@ -3,7 +3,14 @@
  * Scaffold의 scaffoldState와는 별개이며 서로 참조하지 않는다.
  */
 
-export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped';
+/**
+ * answered: 글로 답함. skipped: 답하지 않기로 함(skipReason 참고). deferred: "자료 확인 필요" — 참여자가
+ * 제공된 기록을 아직 충분히 보지 못해 보류함(정보 부재가 아님, 나중에 다시 답할 수 있음).
+ */
+export type StudyWriteAnswerStatus = 'pending' | 'answered' | 'skipped' | 'deferred';
+
+/** skipped 의 이유. 옛 데이터(이유 없음)는 not_in_record("모름 / 기록에 없음")로 본다 */
+export type StudyWriteSkipReason = 'not_in_record' | 'cannot_confirm' | 'needs_follow_up';
 
 export interface StudyWriteAnswerEdit {
   /** 바꾸기 전 답 */
@@ -29,6 +36,8 @@ export interface StudyWriteQuestion {
   /** 왜 이 질문을 골랐는지 (체인 출력). 참여자에게는 보이지 않는다 */
   rationale?: string;
   status: StudyWriteAnswerStatus;
+  /** status 가 skipped 일 때의 이유. 없으면 not_in_record 로 본다 (2026-10-12 이전 데이터) */
+  skipReason?: StudyWriteSkipReason;
   answer: string;
   askedAt: string;
   answeredAt?: string;

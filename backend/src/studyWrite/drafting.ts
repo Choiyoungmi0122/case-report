@@ -21,6 +21,7 @@ import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItem
 import { allQuestions, buildRecordText } from './interview';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 import { applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
+import { answerTextForPrompt } from './answerChoices';
 
 /**
  * 실험용 Write ⑤~⑥: 답변을 반영한 섹션 초안(SW-D), 지시로 고쳐 쓰기(SW-R), CARE 점검(SW-C).
@@ -44,7 +45,8 @@ export async function buildQaText(state: StudyWriteState, forSectionId?: string)
     if (question.status === 'pending') continue;
     const relevant = !forSectionId || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
     if (!relevant) continue;
-    const answer = question.status === 'skipped' ? '(모름 / 기록에 없음 — 이 주제는 쓰지 않는다)' : await deidentifyText(question.answer);
+    // 글로 답하지 않은 질문은 선택지별 처리 지시를 그대로 넣는다 (자료 확인 필요 = 정보 부재 아님)
+    const answer = question.status === 'answered' ? await deidentifyText(question.answer) : answerTextForPrompt(question) || '(아직 답하지 않음)';
     lines.push(`- id: ${question.id}\n  쓰이는 섹션: ${question.targetSectionIds.join(', ')}\n  Q: ${question.text}\n  A: ${answer}`);
   }
   return lines.join('\n');

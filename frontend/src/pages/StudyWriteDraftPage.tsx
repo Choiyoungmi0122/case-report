@@ -11,6 +11,7 @@ import {
 } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
+import { ANSWER_CHOICES, answerStatusLabel, choiceToBody, AnswerChoiceValue } from '../utils/studyWriteAnswers';
 import './StudyWriteDraftPage.css';
 
 /**
@@ -160,11 +161,15 @@ export default function StudyWriteDraftPage() {
     }
   };
 
-  const saveAnswer = async (question: StudyWriteQuestion) => {
+  const saveAnswer = async (question: StudyWriteQuestion, choice?: AnswerChoiceValue) => {
     if (!caseId) return;
     const answer = answerDraft.trim();
+    if (!choice && !answer) {
+      setError('답을 적거나 선택지를 골라 주세요.');
+      return;
+    }
     try {
-      await caseApi.answerStudyWriteQuestion(caseId, { questionId: question.id, answer, skipped: !answer });
+      await caseApi.answerStudyWriteQuestion(caseId, choice ? choiceToBody(question.id, choice) : { questionId: question.id, answer });
       setEditingAnswerId(null);
       setDirtySectionIds((prev) => Array.from(new Set([...prev, ...question.targetSectionIds])));
       await refresh();
@@ -355,7 +360,7 @@ export default function StudyWriteDraftPage() {
               CARE 점검{section && missingRequiredCount(section) > 0 ? ` (${missingRequiredCount(section)})` : ''}
             </button>
             <button type="button" className={tab === 'answers' ? 'is-active' : ''} onClick={() => setTab('answers')}>
-              내 답변
+              내 답변{questions.some((question) => question.status === 'deferred') ? ` (보류 ${questions.filter((question) => question.status === 'deferred').length})` : ''}
             </button>
           </div>
 
@@ -537,7 +542,14 @@ export default function StudyWriteDraftPage() {
                       <p className="sw-answer__question">{question.text}</p>
                       {editingAnswerId === question.id ? (
                         <div className="sw-draft__answer-edit">
-                          <textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} rows={4} autoFocus />
+                          <textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} rows={4} autoFocus placeholder="답을 적거나 아래 선택지를 고르세요" />
+                          <div className="sw-answer__choices">
+                            {ANSWER_CHOICES.map((choice) => (
+                              <button key={choice.value} type="button" className="is-secondary" title={choice.description} onClick={() => void saveAnswer(question, choice.value)}>
+                                {choice.label}
+                              </button>
+                            ))}
+                          </div>
                           <div>
                             <button type="button" onClick={() => void saveAnswer(question)}>
                               저장
@@ -549,7 +561,14 @@ export default function StudyWriteDraftPage() {
                         </div>
                       ) : (
                         <p className="sw-answer__text">
-                          {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
+                          {question.status === 'answered' ? (
+                            question.answer
+                          ) : (
+                            <em className={question.status === 'deferred' ? 'is-deferred' : ''}>
+                              {answerStatusLabel(question)}
+                              {question.status === 'deferred' && !locked ? ' — 기록을 확인한 뒤 "수정"으로 답해 주세요' : ''}
+                            </em>
+                          )}
                         </p>
                       )}
                     </article>
