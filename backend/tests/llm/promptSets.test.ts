@@ -39,15 +39,17 @@ async function run() {
   assert.equal(promptKeyForChainName('CHAIN6', 'scaffold'), 'CHAIN6');
   assert.equal(promptKeyForChainName('CHAIN7', 'scaffold'), 'CHAIN7');
   assert.equal(promptKeyForChainName('CHAIN3_STUDY_REVEAL:THERAPEUTIC_INTERVENTIONS', 'scaffold'), 'CHAIN3_STUDY_REVEAL');
-  assert.equal(promptVersionLabel('SCAFFOLD_CHAIN3'), 'SCAFFOLD-CHAIN3:v2');
+  assert.equal(promptVersionLabel('SCAFFOLD_CHAIN3'), 'SCAFFOLD-CHAIN3:v3');
   assert.notEqual(promptTemplateHash('SCAFFOLD_CHAIN3'), promptTemplateHash('CHAIN3'));
   // 공개 단계는 Scaffold 의 CHAIN3 본문을 쓴다
   const revealExpected = createHash('sha256')
     .update([promptVersionLabel('CHAIN3_STUDY_REVEAL'), scaffoldChain3].join('\n\n---\n\n'))
     .digest('hex');
   assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), revealExpected);
-  // 분리 전(2026-10-12, a53e34c) 공개 단계 해시가 그대로다 — Scaffold CHAIN3 를 고치면 이 값이 바뀌므로 버전을 올리고 갱신한다
-  assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), 'f59a93a063739cc47acd6e18297891540a0245053409b20eff82f3a5db4549cf');
+  // 공개 단계 해시 고정값 — Scaffold CHAIN3 를 고치면 바뀌므로 버전을 올리고 이 값을 갱신한다.
+  // 이력: v2 f59a93a0…(분리 시점, a53e34c) → v3 00406d6d…(2026-10-12 Scaffold CHAIN3 개선 적용)
+  assert.equal(promptVersionLabel('CHAIN3_STUDY_REVEAL'), 'CHAIN3_STUDY_REVEAL:v3');
+  assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), '00406d6d2475b489a2d1c073bfc8c578a068efcf7be85ee8c777e6964f629d3e');
 
   // ---------------------------------------------------------------- 캐시 지문과 로그
   const scaffoldEntry = buildChainCacheEntry('h', { a: 1 }, 'CHAIN1', 'scaffold');

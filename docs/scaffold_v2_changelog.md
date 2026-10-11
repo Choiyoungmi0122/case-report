@@ -158,6 +158,11 @@
 - Scaffold 모드는 이제 전용 프롬프트(`backend/src/llm/prompts/scaffold/`, 레지스트리 `SCAFFOLD_*`)를 쓴다. Write 쪽 프롬프트 수정이 Scaffold V2에 영향을 주지 않는다. 규칙: `docs/prompt_sets_scaffold_write_v1.md`.
 - 분리 시점 본문은 같다. V2 참가자 자료(고정 AI 초안 등)와 공개 단계 해시는 그대로다.
 
+## 2026-10-12 — Scaffold CHAIN3 프롬프트 v3 적용
+
+- Scaffold 세트의 CHAIN3를 개선판(v3)으로 바꾸고 공개 단계 버전도 v3으로 올렸다(`docs/scaffold_prompt_improvement_phase1.md`).
+- V2 참가자와 테스트 사례는 고정 사례라 공개 단계가 고정 초안을 그대로 돌려준다. V2 화면의 AI 초안은 바뀌지 않는다(초안 sha256 `5563210818a65fb4…`).
+
 ## V1 자료와 함께 분석할 때 주의
 - V1: `scaffoldVersion 'v2.0'`, 섹션 2개(추적 관찰은 연구자가 생략), 게이트 꺼짐, 메모에 회차·출처 필드 없음, 충분성 판단 이유 없음.
 - V2: `scaffoldVersion 'v3.0'`, 섹션 1개, 게이트 켬(own_draft 인정), 메모 회차·분류·출처 있음(없으면 미지정), 판단 이유 선택 입력.
