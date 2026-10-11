@@ -11,6 +11,8 @@ import {
   studyWriteGapQuestionsSystemPrompt
 } from '../llm/prompts/studyWrite_questions';
 import { StudyWriteGapQuestionsOutputSchema } from '../llm/schemas/studyWrite_questions';
+import { StudyWriteCareQuestionOutputSchema } from '../llm/schemas/studyWrite_careQuestion';
+import { buildStudyWriteCareQuestionUserPrompt, studyWriteCareQuestionSystemPrompt } from '../llm/prompts/studyWrite_careQuestion';
 import { coerceCareSection } from '../llm/schemas/common';
 import {
   StudyWriteQuestion,
@@ -170,9 +172,53 @@ export function remainingQuestionCount(state: StudyWriteState): number {
  * 저장돼 초안·점검 체인에 그대로 쓰인다 (사용자 결정 2026-10-12). 질문 상한(9개)과는 별개다.
  * 같은 섹션·항목에 다시 넣으면 답을 바꾸고 이력을 남긴다.
  */
+/**
+ * SW-Q3: CARE 점검에서 "없음"인 항목 하나를 쓰기 위해 임상의에게 물을 질문을 만든다. 저장하지 않는다
+ * (답을 받으면 addCareInfoAnswer 가 질문과 함께 저장한다). 실패하면 항목 이름으로 만든 기본 질문을 돌려준다.
+ */
+export async function generateCareItemQuestion(params: {
+  caseData: any;
+  state: StudyWriteState;
+  sectionId: string;
+  sectionName: string;
+  code: string;
+  label: string;
+  required: boolean;
+}): Promise<{ question: string; hint: string; generated: boolean }> {
+  const section = params.state.sections?.[params.sectionId];
+  const item = section?.careCheck?.items.find((entry) => entry.code === params.code);
+  const fallback = {
+    question: `${params.label.split(/[.(]/)[0].trim()}에 대해 이 증례에서 알고 있는 내용을 적어 주세요.`,
+    hint: '',
+    generated: false
+  };
+  try {
+    const output = await callLLMWithSchema(
+      StudyWriteCareQuestionOutputSchema,
+      studyWriteCareQuestionSystemPrompt,
+      buildStudyWriteCareQuestionUserPrompt({
+        sectionName: params.sectionName,
+        code: params.code,
+        label: params.label,
+        required: params.required,
+        checkHint: item?.hint || '',
+        sectionDraft: section?.draftText || '',
+        priorQaSummary: await buildPriorQaSummary(params.state),
+        recordText: buildRecordText(params.caseData)
+      }),
+      { model: getModelForChain('chain4'), label: `SW-Q3 ${params.sectionId} ${params.code}` }
+    );
+    const question = String(output.question || '').trim();
+    return question ? { question, hint: String(output.hint || '').trim(), generated: true } : fallback;
+  } catch (error) {
+    console.error('[SW-Q3] question generation failed', error);
+    return fallback;
+  }
+}
+
 export function addCareInfoAnswer(
   state: StudyWriteState,
-  params: { sectionId: string; code: string; label: string; required: boolean; answer: string }
+  params: { sectionId: string; code: string; label: string; required: boolean; answer: string; question?: string }
 ): StudyWriteState {
   if (state.answersLockedAt) {
     throw new Error('최종 수정 단계에 들어가 정보를 더 넣을 수 없습니다.');
@@ -186,9 +232,12 @@ export function addCareInfoAnswer(
     round = { roundNo: rounds.length + 1, kind: 'care_check', startedAt: now, questions: [] };
     rounds.push(round);
   }
+  // 점검에서 보여 준 질문을 함께 남긴다 (없으면 항목 이름)
+  const questionText = String(params.question || '').trim().slice(0, 500) || `[CARE 점검 추가 입력] ${params.code} ${params.label}`;
   const existing = round.questions.find((question) => question.careItem === params.code && question.targetSectionIds.includes(params.sectionId));
   if (existing) {
     existing.editHistory = [...existing.editHistory, { previousAnswer: existing.answer, previousStatus: existing.status, editedAt: now }];
+    existing.text = questionText;
     existing.status = 'answered';
     existing.answer = answer;
     existing.answeredAt = now;
@@ -198,7 +247,7 @@ export function addCareInfoAnswer(
       id: `swq-${randomUUID()}`,
       roundNo: round.roundNo,
       order: allQuestions(state).length + 1,
-      text: `[CARE 점검 추가 입력] ${params.code} ${params.label}`,
+      text: questionText,
       source: 'care_check',
       targetSectionIds: [params.sectionId],
       careItem: params.code,

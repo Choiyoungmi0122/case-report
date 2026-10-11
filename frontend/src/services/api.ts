@@ -1678,8 +1678,17 @@ export const caseApi = {
   },
 
   /** CARE 점검의 "기록에 없음" 항목에 사용자가 정보를 직접 넣는다 */
-  addStudyWriteCareInfo: async (caseId: string, sectionId: string, body: { code: string; answer: string }) => {
+  addStudyWriteCareInfo: async (caseId: string, sectionId: string, body: { code: string; answer: string; question?: string }) => {
     const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/care-info`, body);
+    return response.data;
+  },
+
+  /** CARE 점검의 "없음" 항목을 쓰기 위한 질문을 받는다 (저장하지 않음) */
+  askStudyWriteCareQuestion: async (caseId: string, sectionId: string, code: string) => {
+    const response = await api.post<{ code: string; question: string; hint: string; generated: boolean }>(
+      `/study-write/cases/${caseId}/sections/${sectionId}/care-question`,
+      { code }
+    );
     return response.data;
   },
 

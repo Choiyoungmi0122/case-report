@@ -83,17 +83,43 @@ export default function StudyWriteDraftPage() {
   const [careInfoCode, setCareInfoCode] = useState<string | null>(null);
   const [careInfoText, setCareInfoText] = useState('');
   const [careInfoSaving, setCareInfoSaving] = useState(false);
+  // 그 항목을 쓰기 위해 AI 가 만든 질문 (버튼을 누르면 먼저 묻는다)
+  const [careQuestion, setCareQuestion] = useState<{ code: string; question: string; hint: string } | null>(null);
+  const [careQuestionLoading, setCareQuestionLoading] = useState(false);
 
-  /** 넣은 정보를 저장하고 이 섹션만 다시 쓴다 */
+  /** "이 정보 입력하기": 빈 칸 대신 그 항목을 쓰기 위한 질문을 먼저 받아 보여 준다 */
+  const openCareQuestion = async (sectionId: string, code: string) => {
+    if (!caseId) return;
+    setCareInfoCode(code);
+    setCareInfoText('');
+    setCareQuestion(null);
+    setCareQuestionLoading(true);
+    try {
+      const result = await caseApi.askStudyWriteCareQuestion(caseId, sectionId, code);
+      setCareQuestion({ code, question: result.question, hint: result.hint });
+    } catch (nextError: any) {
+      setCareQuestion({ code, question: '이 항목에 쓸 수 있는 내용을 적어 주세요.', hint: '' });
+      setError(nextError?.response?.data?.error || null);
+    } finally {
+      setCareQuestionLoading(false);
+    }
+  };
+
+  /** 답을 질문과 함께 저장하고 이 섹션만 다시 쓴다 */
   const submitCareInfo = async (sectionId: string, code: string) => {
     if (!caseId || !careInfoText.trim()) return;
     setCareInfoSaving(true);
     setError(null);
     try {
-      await caseApi.addStudyWriteCareInfo(caseId, sectionId, { code, answer: careInfoText.trim() });
+      await caseApi.addStudyWriteCareInfo(caseId, sectionId, {
+        code,
+        answer: careInfoText.trim(),
+        question: careQuestion?.code === code ? careQuestion.question : undefined
+      });
       setData(await caseApi.generateStudyWriteDrafts(caseId, [sectionId]));
       setCareInfoCode(null);
       setCareInfoText('');
+      setCareQuestion(null);
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
     } finally {
@@ -710,30 +736,50 @@ export default function StudyWriteDraftPage() {
                           <button
                             type="button"
                             className="sw-care-item__action"
-                            disabled={running || careInfoSaving}
-                            onClick={() => {
-                              setCareInfoCode(item.code);
-                              setCareInfoText('');
-                            }}
+                            disabled={running || careInfoSaving || careQuestionLoading}
+                            onClick={() => void openCareQuestion(section.sectionId, item.code)}
                           >
                             이 정보 입력하기
                           </button>
                         ) : null}
                         {item.status === 'not_in_record' && !locked && careInfoCode === item.code ? (
                           <div className="sw-care-item__input">
+                            <div className="sw-care-item__question">
+                              <span>AI 질문</span>
+                              {careQuestionLoading || careQuestion?.code !== item.code ? (
+                                <p className="is-loading">이 항목을 쓰기 위해 무엇을 여쭤볼지 고르는 중…</p>
+                              ) : (
+                                <>
+                                  <p>{careQuestion.question}</p>
+                                  {careQuestion.hint ? <small>답에 들어가면 좋은 것: {careQuestion.hint}</small> : null}
+                                </>
+                              )}
+                            </div>
                             <textarea
                               value={careInfoText}
                               autoFocus
                               rows={3}
-                              placeholder="알고 있는 내용을 적어 주세요. 저장하면 이 섹션을 다시 씁니다."
-                              disabled={careInfoSaving}
+                              placeholder="답을 적어 주세요. 저장하면 이 섹션을 다시 씁니다."
+                              disabled={careInfoSaving || careQuestionLoading}
                               onChange={(event) => setCareInfoText(event.target.value)}
                             />
                             <div>
-                              <button type="button" disabled={careInfoSaving || !careInfoText.trim()} onClick={() => void submitCareInfo(section.sectionId, item.code)}>
-                                {careInfoSaving ? '저장 중…' : '저장하고 다시 쓰기'}
+                              <button
+                                type="button"
+                                disabled={careInfoSaving || careQuestionLoading || !careInfoText.trim()}
+                                onClick={() => void submitCareInfo(section.sectionId, item.code)}
+                              >
+                                {careInfoSaving ? '저장 중…' : '답하고 다시 쓰기'}
                               </button>
-                              <button type="button" className="is-secondary" disabled={careInfoSaving} onClick={() => setCareInfoCode(null)}>
+                              <button
+                                type="button"
+                                className="is-secondary"
+                                disabled={careInfoSaving}
+                                onClick={() => {
+                                  setCareInfoCode(null);
+                                  setCareQuestion(null);
+                                }}
+                              >
                                 취소
                               </button>
                             </div>

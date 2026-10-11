@@ -4,6 +4,7 @@ import { CaseModel } from '../models/caseModel';
 import { inspectRecordFile, MAX_FILE_BYTES } from '../studyWrite/recordImport';
 import {
   addCareInfoAnswer,
+  generateCareItemQuestion,
   answerQuestion,
   canOpenNextRound,
   createInitialStudyWriteState,
@@ -596,11 +597,39 @@ router.delete('/cases/:caseId/attachments/:attachmentId', async (req: Request, r
  * CARE 점검에서 "기록에 없음"인 항목에 사용자가 정보를 직접 넣는다. 저장만 하고, 섹션 재생성은
  * 화면이 /drafts/generate 로 따로 요청한다.
  */
+/** CARE 점검의 "없음" 항목을 쓰기 위한 질문을 만든다 (SW-Q3). 저장하지 않는다. */
+router.post('/cases/:caseId/sections/:sectionId/care-question', async (req: Request, res: Response) => {
+  try {
+    const { caseId, sectionId } = req.params;
+    const code = String(req.body?.code || '').trim();
+    if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
+    const def = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((item) => item.code === code);
+    if (!def) return res.status(400).json({ error: '알 수 없는 CARE 항목입니다.' });
+    const caseData = await loadCase(caseId);
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const state = normalizeStudyWriteState(caseData.studyWrite);
+    if (state.submittedAt || state.answersLockedAt) return res.status(400).json({ error: '이미 답 수정이 잠긴 사례입니다.' });
+    const result = await generateCareItemQuestion({
+      caseData,
+      state,
+      sectionId,
+      sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
+      code,
+      label: def.label,
+      required: def.required
+    });
+    return res.json({ code, ...result });
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '질문을 만들지 못했습니다.' });
+  }
+});
+
 router.post('/cases/:caseId/sections/:sectionId/care-info', async (req: Request, res: Response) => {
   try {
     const { caseId, sectionId } = req.params;
     const code = String(req.body?.code || '').trim();
     const answer = String(req.body?.answer || '');
+    const question = typeof req.body?.question === 'string' ? req.body.question : undefined;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
     const def = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((item) => item.code === code);
     if (!def) return res.status(400).json({ error: '알 수 없는 CARE 항목입니다.' });
@@ -609,7 +638,7 @@ router.post('/cases/:caseId/sections/:sectionId/care-info', async (req: Request,
       if (!caseData) return null;
       const state = normalizeStudyWriteState(caseData.studyWrite);
       if (state.submittedAt) throw new Error('이미 제출한 사례입니다.');
-      const next = addCareInfoAnswer(state, { sectionId, code, label: def.label, required: def.required, answer });
+      const next = addCareInfoAnswer(state, { sectionId, code, label: def.label, required: def.required, answer, question });
       await saveState(caseData.id, next);
       return buildDraftsResponse(caseData, next, await listAttachments(caseData.id));
     });

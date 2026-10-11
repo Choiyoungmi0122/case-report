@@ -28,6 +28,7 @@ import {
   studyWriteReviseSystemPrompt
 } from './prompts/studyWrite_draft';
 import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPrompt } from './prompts/studyWrite_questions';
+import { STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION, studyWriteCareQuestionSystemPrompt } from './prompts/studyWrite_careQuestion';
 import { getModelForChain } from './models';
 import { PromptSet, SharedChainKey, SHARED_CHAIN_KEYS } from './promptSets';
 import { chain1SystemPrompt as scaffoldChain1SystemPrompt } from './prompts/scaffold/chain1_splitTag';
@@ -47,6 +48,8 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SCAFFOLD-CHAIN1~5, SCAFFOLD-REVIEW v2: 2026-10-12 Scaffold 전용 사본으로 분리(`prompts/scaffold/`). 본문은 분리 시점의
  *    Write v2 와 같고, 라벨이 달라 템플릿 해시는 다르다. 이후 각자 따로 버전을 올린다.
  *  - CHAIN3_STUDY_REVEAL: 2026-10-12부터 Scaffold 사본의 CHAIN3 를 가리킨다. 분리 시점 본문이 같아 해시도 그대로다.
+ *  - SW-Q2 v4 / SW-D v4 / SW-R v4: 2026-10-12 `3d6e831` 국내 한의 증례보고 5편의 서술 관례 반영(docs/case_report_style_basis_v1.md).
+ *  - SW-Q3 v1: 2026-10-12 CARE 점검의 "없음" 항목 하나를 쓰기 위한 질문 (새 체인).
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',
@@ -68,7 +71,8 @@ export const PROMPT_VERSIONS = {
   SW_Q2: STUDY_WRITE_QUESTIONS_PROMPT_VERSION.split(':')[1],
   SW_D: STUDY_WRITE_DRAFT_PROMPT_VERSION.split(':')[1],
   SW_R: STUDY_WRITE_REVISE_PROMPT_VERSION.split(':')[1],
-  SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1]
+  SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1],
+  SW_Q3: STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION.split(':')[1]
 } as const;
 
 export type PromptKey = keyof typeof PROMPT_VERSIONS;
@@ -92,7 +96,8 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   SW_Q2: studyWriteGapQuestionsSystemPrompt,
   SW_D: studyWriteDraftSystemPrompt,
   SW_R: studyWriteReviseSystemPrompt,
-  SW_C: studyWriteCareCheckSystemPrompt
+  SW_C: studyWriteCareCheckSystemPrompt,
+  SW_Q3: studyWriteCareQuestionSystemPrompt
 };
 
 /** getModelForChain 의 키. */
@@ -115,7 +120,8 @@ const MODEL_KEYS: Record<PromptKey, string> = {
   SW_Q2: 'chain5',
   SW_D: 'chain6',
   SW_R: 'chain6',
-  SW_C: 'chain4'
+  SW_C: 'chain4',
+  SW_Q3: 'chain4'
 };
 
 /** 기존 generationMetadata.promptTemplateHash 와 같은 방식: sha256(version + system prompt, 구분자 포함). */
