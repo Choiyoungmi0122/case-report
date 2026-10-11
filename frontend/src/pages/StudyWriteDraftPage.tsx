@@ -12,7 +12,14 @@ import {
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import { ANSWER_CHOICES, answerStatusLabel, choiceToBody, AnswerChoiceValue } from '../utils/studyWriteAnswers';
-import { careCompliance, complianceLevel, overallCareCompliance } from '../utils/studyWriteCare';
+import {
+  careCompliance,
+  complianceLevel,
+  effectiveCareStatus,
+  isCareSatisfied,
+  overallCareCompliance,
+  uncheckedSuffix
+} from '../utils/studyWriteCare';
 import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import './StudyWriteDraftPage.css';
@@ -29,7 +36,8 @@ const STATUS_LABEL: Record<StudyWriteCareItemStatus, string> = {
   present: '있음',
   in_record_not_in_draft: '초안에 빠짐',
   not_in_record: '없음',
-  not_applicable: '해당 없음'
+  not_applicable: '해당 없음',
+  unchecked: '판정 없음'
 };
 
 /** 상태 배지에 쓰는 기호와 한 줄 설명 */
@@ -37,11 +45,18 @@ const STATUS_META: Record<StudyWriteCareItemStatus, { mark: string; note: string
   present: { mark: '✓', note: '초안에 들어 있음' },
   in_record_not_in_draft: { mark: '!', note: '기록에는 있는데 초안에 없음. 수정 요청으로 넣을 수 있음' },
   not_in_record: { mark: '✕', note: '기록에도 답변에도 없음. 알고 있으면 내 답변에 보충' },
-  not_applicable: { mark: '–', note: '이 증례에는 해당 없음' }
+  not_applicable: { mark: '–', note: '이 증례에는 해당 없음' },
+  unchecked: { mark: '?', note: '점검 결과를 받지 못함(없다는 뜻이 아님). 위의 "전체 점검하기"로 다시 점검' }
 };
 
 function missingRequiredCount(section: StudyWriteSection) {
-  return section.careCheck?.items.filter((item) => item.required && item.status !== 'present' && item.status !== 'not_applicable').length || 0;
+  // 판정 없음은 누락으로 세지 않는다
+  return (
+    section.careCheck?.items.filter((item) => {
+      const status = effectiveCareStatus(item);
+      return item.required && status !== 'unchecked' && !isCareSatisfied(status);
+    }).length || 0
+  );
 }
 
 export default function StudyWriteDraftPage() {
@@ -387,7 +402,7 @@ export default function StudyWriteDraftPage() {
           {(() => {
             const all = data ? overallCareCompliance(data.sections) : null;
             return all ? (
-              <span className={`sw-draft__overall is-${complianceLevel(all)}`} title={`CARE 세부 항목 ${all.ok}/${all.total} 충족 · 필수 ${all.requiredOk}/${all.requiredTotal}`}>
+              <span className={`sw-draft__overall is-${complianceLevel(all)}`} title={`CARE 세부 항목 ${all.ok}/${all.total} 충족 · 필수 ${all.requiredOk}/${all.requiredTotal}${uncheckedSuffix(all)}`}>
                 CARE 준수율 {all.pct}% · 필수 {all.requiredPct ?? '-'}%
               </span>
             ) : null;
@@ -661,8 +676,10 @@ export default function StudyWriteDraftPage() {
                   const items = section.careCheck.items;
                   const required = items.filter((item) => item.required);
                   const optional = items.filter((item) => !item.required);
-                  const okCount = (list: typeof items) => list.filter((item) => item.status === 'present' || item.status === 'not_applicable').length;
-                  const renderItem = (item: (typeof items)[number]) => (
+                  const okCount = (list: typeof items) => list.filter((item) => isCareSatisfied(effectiveCareStatus(item))).length;
+                  const renderItem = (rawItem: (typeof items)[number]) => {
+                    const item = { ...rawItem, status: effectiveCareStatus(rawItem) };
+                    return (
                     <li key={item.code} className={`sw-care-item is-${item.status}`}>
                       <div className="sw-care-item__status" aria-label={STATUS_LABEL[item.status]}>
                         <span className="sw-care-item__mark">{STATUS_META[item.status].mark}</span>
@@ -724,7 +741,8 @@ export default function StudyWriteDraftPage() {
                         ) : null}
                       </div>
                     </li>
-                  );
+                    );
+                  };
                   return (
                     <>
                       <div className="sw-care-summary">
@@ -736,6 +754,7 @@ export default function StudyWriteDraftPage() {
                               <strong>{c.pct}%</strong>
                               <em>
                                 세부 항목 {c.ok} / {c.total} 충족 · 필수 {c.requiredOk} / {c.requiredTotal}
+                                {uncheckedSuffix(c)}
                               </em>
                             </div>
                           ) : null;

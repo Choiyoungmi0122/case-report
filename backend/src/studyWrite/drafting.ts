@@ -142,8 +142,8 @@ export async function runCareCheck(params: {
     { model: getModelForChain('chain4'), label: `SW-C ${sectionId}` }
   );
   // 정의된 항목 순서대로 맞춘다. 코드 표기("9a.", "CARE 9a", "9-a")는 숫자+영문으로 정규화해 맞춘다.
-  // 모델이 빠뜨린 항목은 임시로 not_in_record 로 두되, 판정을 받지 못한 것임을 hint 에 밝힌다
-  // ("판정 없음" 상태를 따로 두는 일은 화면 쪽 작업과 함께 한다: docs/prompt_chain_review_v1.md §5-1 4번).
+  // 모델이 빠뜨린 항목은 'unchecked'(판정 없음)로 둔다. "없음"으로 두면 기록에 없는 것처럼 보인다
+  // (docs/prompt_chain_review_v1.md §5-1 4번).
   const byCode = new Map<string, (typeof output.items)[number]>();
   for (const item of output.items) {
     const key = normalizeCareItemCode(item.code);
@@ -161,8 +161,8 @@ export async function runCareCheck(params: {
         code: def.code,
         label: def.label,
         required: def.required,
-        status: found?.status || 'not_in_record',
-        hint: found?.hint || (found ? '' : '점검 결과를 받지 못한 항목입니다. 다시 점검하면 판정됩니다.')
+        status: found?.status || 'unchecked',
+        hint: found?.hint || (found ? '' : '점검 결과를 받지 못했습니다. "전체 점검하기"로 다시 점검하면 판정됩니다.')
       };
     })
   };

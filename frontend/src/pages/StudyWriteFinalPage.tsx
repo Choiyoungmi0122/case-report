@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { caseApi, StudyWriteDraftsResponse, StudyWriteSection } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
-import { careCompliance, complianceLevel } from '../utils/studyWriteCare';
+import { careCompliance, complianceLevel, uncheckedSuffix } from '../utils/studyWriteCare';
 import { convertRelativeDates } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import './StudyWriteFinalPage.css';
@@ -162,7 +162,7 @@ export default function StudyWriteFinalPage() {
                 {(() => {
                   const c = careCompliance(section);
                   return c ? (
-                    <i className={`sw-final__pct is-${complianceLevel(c)}`} title={`CARE 세부 항목 ${c.ok}/${c.total} 충족 · 필수 ${c.requiredOk}/${c.requiredTotal}`}>
+                    <i className={`sw-final__pct is-${complianceLevel(c)}`} title={`CARE 세부 항목 ${c.ok}/${c.total} 충족 · 필수 ${c.requiredOk}/${c.requiredTotal}${uncheckedSuffix(c)}`}>
                       CARE {c.pct}%
                     </i>
                   ) : null;

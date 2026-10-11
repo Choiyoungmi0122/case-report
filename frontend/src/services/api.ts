@@ -851,7 +851,8 @@ export interface StudyWriteState {
   updatedAt: string;
 }
 
-export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable';
+/** unchecked: 점검 응답에 그 항목의 판정이 없었음(없음이 아님). backend/src/types/studyWrite.ts 참고 */
+export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
 export interface StudyWriteCareCheck {
   checkedAt: string;

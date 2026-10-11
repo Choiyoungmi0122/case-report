@@ -16,6 +16,7 @@ import {
 } from '../studyWrite/interview';
 import { StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
+import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
 import {
   createAttachment,
@@ -414,6 +415,8 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
                 at: now,
                 model: revised.model,
                 promptVersion: STUDY_WRITE_REVISE_PROMPT_VERSION,
+                // 라벨만으로는 문구가 바뀐 것을 알 수 없어 템플릿 해시를 함께 남긴다 (참가자별 프롬프트 복원용)
+                promptTemplateHash: promptMeta('SW_R').promptTemplateHash,
                 instruction,
                 changeSummary: revised.changeSummary,
                 outOfRecordClaims: revised.outOfRecordClaims

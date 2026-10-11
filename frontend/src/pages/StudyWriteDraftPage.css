@@ -799,6 +799,18 @@
   color: #5a6c81;
 }
 
+/* 판정 없음: 없다는 뜻이 아니므로 경고색 대신 점선 */
+.sw-care-item.is-unchecked {
+  border-left-color: #8a94a6;
+  border-left-style: dashed;
+  background: #f7f8fa;
+}
+
+.sw-care-item.is-unchecked .sw-care-item__status {
+  background: #e6e9ef;
+  color: #4a5568;
+}
+
 .sw-care-item__body {
   flex: 1;
   min-width: 0;

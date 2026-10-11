@@ -70,7 +70,12 @@ export interface StudyWriteQuestionBudget {
   maxTotal: number;
 }
 
-export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable';
+/**
+ * 'unchecked'(판정 없음): SW-C 응답에서 그 항목의 판정을 찾지 못한 것. "없음(not_in_record)"이 아니다. 2026-10-12부터 쓴다.
+ * 그 전(2026-10-11)에는 같은 경우를 not_in_record + hint "점검 결과를 받지 못한 항목…"으로 저장했다. 읽을 때는
+ * studyWrite/careStatus.ts 의 effectiveCareStatus 로 둘을 같게 본다.
+ */
+export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
 export interface StudyWriteCareCheck {
   checkedAt: string;

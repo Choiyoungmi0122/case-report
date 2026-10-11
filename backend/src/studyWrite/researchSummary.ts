@@ -1,10 +1,35 @@
 import { StudyWriteState } from '../types/studyWrite';
 import { CARE_SECTION_ORDER } from './careItems';
+import { effectiveCareStatus, isCareJudged, isCareSatisfied } from './careStatus';
 
 /**
  * 연구용 내보내기에 넣는 실험용 Write 요약. 유용성·효율성을 보려는 것이므로 단계별
  * 소요 시간과 횟수를 미리 계산해 둔다. 원자료(studyWrite 전체)도 함께 내보낸다.
  */
+
+/**
+ * 섹션 하나의 CARE 세부 항목 집계. "있음"·"해당 없음"을 충족으로 본다.
+ * 준수율의 분모는 판정을 받은 항목이다: 판정 없음(unchecked, 2026-10-11 판의 "판정 못 받음" 포함)은
+ * 충족도 누락도 아니므로 careUnchecked 로 따로 센다.
+ */
+function careSummaryFields(rawItems: Array<{ status: string; hint?: string; required: boolean }>) {
+  const items = rawItems.map((item) => ({ ...item, status: effectiveCareStatus(item) }));
+  const judged = items.filter((item) => isCareJudged(item.status));
+  const judgedRequired = judged.filter((item) => item.required);
+  const ok = judged.filter((item) => isCareSatisfied(item.status)).length;
+  return {
+    careTotal: items.length,
+    careUnchecked: items.length - judged.length,
+    careOk: ok,
+    carePct: judged.length ? Math.round((ok / judged.length) * 100) : null,
+    careRequiredPct: judgedRequired.length
+      ? Math.round((judgedRequired.filter((item) => isCareSatisfied(item.status)).length / judgedRequired.length) * 100)
+      : null,
+    careRequiredMissing: judged.filter((item) => item.required && !isCareSatisfied(item.status)).length,
+    careOptionalMissing: judged.filter((item) => !item.required && !isCareSatisfied(item.status)).length,
+    careInRecordNotInDraft: judged.filter((item) => item.status === 'in_record_not_in_draft').length
+  };
+}
 
 function seconds(from?: string, to?: string): number | null {
   if (!from || !to) return null;
@@ -58,22 +83,7 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
       finalDraftChars: finalText.length,
       /** 처음 초안 대비 최종 글자 수 변화 비율 */
       changeRatio: firstText ? Math.round((Math.abs(finalText.length - firstText.length) / firstText.length) * 1000) / 1000 : null,
-      /** CARE 세부 항목 준수율(%). "있음"·"해당 없음"을 충족으로 본다 */
-      careTotal: careItems.length,
-      careOk: careItems.filter((item) => item.status === 'present' || item.status === 'not_applicable').length,
-      carePct: careItems.length
-        ? Math.round((careItems.filter((item) => item.status === 'present' || item.status === 'not_applicable').length / careItems.length) * 100)
-        : null,
-      careRequiredPct: careItems.some((item) => item.required)
-        ? Math.round(
-            (careItems.filter((item) => item.required && (item.status === 'present' || item.status === 'not_applicable')).length /
-              careItems.filter((item) => item.required).length) *
-              100
-          )
-        : null,
-      careRequiredMissing: careItems.filter((item) => item.required && item.status !== 'present' && item.status !== 'not_applicable').length,
-      careOptionalMissing: careItems.filter((item) => !item.required && item.status !== 'present' && item.status !== 'not_applicable').length,
-      careInRecordNotInDraft: careItems.filter((item) => item.status === 'in_record_not_in_draft').length
+      ...careSummaryFields(careItems)
     };
   });
 
@@ -133,8 +143,10 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
     careCompliance: (() => {
       const checked = sections.filter((item: any) => typeof item.careTotal === 'number' && item.careTotal > 0) as any[];
       const total = checked.reduce((sum, item) => sum + item.careTotal, 0);
+      const unchecked = checked.reduce((sum, item) => sum + (item.careUnchecked || 0), 0);
+      const judged = total - unchecked;
       const ok = checked.reduce((sum, item) => sum + item.careOk, 0);
-      return { sectionsChecked: checked.length, total, ok, pct: total ? Math.round((ok / total) * 100) : null };
+      return { sectionsChecked: checked.length, total, unchecked, ok, pct: judged ? Math.round((ok / judged) * 100) : null };
     })(),
     totals: {
       reviseCount: sumOf(sections, 'reviseCount'),
