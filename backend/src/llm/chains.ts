@@ -868,7 +868,10 @@ function findBestClauseMatch(cardText: string, visit: PreparedVisit | undefined)
   return bestScore >= 0.35 ? bestClause : null;
 }
 
-function buildTaggedEvidenceSummary(evidenceCards: EvidenceCard[]): string {
+function buildTaggedEvidenceSummary(
+  evidenceCards: EvidenceCard[],
+  options: { includeVisitDates?: boolean } = {}
+): string {
   return CORE_AI_SECTIONS.map((sectionId) => {
     const relevant = evidenceCards.filter((card) => {
       const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
@@ -880,9 +883,9 @@ function buildTaggedEvidenceSummary(evidenceCards: EvidenceCard[]): string {
         ? relevant
             .map(
               (card) =>
-                `- (${card.id}) [visit ${card.visitIndex}] ${
-                  card.normalizedText || card.sourceText || ''
-                }`
+                `- (${card.id}) [visit ${card.visitIndex}${
+                  options.includeVisitDates && card.visitDateTime ? `, ${card.visitDateTime}` : ''
+                }] ${card.normalizedText || card.sourceText || ''}`
             )
             .join('\n')
         : '- (none)';
@@ -1612,24 +1615,44 @@ export async function runSectionAssessment(
   return heuristicAssessments.map((item) => llmBySection.get(item.sectionId) || item);
 }
 
+/**
+ * CHAIN3 사용자 프롬프트의 세 입력. 프롬프트 평가 스크립트(scripts/evalScaffoldPrompt.ts)도 같은 입력을 쓰도록 내보낸다.
+ * includeVisitDates: 근거 줄에 방문 날짜를 붙인다(기본 false = 지금까지와 같은 입력).
+ */
+export function buildChain3Inputs(
+  evidenceCards: EvidenceCard[],
+  sectionAssessments: SectionAssessment[],
+  options: { includeVisitDates?: boolean } = {}
+) {
+  return {
+    evidenceText: buildTaggedEvidenceSummary(evidenceCards, options),
+    statusSummary: (sectionAssessments || [])
+      .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
+      .join('\n\n'),
+    rubricSummary: buildCompactRubricSummary(CORE_AI_SECTIONS)
+  };
+}
+
+/** 모델 출력(CHAIN3)을 저장 형태로 정리한다: 근거 id 검증, 휴리스틱 근거 연결. 평가 스크립트도 쓴다. */
+export function normalizeChain3Output(
+  sectionDrafts: Parameters<typeof normalizeSectionDrafts>[0],
+  evidenceCards: EvidenceCard[]
+): SectionDraft[] {
+  return normalizeSectionDrafts(sectionDrafts, evidenceCards);
+}
+
 export async function runInitialSectionDrafts(
   evidenceCards: EvidenceCard[],
   sectionAssessments: SectionAssessment[],
   runtimeMeta?: ChainRuntimeMeta
 ): Promise<SectionDraft[]> {
-  const statusSummary = (sectionAssessments || [])
-    .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
-    .join('\n\n');
+  const inputs = buildChain3Inputs(evidenceCards, sectionAssessments);
 
   const chain3Prompts = chainPrompts(runtimeMeta?.promptSet).chain3;
   const result = await callLLMWithSchema(
     Chain3ModelOutputSchema,
     chain3Prompts.system,
-    chain3Prompts.user(
-      buildTaggedEvidenceSummary(evidenceCards),
-      statusSummary,
-      buildCompactRubricSummary(CORE_AI_SECTIONS)
-    ),
+    chain3Prompts.user(inputs.evidenceText, inputs.statusSummary, inputs.rubricSummary),
     {
       model: getModelForChain('chain3'),
       label: chainLabel('CHAIN3 draft', runtimeMeta?.promptSet),

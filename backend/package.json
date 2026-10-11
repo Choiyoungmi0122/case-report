@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "study:snapshot": "tsx --env-file=.env scripts/buildStudyCaseSnapshot.ts",
     "usage:summary": "tsx scripts/summarizeLlmUsage.ts",
+    "eval:scaffold-prompt": "tsx scripts/evalScaffoldPrompt.ts",
     "study:freeze": "tsx scripts/freezeStudyCase.ts",
     "test:rag": "tsx tests/rag/termNormalizer.test.ts",
     "test:rag-loader": "tsx tests/rag/terminologyLoader.test.ts",
