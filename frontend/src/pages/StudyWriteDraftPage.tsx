@@ -27,6 +27,7 @@ import {
 import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import TitleKeywordsEditor from '../components/studyWrite/TitleKeywordsEditor';
+import RecordViewer from '../components/studyWrite/RecordViewer';
 import { parseTitleDraft } from '../utils/titleKeywords';
 import './StudyWriteDraftPage.css';
 
@@ -84,6 +85,8 @@ export default function StudyWriteDraftPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>('TITLE');
   const [tab, setTab] = useState<'chat' | 'care' | 'answers'>('chat');
+  // 원문 EMR 보기 (왼쪽 목록 맨 아래)
+  const [recordOpen, setRecordOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [instruction, setInstruction] = useState('');
   // 보낸 뒤 입력 칸 높이를 원래대로
@@ -538,7 +541,20 @@ export default function StudyWriteDraftPage() {
               </button>
             );
           })}
+          <div className="sw-draft__nav-divider" />
+          <button type="button" className="sw-draft__nav-item sw-draft__nav-record" onClick={() => setRecordOpen(true)}>
+            <span>원문 EMR 보기</span>
+          </button>
         </nav>
+        {caseId ? (
+          <RecordViewer
+            caseId={caseId}
+            isOpen={recordOpen}
+            onClose={() => setRecordOpen(false)}
+            relativeDates={Boolean(data?.relativeDates)}
+            formatDate={dated}
+          />
+        ) : null}
 
         <main className="sw-draft__main">
           {section ? (

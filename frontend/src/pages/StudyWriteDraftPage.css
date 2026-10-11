@@ -1259,3 +1259,21 @@
   font-size: 12.5px;
   color: #7a4b00;
 }
+
+/* 왼쪽 목록 맨 아래: 원문 EMR 보기 */
+.sw-draft__nav-divider {
+  height: 1px;
+  margin: 8px 4px;
+  background: #d9e0e8;
+}
+
+.sw-draft__nav-record {
+  border-color: #d9e0e8;
+  background: #fff;
+  color: #1f5f8b;
+  font-weight: 600;
+}
+
+.sw-draft__nav-record:hover {
+  background: #eef5fb;
+}
