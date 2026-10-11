@@ -38,6 +38,32 @@ export function glossaryForTexts(texts: string[]): Map<string, string> {
   return found;
 }
 
+// ── 혈위 WHO 코드 (용어 사전의 acupuncture_point: "풍지(GB20)") ──
+let acupointCache: Map<string, string> | null = null;
+
+/** 혈위명 → WHO 코드. 기록·답변에 나온 혈위의 코드를 프롬프트에 주어 코드를 지어내지 않게 한다 */
+export function getAcupointCodes(): Map<string, string> {
+  if (acupointCache) return acupointCache;
+  const pairs: Array<[string, string]> = [];
+  for (const entry of terminologyEntries) {
+    if (entry.category !== 'acupuncture_point') continue;
+    const match = String(entry.standardTerm || '').match(/^([가-힣]{1,6})\(([A-Z]{2,3}(?:-[A-Z]{1,2})?\d{1,2})\)$/);
+    if (match) pairs.push([match[1], match[2]]);
+  }
+  pairs.sort((a, b) => b[0].length - a[0].length);
+  acupointCache = new Map(pairs);
+  return acupointCache;
+}
+
+export function acupointCodesForTexts(texts: string[]): Map<string, string> {
+  const joined = texts.filter(Boolean).join('\n');
+  const found = new Map<string, string>();
+  for (const [name, code] of getAcupointCodes()) {
+    if (joined.includes(name)) found.set(name, code);
+  }
+  return found;
+}
+
 export function formatHanjaGlossary(glossary: Map<string, string>): string {
   return [...glossary.entries()].map(([term, hanja]) => `- ${term} = ${hanja}`).join('\n');
 }
@@ -74,6 +100,8 @@ export function applyHanjaGlossary(text: string, glossary: Map<string, string>):
     if (first < 0) continue;
     const after = result.slice(first + term.length);
     if (after.startsWith('(')) continue;
+    // 합방·가미방 이름의 앞부분("반하후박탕합생맥산", "갈근탕가천궁")에는 붙이지 않는다
+    if (/^[합가]/.test(after)) continue;
     result = `${result.slice(0, first + term.length)}(${hanja})${after}`;
   }
   return result;

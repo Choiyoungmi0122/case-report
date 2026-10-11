@@ -22,7 +22,11 @@ import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItem
 import { allQuestions, buildRecordText, isRecordTruncated } from './interview';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
 import { promptMeta } from '../llm/promptRegistry';
-import { applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
+import { acupointCodesForTexts, applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
+import { dropAbsenceSentences } from './absenceFilter';
+
+/** 부재 문장 필터를 쓰지 않는 섹션: 서론·고찰(공백·한계 서술), 동의(답변 그대로) */
+const ABSENCE_FILTER_SKIP = new Set(['INTRODUCTION', 'DISCUSSION_CONCLUSION', 'INFORMED_CONSENT']);
 import { answerTextForPrompt } from './answerChoices';
 
 /**
@@ -97,6 +101,7 @@ export async function runDraftForSection(params: {
   const qaText = await buildQaText(state, sectionId, context);
   // 처방명·변증명 한자는 용어 사전 것을 쓴다 (기록·답변에 나온 것만 목록으로)
   const glossary = glossaryForTexts([recordText, currentDraft, qaText]);
+  const acupoints = formatHanjaGlossary(acupointCodesForTexts([recordText, currentDraft, qaText]));
   const output = await callLLMWithSchema(
     StudyWriteDraftOutputSchema,
     studyWriteDraftSystemPrompt,
@@ -108,14 +113,22 @@ export async function runDraftForSection(params: {
       recordText,
       currentDraft,
       qaText,
-      hanjaGlossary: formatHanjaGlossary(glossary)
+      hanjaGlossary: formatHanjaGlossary(glossary),
+      acupointCodes: acupoints
     }),
     { model, label: `SW-D ${sectionId}` }
   );
+  // 기록에 없는 항목의 부재 문장("~는 기록되지 않았다")은 증례보고에 쓰지 않으므로 걸러내고 notes 로 알린다.
+  // 서론·고찰은 선행 연구의 공백이나 한계("객관 지표 자료가 없다")를 말하는 정당한 문장이 있어 거르지 않는다.
+  const prepared = applyHanjaGlossary(dropForeignPlaceholders(output.draftText, [recordText, currentDraft, qaText]), glossary);
+  const filtered = ABSENCE_FILTER_SKIP.has(sectionId) ? { text: prepared, removed: [] as string[] } : dropAbsenceSentences(prepared);
   return {
-    draftText: applyHanjaGlossary(dropForeignPlaceholders(output.draftText, [recordText, currentDraft, qaText]), glossary),
+    draftText: filtered.text,
     usedQuestionIds: output.usedQuestionIds || [],
-    notes: output.notes || [],
+    notes: [
+      ...(output.notes || []),
+      ...filtered.removed.map((sentence) => `기록에 없다는 문장을 본문에서 뺐습니다: "${sentence}"`)
+    ],
     model
   };
 }
@@ -224,6 +237,7 @@ export async function runRevise(params: {
   const qaText = await buildQaText(state, section.sectionId, context);
   const safeInstruction = await deidentifyText(instruction, context);
   const glossary = glossaryForTexts([recordText, section.draftText, qaText, safeInstruction]);
+  const acupoints = formatHanjaGlossary(acupointCodesForTexts([recordText, section.draftText, qaText, safeInstruction]));
   const output = await callLLMWithSchema(
     StudyWriteReviseOutputSchema,
     studyWriteReviseSystemPrompt,
@@ -238,6 +252,7 @@ export async function runRevise(params: {
       priorInstructions,
       instruction: safeInstruction,
       hanjaGlossary: formatHanjaGlossary(glossary),
+      acupointCodes: acupoints,
       selectedText,
       previousDraft: params.previousDraft
     }),
