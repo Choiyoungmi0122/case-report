@@ -15,6 +15,7 @@ import {
 import { buildChainCacheEntry, buildPerformanceLog, hasChainCacheHit } from '../../src/optimization/chainRuntime';
 import {
   buildScaffoldChain3SystemPrompt,
+  buildScaffoldRevealSystemPrompt,
   chain3SystemPrompt as scaffoldChain3,
   SCAFFOLD_CHAIN3_SECTIONS
 } from '../../src/llm/prompts/scaffold/chain3_draft';
@@ -44,17 +45,24 @@ async function run() {
   assert.equal(promptKeyForChainName('CHAIN6', 'scaffold'), 'CHAIN6');
   assert.equal(promptKeyForChainName('CHAIN7', 'scaffold'), 'CHAIN7');
   assert.equal(promptKeyForChainName('CHAIN3_STUDY_REVEAL:THERAPEUTIC_INTERVENTIONS', 'scaffold'), 'CHAIN3_STUDY_REVEAL');
-  assert.equal(promptVersionLabel('SCAFFOLD_CHAIN3'), 'SCAFFOLD-CHAIN3:v3');
+  assert.equal(promptVersionLabel('SCAFFOLD_CHAIN3'), 'SCAFFOLD-CHAIN3:v4');
   assert.notEqual(promptTemplateHash('SCAFFOLD_CHAIN3'), promptTemplateHash('CHAIN3'));
   // 공개 단계는 Scaffold 의 CHAIN3 본문을 쓴다
   const revealExpected = createHash('sha256')
-    .update([promptVersionLabel('CHAIN3_STUDY_REVEAL'), scaffoldChain3].join('\n\n---\n\n'))
+    .update([promptVersionLabel('CHAIN3_STUDY_REVEAL'), buildScaffoldRevealSystemPrompt('THERAPEUTIC_INTERVENTIONS')].join('\n\n---\n\n'))
     .digest('hex');
   assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), revealExpected);
   // 공개 단계 해시 고정값 — Scaffold CHAIN3 를 고치면 바뀌므로 버전을 올리고 이 값을 갱신한다.
-  // 이력: v2 f59a93a0…(분리 시점, a53e34c) → v3 00406d6d…(2026-10-12 Scaffold CHAIN3 개선 적용)
-  assert.equal(promptVersionLabel('CHAIN3_STUDY_REVEAL'), 'CHAIN3_STUDY_REVEAL:v3');
-  assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), '00406d6d2475b489a2d1c073bfc8c578a068efcf7be85ee8c777e6964f629d3e');
+  // 이력: v2 f59a93a0…(분리 시점, a53e34c) → v3 00406d6d…(Scaffold CHAIN3 개선) → v4 c9c8ca48…(v3.3 규칙, 공개 섹션만 생성)
+  assert.equal(promptVersionLabel('CHAIN3_STUDY_REVEAL'), 'CHAIN3_STUDY_REVEAL:v4');
+  assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), 'c9c8ca485eebcabb09e5d973ecf96812b96871ccca92498bebfc01ad27f2c20a');
+  // 공개 단계 대표 프롬프트는 치료 개입 하나만 쓰게 한다. CHAIN3 의 7개 섹션이 아니면 전체 프롬프트(이전 동작)
+  assert.match(buildScaffoldRevealSystemPrompt('THERAPEUTIC_INTERVENTIONS'), /아래 섹션에 대해서만/);
+  assert.equal(buildScaffoldRevealSystemPrompt('DISCUSSION_CONCLUSION'), scaffoldChain3);
+  // v4 규칙 11~13
+  for (const rule of ['11. 없는 내용:', '12. 표기 보존:', '13. 마무리 문장 금지:', '14. evidenceCardIdsUsed']) {
+    assert.ok(scaffoldChain3.includes(rule), rule);
+  }
 
   // ---------------------------------------------------------------- 섹션별 생성 프롬프트 (2026-10-12 평가용)
   // 기본값은 서비스 본문과 같다 (위 공개 단계 해시가 이것을 고정한다)
@@ -128,6 +136,42 @@ async function run() {
     __setOpenAIClientForTests(null);
   }
   assert.ok(labels[0].startsWith('[CHAIN3 draft [scaffold]]'), labels.join('\n'));
+  // 섹션별 생성: 시스템 프롬프트·입력이 그 섹션으로 줄고, 다른 섹션 결과는 버린다
+  {
+    const bodies: any[] = [];
+    __setOpenAIClientForTests({
+      chat: {
+        completions: {
+          create: async (body: any) => {
+            bodies.push(body);
+            return {
+              choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ sectionDrafts: [
+                { sectionId: 'THERAPEUTIC_INTERVENTIONS', evidenceCardIdsUsed: ['t1'], draftText: '침 치료를 시행하였다.', openIssues: [] },
+                { sectionId: 'CLINICAL_FINDINGS', evidenceCardIdsUsed: [], draftText: '요청하지 않은 섹션', openIssues: [] }
+              ] }) } }],
+              usage: null
+            };
+          }
+        }
+      }
+    });
+    const sectionCards: any[] = [
+      { id: 't1', visitIndex: 1, visitDateTime: '', sourceText: '침 치료', normalizedText: '침 치료', evidenceType: 'therapeutic_intervention', tags: ['THERAPEUTIC_INTERVENTIONS'], sectionHints: [], terms: [], confidence: 0.9 },
+      { id: 'c1', visitIndex: 1, visitDateTime: '', sourceText: '두통', normalizedText: '두통', evidenceType: 'clinical_finding', tags: ['CLINICAL_FINDINGS'], sectionHints: [], terms: [], confidence: 0.9 }
+    ];
+    try {
+      const drafts = await runInitialSectionDrafts(sectionCards, [], { promptSet: 'scaffold', sectionIds: ['THERAPEUTIC_INTERVENTIONS'] });
+      assert.deepEqual(drafts.map((draft) => draft.sectionId), ['THERAPEUTIC_INTERVENTIONS']);
+      const system = bodies[0].messages[0].content as string;
+      const user = bodies[0].messages[1].content as string;
+      assert.match(system, /아래 섹션에 대해서만/);
+      assert.ok(!user.includes('두통'), '다른 섹션 근거는 보내지 않는다');
+      assert.ok(user.includes('침 치료'));
+      await assert.rejects(() => runInitialSectionDrafts(sectionCards, [], { sectionIds: ['THERAPEUTIC_INTERVENTIONS'] }), /Scaffold/);
+    } finally {
+      __setOpenAIClientForTests(null);
+    }
+  }
   assert.ok(labels[1].startsWith('[CHAIN3 draft]'), labels.join('\n'));
   if (labels[2]) assert.ok(labels[2].startsWith('[CHAIN2 assessment [scaffold]]'), labels.join('\n'));
 

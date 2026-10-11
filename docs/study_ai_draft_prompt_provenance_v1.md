@@ -32,6 +32,7 @@ git show c18c6e5:backend/src/llm/prompts/chain3_draft.ts
 - 2026-10-12 (3순위): 용어 판정기 프롬프트 한국어화(`TERM:v2`), CHAIN1 카드 본문 비치환, CHAIN7 저자 원문 보존 등(`docs/prompt_chain_review_v1.md` §5-4). 고정 사례는 저장된 CHAIN1 스냅샷을 쓰므로 영향이 없다.
 - 2026-10-12: Scaffold / Write 프롬프트 분리. Scaffold 모드는 `backend/src/llm/prompts/scaffold/`를 쓴다(`docs/prompt_sets_scaffold_write_v1.md`). 공개 단계 `CHAIN3_STUDY_REVEAL`은 Scaffold 사본을 가리키지만 본문이 같아 템플릿 해시가 `f59a93a0…` 그대로다. 앞으로 Scaffold 쪽 프롬프트의 이력은 `SCAFFOLD_*` 버전으로 따로 남는다.
 - 2026-10-12: Scaffold CHAIN3 개선을 적용했다(`SCAFFOLD-CHAIN3:v3`, 공개 단계 `CHAIN3_STUDY_REVEAL:v3`, 템플릿 해시 `00406d6d…`, `docs/scaffold_prompt_improvement_phase1.md`). 공개 단계는 고정 초안이 있으면 그것을 먼저 돌려주므로 참가자 초안은 그대로다.
+- 2026-10-12: Scaffold CHAIN3 v4(규칙 11~13 추가)를 적용하고, 공개 단계 실시간 생성을 공개 섹션 전용으로 바꿨다(`CHAIN3_STUDY_REVEAL:v4`, 해시 `c9c8ca48…`). 고정 초안이 있으면 그것을 먼저 돌려주므로 참가자 초안은 그대로다.
 - 고정 결과는 EMR 본문 해시로만 선택되므로 위 변경과 무관하게 그대로 쓰인다. 고정 파일의 `unsupportedClaims.reason` 문구도 저장된 그대로다.
 
 ## 4. 지켜야 할 것

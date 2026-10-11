@@ -13,7 +13,7 @@
  *  - --dates : 근거 줄에 방문 날짜를 붙여 보낸다(서비스 기본값은 끔).
  *  - --sections A,B : 섹션별 생성. 그 섹션만 쓰게 한다(current 만). 예: --sections THERAPEUTIC_INTERVENTIONS
  *  - --evidence section|all : 섹션별 생성 때 근거 목록 범위. section(기본) = 그 섹션 근거만, all = 7개 섹션 근거 전체.
- *  - --candidate v33 : current 프롬프트에 후보 규칙을 끼운다(scripts/promptEval/candidates/scaffoldChain3V33.ts).
+ *  - (v3.3 후보 규칙은 2026-10-12 서비스 v4 에 들어갔다. 이전 v3 본문은 --variant v3 로 비교한다.)
  *
  * 사례와 무관한 지표(모든 source): 치료 개입 근거의 숫자+단위 표기(용량·횟수·시간·규격)가 초안에 남은 비율, 초안의 숫자+단위 표기 중
  * 어느 근거 카드에도 없는 것(바뀌었거나 지어낸 값 후보), 글자·문장 수. 최종 판단은 사람이 초안을 기록과 대조해 한다.
@@ -25,7 +25,14 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { FIXED_STUDY_CASE_PROCESSED } from '../src/study/cases/defaultStudyCaseProcessed.generated';
 import { callLLMWithSchema } from '../src/llm/client';
-import { buildChain3Inputs, normalizeChain3Output, preprocessVisitsForChain1, runEvidenceSplit, runSectionAssessment } from '../src/llm/chains';
+import {
+  buildChain3Inputs,
+  normalizeChain3Output,
+  preprocessVisitsForChain1,
+  runEvidenceSplit,
+  runInitialSectionDrafts,
+  runSectionAssessment
+} from '../src/llm/chains';
 import { getModelForChain } from '../src/llm/models';
 import { Chain3ModelOutputSchema } from '../src/llm/schemas/chain3_draft';
 import {
@@ -40,11 +47,11 @@ import { runWithUsageContext } from '../src/llm/usageContext';
 import { getScaffoldTerminologyRuntime } from '../src/rag/runtime';
 import { SCAFFOLD_CHAIN3_V2_LABEL, scaffoldChain3V2SystemPrompt } from './promptEval/baselines/scaffoldChain3V2';
 import { scoreTiDraft } from './promptEval/scaffoldTiChecklist';
-import { applyScaffoldChain3V33, SCAFFOLD_CHAIN3_V33_LABEL } from './promptEval/candidates/scaffoldChain3V33';
+import { SCAFFOLD_CHAIN3_V3_LABEL, scaffoldChain3V3SystemPrompt } from './promptEval/baselines/scaffoldChain3V3';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-type Variant = 'frozen' | 'v2' | 'current';
+type Variant = 'frozen' | 'v2' | 'v3' | 'current';
 type Inputs = { evidenceCards: any[]; sectionStates: any[]; label: string };
 
 const OUT_DIR = path.resolve(__dirname, '../data/prompt-eval');
@@ -156,6 +163,19 @@ function scopeTag(scope: Scope): string {
 }
 
 async function generate(variant: Exclude<Variant, 'frozen'>, inputs: Inputs, includeVisitDates: boolean, scope: Scope) {
+  // 서비스 경로 그대로: 공개 단계와 같은 호출(runInitialSectionDrafts + sectionIds, 그 섹션 근거만)
+  if (variant === 'current' && scope.sections && scope.evidence === 'section' && !includeVisitDates) {
+    let serviceUsage: any = null;
+    const serviceStartedAt = Date.now();
+    const serviceDrafts = await runInitialSectionDrafts(inputs.evidenceCards, inputs.sectionStates, {
+      promptSet: 'scaffold',
+      sectionIds: scope.sections,
+      onUsage: (value) => {
+        serviceUsage = value;
+      }
+    });
+    return { drafts: serviceDrafts, usage: serviceUsage, elapsedMs: Date.now() - serviceStartedAt };
+  }
   const chain3 = buildChain3Inputs(inputs.evidenceCards, inputs.sectionStates, {
     includeVisitDates,
     sectionIds: scope.sections,
@@ -168,9 +188,10 @@ async function generate(variant: Exclude<Variant, 'frozen'>, inputs: Inputs, inc
       ? scope.sections
         ? buildScaffoldChain3SystemPrompt(scope.sections)
         : currentScaffoldChain3
-      : scaffoldChain3V2SystemPrompt;
-  if (scope.candidate && variant !== 'current') throw new Error('--candidate 는 current 에서만 쓴다');
-  const system = scope.candidate === 'v33' ? applyScaffoldChain3V33(base) : base;
+      : variant === 'v3'
+        ? scaffoldChain3V3SystemPrompt
+        : scaffoldChain3V2SystemPrompt;
+  const system = base;
   let usage: any = null;
   const startedAt = Date.now();
   const output = await callLLMWithSchema(
@@ -193,7 +214,7 @@ export { genericMetrics };
 
 async function main() {
   const variant = (arg('--variant') || 'frozen') as Variant;
-  if (!['frozen', 'v2', 'current'].includes(variant)) throw new Error(`unknown variant ${variant}`);
+  if (!['frozen', 'v2', 'v3', 'current'].includes(variant)) throw new Error(`unknown variant ${variant}`);
   const source = arg('--source') || 'fixed';
   if (variant === 'frozen' && source !== 'fixed') throw new Error('frozen 은 --source fixed 에서만 쓴다');
   const includeVisitDates = process.argv.includes('--dates');
@@ -202,7 +223,7 @@ async function main() {
   const scope: Scope = {
     sections: sectionsArg ? (sectionsArg.split(',').map((id) => id.trim()) as ScaffoldChain3Section[]) : undefined,
     evidence: arg('--evidence') === 'all' ? 'all' : 'section',
-    candidate: arg('--candidate') === 'v33' ? 'v33' : undefined
+    candidate: undefined
   };
   const inputs = await loadInputs(source);
   const promptLabel =
@@ -210,8 +231,8 @@ async function main() {
       ? 'CHAIN3:v1 (c18c6e5, 고정)'
       : variant === 'v2'
         ? SCAFFOLD_CHAIN3_V2_LABEL
-        : scope.candidate === 'v33'
-          ? SCAFFOLD_CHAIN3_V33_LABEL
+        : variant === 'v3'
+          ? SCAFFOLD_CHAIN3_V3_LABEL
           : promptVersionLabel('SCAFFOLD_CHAIN3');
 
   const results: any[] = [];

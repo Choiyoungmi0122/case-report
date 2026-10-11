@@ -33,7 +33,10 @@ import { getModelForChain } from './models';
 import { PromptSet, SharedChainKey, SHARED_CHAIN_KEYS } from './promptSets';
 import { chain1SystemPrompt as scaffoldChain1SystemPrompt } from './prompts/scaffold/chain1_splitTag';
 import { chain2SystemPrompt as scaffoldChain2SystemPrompt } from './prompts/scaffold/chain2_assess';
-import { chain3SystemPrompt as scaffoldChain3SystemPrompt } from './prompts/scaffold/chain3_draft';
+import {
+  buildScaffoldRevealSystemPrompt,
+  chain3SystemPrompt as scaffoldChain3SystemPrompt
+} from './prompts/scaffold/chain3_draft';
 import { chain4MissingSystemPrompt as scaffoldChain4SystemPrompt } from './prompts/scaffold/chain4_missing';
 import { chain5QuestionSystemPrompt as scaffoldChain5SystemPrompt } from './prompts/scaffold/chain5_questions';
 import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from './prompts/scaffold/section_adequacy_review';
@@ -50,6 +53,8 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - CHAIN3_STUDY_REVEAL: 2026-10-12부터 Scaffold 사본의 CHAIN3 를 가리킨다. 분리 시점 본문이 같아 해시도 그대로다.
  *  - SCAFFOLD-CHAIN3 v3, CHAIN3_STUDY_REVEAL v3: 2026-10-12 Scaffold CHAIN3 개선(평가 후보 v3.2) 적용.
  *    고정 연구 사례(학생 V1, V2)는 고정 초안을 먼저 돌려주므로(routes/scaffold.ts) 영향이 없다.
+ *  - SCAFFOLD-CHAIN3 v4, CHAIN3_STUDY_REVEAL v4: 2026-10-12 v3.3 규칙(없는 내용 서술·표기 변경·마무리 문장 금지) 적용.
+ *    공개 단계는 공개하는 섹션만 생성하도록 바꿨다(대표 프롬프트는 치료 개입 전용).
  *  - SW-Q2 v4 / SW-D v4 / SW-R v4: 2026-10-12 `3d6e831` 국내 한의 증례보고 5편의 서술 관례 반영(docs/case_report_style_basis_v1.md).
  *  - SW-Q3 v1: 2026-10-12 CARE 점검의 "없음" 항목 하나를 쓰기 위한 질문 (새 체인).
  *  - SW-C v3: 2026-10-12 하위 요소 판정(subItems) 추가. 환자 정보·진단 평가·치료 개입·추적 관찰만 (docs/care_subelements_v1.md).
@@ -64,10 +69,10 @@ export const PROMPT_VERSIONS = {
   CHAIN7: 'v2',
   REVIEW: 'v2',
   /** 공개 단계는 Scaffold 세트의 chain3 프롬프트를 쓴다. */
-  CHAIN3_STUDY_REVEAL: 'v3',
+  CHAIN3_STUDY_REVEAL: 'v4',
   SCAFFOLD_CHAIN1: 'v2',
   SCAFFOLD_CHAIN2: 'v2',
-  SCAFFOLD_CHAIN3: 'v3',
+  SCAFFOLD_CHAIN3: 'v4',
   SCAFFOLD_CHAIN4: 'v2',
   SCAFFOLD_CHAIN5: 'v2',
   SCAFFOLD_REVIEW: 'v2',
@@ -89,7 +94,9 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   CHAIN6: chain6UpdateSystemPrompt,
   CHAIN7: chain7SystemPrompt,
   REVIEW: sectionAdequacyReviewSystemPrompt,
-  CHAIN3_STUDY_REVEAL: scaffoldChain3SystemPrompt,
+  // 공개 단계는 공개하는 섹션만 쓴다(2026-10-12 v4). V2 의 공개 섹션인 치료 개입 프롬프트를 대표로 등록한다.
+  // 다른 섹션을 공개할 때의 실제 프롬프트 해시는 생성 메타데이터(routes/scaffold.ts)에 따로 남는다.
+  CHAIN3_STUDY_REVEAL: buildScaffoldRevealSystemPrompt('THERAPEUTIC_INTERVENTIONS'),
   SCAFFOLD_CHAIN1: scaffoldChain1SystemPrompt,
   SCAFFOLD_CHAIN2: scaffoldChain2SystemPrompt,
   SCAFFOLD_CHAIN3: scaffoldChain3SystemPrompt,
@@ -129,9 +136,12 @@ const MODEL_KEYS: Record<PromptKey, string> = {
 
 /** 기존 generationMetadata.promptTemplateHash 와 같은 방식: sha256(version + system prompt, 구분자 포함). */
 export function promptTemplateHash(key: PromptKey): string {
-  return createHash('sha256')
-    .update([promptVersionLabel(key), SYSTEM_PROMPTS[key]].join('\n\n---\n\n'))
-    .digest('hex');
+  return templateHashOf(promptVersionLabel(key), SYSTEM_PROMPTS[key]);
+}
+
+/** 버전 라벨과 시스템 프롬프트 본문으로 템플릿 해시를 낸다(promptTemplateHash 와 같은 계산). 섹션별 프롬프트처럼 등록 본문과 다른 실제 본문에 쓴다. */
+export function templateHashOf(versionLabel: string, systemPrompt: string): string {
+  return createHash('sha256').update([versionLabel, systemPrompt].join('\n\n---\n\n')).digest('hex');
 }
 
 /** 예: "CHAIN3:v2", "SW-D:v3", "SCAFFOLD-CHAIN3:v2" */

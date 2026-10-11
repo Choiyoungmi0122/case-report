@@ -17,6 +17,7 @@ import { buildCareRubricSummary, careSectionRubricMap, SupportedCareSectionId } 
 import { chain6UpdateSystemPrompt, buildChain6UpdateUserPrompt } from './prompts/chain6_update';
 import { chain7SystemPrompt, buildChain7UserPrompt } from './prompts/chain7_final';
 import { chainLabel, chainPrompts, PromptSet } from './promptSets';
+import { buildScaffoldChain3SystemPrompt, isScaffoldChain3Section } from './prompts/scaffold/chain3_draft';
 import {
   buildSectionHintsFromTerms,
   normalizeLookupKey,
@@ -104,6 +105,8 @@ type ChainRuntimeMeta = {
   onUsage?: (usage: LLMUsageMetrics | null) => void;
   /** 프롬프트 세트. 사례 mode 가 scaffold 이면 'scaffold' (llm/promptSets.ts). 없으면 write. */
   promptSet?: PromptSet;
+  /** CHAIN3 섹션별 생성: 이 섹션만 쓰게 한다. Scaffold 세트에서만 쓴다 (2026-10-12, 실험용 Scaffold 공개 단계). */
+  sectionIds?: string[];
 };
 
 function normalizeForGrounding(text: string): string {
@@ -1654,12 +1657,19 @@ export async function runInitialSectionDrafts(
   sectionAssessments: SectionAssessment[],
   runtimeMeta?: ChainRuntimeMeta
 ): Promise<SectionDraft[]> {
-  const inputs = buildChain3Inputs(evidenceCards, sectionAssessments);
+  const sectionIds = runtimeMeta?.sectionIds?.length ? runtimeMeta.sectionIds : undefined;
+  if (sectionIds && runtimeMeta?.promptSet !== 'scaffold') {
+    throw new Error('CHAIN3 섹션별 생성은 Scaffold 프롬프트 세트에서만 쓴다');
+  }
+  const inputs = buildChain3Inputs(evidenceCards, sectionAssessments, { sectionIds });
 
   const chain3Prompts = chainPrompts(runtimeMeta?.promptSet).chain3;
+  const systemPrompt = sectionIds
+    ? buildScaffoldChain3SystemPrompt(sectionIds.filter(isScaffoldChain3Section))
+    : chain3Prompts.system;
   const result = await callLLMWithSchema(
     Chain3ModelOutputSchema,
-    chain3Prompts.system,
+    systemPrompt,
     chain3Prompts.user(inputs.evidenceText, inputs.statusSummary, inputs.rubricSummary),
     {
       model: getModelForChain('chain3'),
@@ -1668,7 +1678,10 @@ export async function runInitialSectionDrafts(
     }
   );
 
-  return normalizeSectionDrafts(result.sectionDrafts || [], evidenceCards);
+  const drafts = sectionIds
+    ? (result.sectionDrafts || []).filter((draft) => sectionIds.includes(draft.sectionId))
+    : result.sectionDrafts || [];
+  return normalizeSectionDrafts(drafts, evidenceCards);
 }
 
 export async function runSectionMissingDetection(params: {

@@ -6,6 +6,9 @@
  * v3 (2026-10-12): 평가 후보 v3.2 를 적용. 검증 가능한 문장, 날짜·기간·보고 시점, 이유·목적·계획은 기록된 경우만, 행위 주체,
  * 자료 설명 금지, 치료 개입 세부(다른 기관 약 구분, 재현 가능한 세부, 반복 처치 묶기, 변경과 이유, 이상반응은 추적 결과로).
  * 평가: docs/scaffold_prompt_improvement_phase1.md. 이전 v2 본문: scripts/promptEval/baselines/scaffoldChain3V2.ts
+ *
+ * v4 (2026-10-12): 섹션별 생성 평가(§9)에서 나온 v3.3 규칙 적용 — 11 없는 내용 서술 금지, 12 표기 보존, 13 마무리 문장 금지.
+ * 이전 v3 본문: scripts/promptEval/baselines/scaffoldChain3V3.ts
  */
 import { MANUSCRIPT_STYLE, RUBRIC_HANDLING, sharedPrinciples } from './common';
 
@@ -43,7 +46,10 @@ const RULES_AFTER_SCOPE = `2. 섹션 아래에 근거 카드가 1개 이상 있�
 8. 이유·목적·계획: 치료를 시작·변경·중단한 이유, 처방의 목적, 향후 계획은 기록에 적힌 경우에만, 적힌 대로 씁니다.
 9. 행위 주체: 누가 한 일인지 바꾸지 않습니다. 환자가 스스로 하고 있다고 말한 일을 의료진이 지도·권유·시행한 것으로 쓰지 않고, 의료진이 안내·권유한 일은 안내한 내용 그대로 씁니다(예: 다른 의료기관에 문의하라고 안내한 것을 직접 변경을 지시한 것으로 바꾸지 않습니다). 보호자가 전한 내용은 보호자의 진술로 씁니다.
 10. 본문에는 환자와 치료에 대한 사실만 씁니다. "기록", "기재", "근거" 같은 자료에 대한 설명을 넣지 않습니다.
-11. evidenceCardIdsUsed에는 그 섹션 초안에 실제로 사용한 근거 카드의 id를 넣습니다.
+11. 없는 내용: 본문에는 무엇이 기록되지 않았는지, 무엇이 확인되지 않는지 쓰지 않습니다. 근거가 없는 세부는 본문에서 빼고, 필수 항목이면 openIssues에 항목 이름으로 적습니다.
+12. 표기 보존: 수치, 단위, 약어, 처방·처치 이름은 근거에 적힌 그대로 씁니다. 단위가 적히지 않은 수치에 단위를 붙이지 않고, 뜻이 근거에 나오지 않는 약어나 줄임말을 풀어 쓰지 않으며, 합계나 횟수를 계산해 근거에 없는 수치를 만들지 않습니다.
+13. 마무리 문장 금지: 섹션 끝에 앞의 내용을 요약하거나 일반화하는 문장(예: 치료가 반복되었다, 상태에 따라 조정되었다)을 덧붙이지 않습니다.
+14. evidenceCardIdsUsed에는 그 섹션 초안에 실제로 사용한 근거 카드의 id를 넣습니다.
 
 `;
 
@@ -110,6 +116,19 @@ export function buildScaffoldChain3SystemPrompt(sectionIds: readonly ScaffoldCha
 }
 
 export const chain3SystemPrompt = buildScaffoldChain3SystemPrompt();
+
+export function isScaffoldChain3Section(sectionId: string): sectionId is ScaffoldChain3Section {
+  return (SCAFFOLD_CHAIN3_SECTIONS as readonly string[]).includes(sectionId);
+}
+
+/**
+ * 실험용 Scaffold 공개 단계의 실시간 생성 프롬프트: 공개하는 섹션 하나만 쓴다(2026-10-12).
+ * 고정 초안이 있는 연구 사례(학생 V1, V2)는 이 프롬프트를 쓰지 않는다(routes/scaffold.ts 가 고정 초안을 먼저 돌려준다).
+ * CHAIN3 의 7개 섹션이 아니면 전체 프롬프트를 쓴다(이전 동작).
+ */
+export function buildScaffoldRevealSystemPrompt(sectionId: string): string {
+  return isScaffoldChain3Section(sectionId) ? buildScaffoldChain3SystemPrompt([sectionId]) : chain3SystemPrompt;
+}
 
 export const buildChain3UserPrompt = (
   evidenceText: string,

@@ -741,6 +741,9 @@ async function run() {
     CareSection.PATIENT_INFORMATION,
     {
       runInitialSectionDrafts: async (_evidence, _states, runtimeMeta) => {
+        // 공개 단계는 공개하는 섹션만 생성한다 (2026-10-12)
+        assert.equal(runtimeMeta?.promptSet, 'scaffold');
+        assert.deepEqual(runtimeMeta?.sectionIds, [CareSection.PATIENT_INFORMATION]);
         runtimeMeta?.onUsage?.({ promptTokens: 10, completionTokens: 20, totalTokens: 30 });
         return [
           {

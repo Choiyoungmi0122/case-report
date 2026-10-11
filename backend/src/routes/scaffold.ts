@@ -6,13 +6,13 @@ import {
   isFixedStudyCaseText
 } from '../study/cases/defaultStudyCase';
 import { DEFAULT_STUDY_MEMO_SUGGESTIONS_V2 } from '../study/cases/defaultStudyCaseMemoSuggestionsV2';
-import { promptMeta } from '../llm/promptRegistry';
+import { promptMeta, templateHashOf } from '../llm/promptRegistry';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
 import { getModelForChain, runInitialSectionDrafts } from '../llm/chains';
-// 공개 단계는 Scaffold 세트의 CHAIN3 프롬프트를 쓴다 (2026-10-12 분리, 본문·해시는 분리 전과 같다)
-import { chain3SystemPrompt } from '../llm/prompts/scaffold/chain3_draft';
+// 공개 단계는 Scaffold 세트의 CHAIN3 프롬프트로, 공개하는 섹션만 생성한다 (2026-10-12 v4)
+import { buildScaffoldRevealSystemPrompt, isScaffoldChain3Section } from '../llm/prompts/scaffold/chain3_draft';
 import { DEMO_CASE_MEMO_SUGGESTIONS, isDemoCaseText } from '../study/cases/demoCase';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
 import {
@@ -911,7 +911,9 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
       ].join('|')
     )
   ]);
-  const promptHash = hashPromptParts([chain3SystemPrompt, promptVersion, inputHash]);
+  // 실제로 보내는 프롬프트: 공개하는 섹션 하나만 쓰게 한다
+  const revealSystemPrompt = buildScaffoldRevealSystemPrompt(sectionId);
+  const promptHash = hashPromptParts([revealSystemPrompt, promptVersion, inputHash]);
   const startedAt = new Date().toISOString();
   let tokenUsage: any = null;
   const runInitialSectionDraftsImpl =
@@ -924,6 +926,8 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
     [sectionState],
     {
       promptSet: 'scaffold',
+      // CHAIN3 의 7개 섹션이 아니면(이전 동작) 섹션을 지정하지 않는다
+      sectionIds: isScaffoldChain3Section(sectionId) ? [sectionId] : undefined,
       onUsage: (usage) => {
         tokenUsage = usage;
       }
@@ -947,7 +951,8 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
       actualModelVersion: getModelForChain('chain3'),
       inputHash,
       promptHash,
-      promptTemplateHash: hashPromptParts([chain3SystemPrompt, promptVersion]),
+      // 레지스트리와 같은 계산으로, 이 섹션에 실제로 보낸 프롬프트의 해시
+      promptTemplateHash: templateHashOf(promptVersion, revealSystemPrompt),
       promptVersion,
       temperature: 0,
       generatedAt: startedAt,
