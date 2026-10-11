@@ -1,4 +1,5 @@
 import { callLLMWithSchema } from '../llm/client';
+import { z } from 'zod';
 import { getModelForChain } from '../llm/chains';
 import {
   STUDY_WRITE_CARE_CHECK_PROMPT_VERSION,
@@ -167,6 +168,38 @@ export async function runCareCheck(params: {
   };
 }
 
+const NoChangeReasonSchema = z.object({ reason: z.string() });
+
+/**
+ * 수정 지시를 받았는데 본문이 그대로일 때, 왜 안 바뀌었는지만 따로 묻는다. 수정 체인이
+ * "삭제했다"고 거짓 요약을 내놓는 일이 있어(해당 문장이 섹션에 없는데도), 초안을 다시 보고
+ * 사실만 설명하게 한다. 빠른 모델로 짧게.
+ */
+async function explainNoChange(params: { sectionName: string; draftText: string; instruction: string }): Promise<string> {
+  try {
+    const output = await callLLMWithSchema(
+      NoChangeReasonSchema,
+      `임상의가 증례보고 섹션 초안에 수정 지시를 보냈지만 초안 본문은 바뀌지 않았습니다. 왜 바뀌지 않았는지 임상의에게 한두 문장으로 설명합니다.
+초안을 실제로 보고 사실만 씁니다:
+- 지시한 내용에 해당하는 문장이 이 섹션에 없으면 "이 섹션에는 …에 해당하는 문장이 없습니다"라고 쓰고, 그 내용이 CARE 의 어느 섹션(환자 정보, 임상 소견, 타임라인, 진단 평가, 치료 개입, 추적 관찰 및 결과, 고찰, 환자 관점 등)에 속하는지 덧붙입니다.
+- 이미 반영되어 있으면 어느 문장에 있는지 짚습니다.
+- 기록·답변에 근거가 없어 넣을 수 없는 요청이면 그렇게 씁니다.
+- 바꿨다고 쓰지 않습니다. 지어내지 않습니다. 한국어로, JSON {"reason": "..."} 만 돌려줍니다.`,
+      `[섹션] ${params.sectionName}
+
+[현재 초안]
+${params.draftText}
+
+[임상의의 지시]
+${params.instruction}`,
+      { model: getModelForChain('chain4'), label: 'SW-R no-change reason' }
+    );
+    return String(output.reason || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 export async function runRevise(params: {
   caseData: any;
   state: StudyWriteState;
@@ -176,7 +209,7 @@ export async function runRevise(params: {
   selectedText?: string;
   /** 직접 수정 뒤 전체 점검: 직접 수정 전(마지막 AI 판) 초안 */
   previousDraft?: string;
-}): Promise<{ draftText: string; changeSummary: string; outOfRecordClaims: string[]; model: string }> {
+}): Promise<{ draftText: string; changeSummary: string; noChangeReason: string; outOfRecordClaims: string[]; model: string }> {
   const { caseData, state, section, instruction } = params;
   const context = createOutboundDeidContext();
   const selectedText = params.selectedText ? await deidentifyText(params.selectedText, context) : undefined;
@@ -210,12 +243,22 @@ export async function runRevise(params: {
     }),
     { model, label: `SW-R ${section.sectionId}` }
   );
+  const finalDraft = applyHanjaGlossary(
+    dropForeignPlaceholders(output.draftText, [recordText, section.draftText, qaText, safeInstruction]),
+    glossary
+  );
+  let noChangeReason = String(output.noChangeReason || '').trim();
+  if (finalDraft.trim() === section.draftText.trim() && !noChangeReason) {
+    noChangeReason = await explainNoChange({
+      sectionName: CARE_SECTION_NAMES[section.sectionId] || section.sectionId,
+      draftText: section.draftText,
+      instruction: safeInstruction
+    });
+  }
   return {
-    draftText: applyHanjaGlossary(
-      dropForeignPlaceholders(output.draftText, [recordText, section.draftText, qaText, safeInstruction]),
-      glossary
-    ),
+    draftText: finalDraft,
     changeSummary: output.changeSummary,
+    noChangeReason,
     outOfRecordClaims: output.outOfRecordClaims || [],
     model
   };

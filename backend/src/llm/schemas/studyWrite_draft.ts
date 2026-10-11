@@ -9,7 +9,9 @@ export const StudyWriteDraftOutputSchema = z.object({
 export const StudyWriteReviseOutputSchema = z.object({
   draftText: z.string(),
   changeSummary: z.string(),
-  outOfRecordClaims: z.array(z.string()).default([])
+  outOfRecordClaims: z.array(z.string()).default([]),
+  /** 초안을 바꾸지 않았을 때 그 이유 (임상의에게 그대로 보여 준다) */
+  noChangeReason: z.string().optional().default('')
 });
 
 export const StudyWriteCareCheckOutputSchema = z.object({
