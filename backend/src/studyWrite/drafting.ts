@@ -154,8 +154,11 @@ export async function runRevise(params: {
   state: StudyWriteState;
   section: StudyWriteSectionState;
   instruction: string;
+  /** 초안에서 드래그한 부분. 있으면 그 부분만 고친다 */
+  selectedText?: string;
 }): Promise<{ draftText: string; changeSummary: string; outOfRecordClaims: string[]; model: string }> {
   const { caseData, state, section, instruction } = params;
+  const selectedText = params.selectedText ? await deidentifyText(params.selectedText) : undefined;
   const model = getModelForChain('chain6');
   const priorInstructions = section.chat
     .filter((entry) => entry.role === 'user')
@@ -179,7 +182,8 @@ export async function runRevise(params: {
       qaText,
       priorInstructions,
       instruction: safeInstruction,
-      hanjaGlossary: formatHanjaGlossary(glossary)
+      hanjaGlossary: formatHanjaGlossary(glossary),
+      selectedText
     }),
     { model, label: `SW-R ${section.sectionId}` }
   );

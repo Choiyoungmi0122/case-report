@@ -1622,9 +1622,10 @@ export const caseApi = {
     return response.data;
   },
 
-  reviseStudyWriteSection: async (caseId: string, sectionId: string, instruction: string) => {
+  reviseStudyWriteSection: async (caseId: string, sectionId: string, instruction: string, selectedText?: string) => {
     const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/revise`, {
-      instruction
+      instruction,
+      ...(selectedText ? { selectedText } : {})
     });
     return response.data;
   },

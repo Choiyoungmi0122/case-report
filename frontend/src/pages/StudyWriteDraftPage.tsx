@@ -146,6 +146,101 @@ export default function StudyWriteDraftPage() {
     }
   };
 
+  // ── 초안에서 드래그해 고치기 ──
+  // 선택한 글과 떠 있는 작은 창의 위치(화면 좌표), 모드(메뉴 / AI 지시 / 직접 고치기)
+  const [selection, setSelection] = useState<{ text: string; top: number; left: number } | null>(null);
+  const [selMode, setSelMode] = useState<'menu' | 'ai' | 'edit'>('menu');
+  const [selInstruction, setSelInstruction] = useState('');
+  const [selEditText, setSelEditText] = useState('');
+  const [selBusy, setSelBusy] = useState(false);
+  // 섹션 전체 직접 편집
+  const [fullEditOpen, setFullEditOpen] = useState(false);
+  const [fullEditText, setFullEditText] = useState('');
+  const mainTextRef = useRef<HTMLDivElement | null>(null);
+
+  const captureSelection = () => {
+    if (locked || !section?.draftText) return;
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() || '';
+    if (!sel || sel.rangeCount === 0 || text.length < 2 || !mainTextRef.current) {
+      // 그냥 클릭했으면 떠 있던 창을 닫는다
+      setSelection(null);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!mainTextRef.current.contains(range.commonAncestorContainer)) return;
+    const rect = range.getBoundingClientRect();
+    setSelection({ text, top: rect.bottom + 8, left: Math.max(16, Math.min(rect.left, window.innerWidth - 420)) });
+    setSelMode('menu');
+    setSelInstruction('');
+    setSelEditText(text);
+  };
+
+  const closeSelection = () => {
+    setSelection(null);
+    setSelMode('menu');
+  };
+
+  /** 드래그한 부분만 AI 가 고친다 */
+  const reviseSelection = async () => {
+    if (!caseId || !section || !selection || !selInstruction.trim()) return;
+    setSelBusy(true);
+    setError(null);
+    try {
+      setData(await caseApi.reviseStudyWriteSection(caseId, section.sectionId, selInstruction.trim(), selection.text));
+      closeSelection();
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '고치지 못했습니다.');
+    } finally {
+      setSelBusy(false);
+    }
+  };
+
+  /** 드래그한 부분을 사람이 직접 바꿔 저장한다. 원문에서 못 찾으면 전체 편집으로 넘어간다 */
+  const saveSelectionEdit = async () => {
+    if (!caseId || !section || !selection) return;
+    const raw = section.draftText;
+    const at = raw.indexOf(selection.text);
+    if (at < 0) {
+      setFullEditText(raw);
+      setFullEditOpen(true);
+      closeSelection();
+      setError('선택한 부분을 원문에서 그대로 찾지 못해 전체 편집으로 열었습니다.');
+      return;
+    }
+    const nextText = raw.slice(0, at) + selEditText + raw.slice(at + selection.text.length);
+    setSelBusy(true);
+    setError(null);
+    try {
+      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, nextText));
+      closeSelection();
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+    } finally {
+      setSelBusy(false);
+    }
+  };
+
+  const saveFullEdit = async () => {
+    if (!caseId || !section) return;
+    setSelBusy(true);
+    setError(null);
+    try {
+      setData(await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, fullEditText));
+      setFullEditOpen(false);
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+    } finally {
+      setSelBusy(false);
+    }
+  };
+
+  // 섹션을 바꾸면 선택과 전체 편집을 닫는다
+  useEffect(() => {
+    setSelection(null);
+    setFullEditOpen(false);
+  }, [selectedId]);
+
   const uploadFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -321,13 +416,53 @@ export default function StudyWriteDraftPage() {
             <>
               <div className="sw-draft__section-head">
                 <h2>{section.name}</h2>
-                <span>버전 {section.version}</span>
+                <span>
+                  버전 {section.version}
+                  {section.draftText && !locked && !fullEditOpen ? (
+                    <button
+                      type="button"
+                      className="is-link sw-draft__edit-toggle"
+                      onClick={() => {
+                        setFullEditText(section.draftText);
+                        setFullEditOpen(true);
+                        closeSelection();
+                      }}
+                    >
+                      직접 편집
+                    </button>
+                  ) : null}
+                </span>
               </div>
-              {section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
+              {section.draftText && !locked && !fullEditOpen ? (
+                <p className="sw-draft__drag-hint">문장을 드래그하면 그 부분만 AI에게 고치게 하거나 직접 고칠 수 있습니다.</p>
+              ) : null}
+              {fullEditOpen ? (
+                <div className="sw-draft__full-edit">
+                  <textarea
+                    value={fullEditText}
+                    onChange={(event) => setFullEditText(event.target.value)}
+                    rows={Math.max(8, Math.min(30, Math.ceil(fullEditText.length / 60) + 2))}
+                    spellCheck={false}
+                    disabled={selBusy}
+                  />
+                  <div>
+                    <button type="button" disabled={selBusy || fullEditText === section.draftText} onClick={() => void saveFullEdit()}>
+                      {selBusy ? '저장 중…' : '저장'}
+                    </button>
+                    <button type="button" className="is-secondary" disabled={selBusy} onClick={() => setFullEditOpen(false)}>
+                      취소
+                    </button>
+                  </div>
+                </div>
+              ) : section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
                 // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입)
-                <TimelineTable text={section.draftText} />
+                <div ref={mainTextRef} onMouseUp={captureSelection}>
+                  <TimelineTable text={section.draftText} />
+                </div>
               ) : section.draftText ? (
-                <div className="sw-draft__text">{renderClinicalAnonymizedText(section.draftText)}</div>
+                <div className="sw-draft__text" ref={mainTextRef} onMouseUp={captureSelection}>
+                  {renderClinicalAnonymizedText(section.draftText)}
+                </div>
               ) : (
                 <p className="sw-draft__empty">{running ? '이 섹션은 아직 쓰는 중입니다.' : '이 섹션의 초안이 없습니다.'}</p>
               )}
@@ -664,6 +799,76 @@ export default function StudyWriteDraftPage() {
           ) : null}
         </aside>
       </div>
+
+      {selection && section && !locked ? (
+        <div className="sw-select-pop" style={{ top: selection.top, left: selection.left }} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="sw-select-pop__quote">「{selection.text.length > 90 ? `${selection.text.slice(0, 90)}…` : selection.text}」</div>
+          {selMode === 'menu' ? (
+            <div className="sw-select-pop__row">
+              <button type="button" onClick={() => setSelMode('ai')}>
+                AI에게 고치기
+              </button>
+              {section.sectionId !== 'TIMELINE' ? (
+                <button type="button" className="is-secondary" onClick={() => setSelMode('edit')}>
+                  직접 고치기
+                </button>
+              ) : null}
+              <button type="button" className="is-secondary" onClick={closeSelection} aria-label="닫기">
+                ✕
+              </button>
+            </div>
+          ) : null}
+          {selMode === 'ai' ? (
+            <>
+              <textarea
+                value={selInstruction}
+                autoFocus
+                rows={2}
+                placeholder="이 부분을 어떻게 고칠까요? 예: 더 간결하게 / 날짜를 넣어 줘"
+                disabled={selBusy}
+                onChange={(event) => setSelInstruction(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void reviseSelection();
+                  }
+                  if (event.key === 'Escape') closeSelection();
+                }}
+              />
+              <div className="sw-select-pop__row">
+                <button type="button" disabled={selBusy || !selInstruction.trim()} onClick={() => void reviseSelection()}>
+                  {selBusy ? '고치는 중…' : '이 부분만 고치기'}
+                </button>
+                <button type="button" className="is-secondary" disabled={selBusy} onClick={closeSelection}>
+                  취소
+                </button>
+              </div>
+            </>
+          ) : null}
+          {selMode === 'edit' ? (
+            <>
+              <textarea
+                value={selEditText}
+                autoFocus
+                rows={Math.max(2, Math.min(8, Math.ceil(selEditText.length / 50)))}
+                disabled={selBusy}
+                onChange={(event) => setSelEditText(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') closeSelection();
+                }}
+              />
+              <div className="sw-select-pop__row">
+                <button type="button" disabled={selBusy || selEditText === selection.text} onClick={() => void saveSelectionEdit()}>
+                  {selBusy ? '저장 중…' : '이렇게 바꾸기'}
+                </button>
+                <button type="button" className="is-secondary" disabled={selBusy} onClick={closeSelection}>
+                  취소
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

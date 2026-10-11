@@ -366,6 +366,8 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
   try {
     const instruction = String(req.body?.instruction || '').trim();
     if (!instruction) return res.status(400).json({ error: '지시를 적어 주세요.' });
+    // 초안에서 드래그한 부분 (선택). 너무 길면 자른다
+    const selectedText = String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
     const { caseId, sectionId } = req.params;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
 
@@ -376,7 +378,7 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     const section = state.sections?.[sectionId];
     if (!section || !section.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
 
-    const revised = await runRevise({ caseData, state, section, instruction });
+    const revised = await runRevise({ caseData, state, section, instruction, selectedText });
     const changed = revised.draftText.trim() !== section.draftText.trim();
     const careCheck = changed ? await runCareCheck({ caseData, state, sectionId, draftText: revised.draftText }) : section.careCheck;
 
@@ -408,7 +410,13 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
           : current.history,
         chat: [
           ...current.chat,
-          { id: `swc-${randomUUID()}`, role: 'user', text: instruction, at: now },
+          {
+            id: `swc-${randomUUID()}`,
+            role: 'user',
+            // 드래그로 고른 부분이 있으면 채팅에 함께 남긴다
+            text: selectedText ? `「${selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}」 ${instruction}` : instruction,
+            at: now
+          },
           {
             id: `swc-${randomUUID()}`,
             role: 'assistant',

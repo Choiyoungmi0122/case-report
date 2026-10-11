@@ -119,6 +119,8 @@ export function buildStudyWriteReviseUserPrompt(params: {
   priorInstructions: string;
   instruction: string;
   hanjaGlossary?: string;
+  /** 임상의가 초안에서 드래그한 부분. 있으면 그 부분만 고친다 */
+  selectedText?: string;
 }): string {
   return `대상 섹션: ${params.sectionId} (${params.sectionName})
 
@@ -144,10 +146,13 @@ ${params.priorInstructions || '(없음)'}
 [현재 초안]
 ${params.currentDraft || '(초안 없음)'}
 
-[이번 지시]
+${params.selectedText ? `[고칠 부분 — 임상의가 초안에서 드래그한 부분]
+${params.selectedText}
+
+` : ''}[이번 지시]
 ${params.instruction}
 
-지시에 따라 초안을 고쳐 쓰세요.`;
+${params.selectedText ? '위 "고칠 부분"만 지시대로 고치고, 나머지 문장은 글자 그대로 둡니다. 고친 부분을 포함한 섹션 전체를 draftText 로 돌려줍니다.' : '지시에 따라 초안을 고쳐 쓰세요.'}`;
 }
 
 export const studyWriteCareCheckSystemPrompt = `
