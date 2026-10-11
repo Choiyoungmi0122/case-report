@@ -710,10 +710,14 @@ router.get('/:id/sections/:sectionId', async (req: Request, res: Response) => {
     // Page entry must not fail because the reviewer output was unparsable.
     // 연구자 다시 보기(읽기 전용)에서는 저장된 검토만 보여 주고, 캐시·성능 로그 갱신이나
     // LLM 호출처럼 참가자 문서를 바꾸는 일은 하지 않는다.
+    // 실험용 Scaffold(studyMode) 케이스도 마찬가지다: 실험 화면은 적정성 검토를 쓰지 않는데,
+    // 공개 뒤 첫 조회에서 캐시 해시가 맞지 않아 LLM 검토가 새로 돌면서(수 초 지연, 세션 중 LLM 호출,
+    // 참가자별로 다른 산출물) 고정 자료 원칙이 깨진다. 고정 결과에 든 검토만 돌려준다.
     const readOnlyView = req.get('X-Read-Only-View') === '1';
+    const studyScaffoldCase = Boolean(anyCase?.studyConfig?.studyMode) && (anyCase?.mode || 'write') === 'scaffold';
     const adequacyReview = preRevealStudySection
       ? emptyAdequacyReview(section)
-      : readOnlyView
+      : readOnlyView || studyScaffoldCase
         ? getStoredAdequacyReview(anyCase, section) || emptyAdequacyReview(section)
         : await ensureAdequacyReviewSafe({
             caseId: id,

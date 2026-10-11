@@ -2709,7 +2709,7 @@ export default function ScaffoldSectionPage() {
                   <div className="scaffold-ai-draft__text">
                     {draftSentences.length === 0
                       ? renderClinicalAnonymizedText(detail?.currentDraft || sectionDraftEntry?.draftText) ||
-                        '초안이 없습니다.'
+                        (isV2 && sectionProgress.draftRevealed ? 'AI 초안을 불러오는 중입니다…' : '초안이 없습니다.')
                       : draftSentences.map((sentence, index) => {
                           const itemId = buildScaffoldItemId(sectionId || '', 'draft_sentence', sentence, index);
                           const flag = flaggedSentences.find((item) => item.itemId === itemId);

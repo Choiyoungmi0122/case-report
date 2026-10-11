@@ -521,19 +521,19 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
 
                 {progress?.draftRevealed ? (
                   <div>
-                    <strong style={recordHeadingStyle}>AI 초안에 빠졌다고 본 내용</strong>
+                    <strong style={recordHeadingStyle}>{isScaffoldV2Data(data) ? 'AI 초안에서 부족하거나 의심스러운 내용' : 'AI 초안에 빠졌다고 본 내용'}</strong>
                     <div style={{ marginTop: 8 }}>{postAi?.missingInDraft || '적은 내용이 없습니다.'}</div>
                   </div>
                 ) : null}
 
                 <div>
-                  <strong style={recordHeadingStyle}>③ 내 초안과 AI 초안을 비교해 보니</strong>
+                  <strong style={recordHeadingStyle}>{isScaffoldV2Data(data) ? '③ 내 초안에서 빠졌거나 부족했던 내용' : '③ 내 초안과 AI 초안을 비교해 보니'}</strong>
                   <div style={{ marginTop: 8 }}>{postAi?.changedJudgment || '기록된 내용이 없습니다.'}</div>
                 </div>
 
                 {postAi?.unresolvedQuestion ? (
                   <div>
-                    <strong style={recordHeadingStyle}>④ 교수님께 확인하고 싶은 것</strong>
+                    <strong style={recordHeadingStyle}>{isScaffoldV2Data(data) ? '④ 교수님이나 전문가에게 확인하고 싶은 것' : '④ 교수님께 확인하고 싶은 것'}</strong>
                     <div style={{ marginTop: 8 }}>{postAi.unresolvedQuestion}</div>
                   </div>
                 ) : null}

@@ -13,6 +13,7 @@ import {
   WidthType
 } from 'docx';
 import { renderClinicalAnonymizedText } from '../deid/publicationRenderer';
+import { isStudyScaffoldV2Case } from '../config/researchMetadata';
 import { Case, CareSection, SectionEvidenceLink, UnsupportedClaim } from '../types';
 import { normalizeUnicodeText, normalizeUnicodeWhitespace } from '../utils/unicode';
 import { ExportLayout, ExportMode, TimelineTableData, TraceabilityAppendixRow } from './types';
@@ -659,15 +660,17 @@ function buildScaffoldSummaryChildren(caseData: Case) {
     }
 
     // 3. What changed after seeing the AI draft
+    // Scaffold V2(v3.0)는 회고 문항의 뜻이 다르다(docs/scaffold_v2_changelog.md D단계). 같은 필드라도 그 버전의 문항으로 적는다.
+    const isV2 = isStudyScaffoldV2Case(caseData);
     const postAi = reflection.postAiReflection || {};
     if (progress.draftRevealed) {
-      children.push(makeSubHeading('AI 초안에 빠졌다고 본 내용'));
+      children.push(makeSubHeading(isV2 ? 'AI 초안에서 부족하거나 의심스러운 내용' : 'AI 초안에 빠졌다고 본 내용'));
       children.push(makeBodyParagraph(safeText(postAi.missingInDraft) || '적은 내용이 없습니다.'));
     }
-    children.push(makeSubHeading('③ 내 초안과 AI 초안을 비교해 보니'));
+    children.push(makeSubHeading(isV2 ? '③ 내 초안에서 빠졌거나 부족했던 내용' : '③ 내 초안과 AI 초안을 비교해 보니'));
     children.push(makeBodyParagraph(safeText(postAi.changedJudgment) || '기록된 내용이 없습니다.'));
     if (safeText(postAi.unresolvedQuestion)) {
-      children.push(makeSubHeading('④ 교수님께 확인하고 싶은 것'));
+      children.push(makeSubHeading(isV2 ? '④ 교수님이나 전문가에게 확인하고 싶은 것' : '④ 교수님께 확인하고 싶은 것'));
       children.push(makeBodyParagraph(safeText(postAi.unresolvedQuestion)));
       instructorQuestions.push(`[${label}] ${safeText(postAi.unresolvedQuestion)}`);
     }
