@@ -109,7 +109,8 @@
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr) minmax(460px, 42%);
   gap: 16px;
-  align-items: start;
+  /* 오른쪽 패널은 초안 칸 높이에 맞춘다. 패널 내용이 더 길 때만 행이 같이 커진다 */
+  align-items: stretch;
 }
 
 .sw-draft__nav {
@@ -118,6 +119,8 @@
   gap: 4px;
   position: sticky;
   top: 16px;
+  /* 행이 stretch 돼도 목록은 위에 붙어 따라오게 */
+  align-self: start;
 }
 
 .sw-draft__nav-item {
@@ -308,15 +311,12 @@
 }
 
 .sw-draft__side {
-  position: sticky;
-  top: 16px;
   background: #fff;
   border: 1px solid #d9e0e8;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 32px);
-  max-height: calc(100vh - 32px);
+  min-height: 420px;
 }
 
 .sw-draft__tabs {
@@ -355,7 +355,7 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-height: 360px;
+  min-height: 200px;
 }
 
 /* 말풍선: AI 답은 배경 없이 본문처럼, 내 요청은 연한 회색 풍선 (ChatGPT/Claude 식) */
