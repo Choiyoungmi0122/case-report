@@ -17,7 +17,7 @@ const PRINCIPLES = `공통 원칙:
 - P4. 잠정 표현 유지: "r/o", "의심", "가능성"으로 기록된 진단이나 판단을 확정된 것으로 바꾸지 않습니다.
 - P5. 효과·인과 주장 금지: 치료 기간 중의 변화는 관찰된 경과로만 기술합니다. 치료가 변화를 일으켰다거나 효과적이었다고 쓰지 않습니다. 환자나 의료진이 그렇게 말한 내용은 그 사람의 진술로 표기합니다.
 - P6. 비식별 표기 유지: 입력에 대괄호로 된 비식별 표기(이름·기관 자리표시)가 있으면 그대로 둡니다. 입력에 없는 자리표시를 새로 만들지 않고, 환자는 "환자"라고만 씁니다.
-- P7. 기록 표기 유지: 환자가 말한 표현(예: "두근거림", "가슴이 울렁거림")은 표준 용어로 바꾸지 않고 그대로 씁니다. 처방명·약재명·변증명·병명은 처음 나올 때 한자를 병기합니다. 기록에 한자가 있으면 그대로 씁니다(예: 담화요심증(痰火擾心證)). 기록에 한자가 없으면 그 용어의 표준 한자를 붙이되 바로 뒤에 "[한자 확인]"을 답니다(예: 황련온담탕(黃連溫膽湯)[한자 확인]). 표준 한자가 확실하지 않으면 한자 없이 "[한자 확인]"만 답니다. 표시는 처음 나올 때 한 번만 하고, 두 번째부터는 한글만 씁니다 (사용자 결정 2026-10-11).
+- P7. 기록 표기 유지: 환자가 말한 표현(예: "두근거림", "가슴이 울렁거림")은 표준 용어로 바꾸지 않고 그대로 씁니다. 처방명·약재명·변증명·병명은 처음 나올 때 한자를 병기합니다. 기록에 한자가 있으면 그대로 씁니다(예: 담화요심증(痰火擾心證)). 입력의 "[한자 표기 목록]"에 있는 용어는 그 한자를 그대로 병기하고 "[한자 확인]"을 달지 않습니다. 목록에도 기록에도 없는 용어는 표준 한자를 붙이되 바로 뒤에 "[한자 확인]"을 답니다(예: 소요산(逍遙散)[한자 확인]). 표준 한자가 확실하지 않으면 한자 없이 "[한자 확인]"만 답니다. 표시는 처음 나올 때 한 번만 하고, 두 번째부터는 한글만 씁니다 (사용자 결정 2026-10-11).
 - P8. 출력: 지정된 JSON 객체 하나만 반환합니다. 사람이 읽는 문장은 모두 한국어로 씁니다.`;
 
 const STYLE = `문체:
@@ -59,12 +59,17 @@ export function buildStudyWriteDraftUserPrompt(params: {
   recordText: string;
   currentDraft: string;
   qaText: string;
+  /** 용어 사전에서 가져온 "용어 = 한자" 목록. 기록·답변에 나온 처방명·변증명만 */
+  hanjaGlossary?: string;
 }): string {
   return `대상 섹션: ${params.sectionId} (${params.sectionName})
 
 [이 섹션의 CARE 세부 항목]
 ${params.careItems}
-
+${params.hanjaGlossary ? `
+[한자 표기 목록 — 이 용어들은 아래 한자를 그대로 병기하고 "[한자 확인]"을 달지 않는다]
+${params.hanjaGlossary}
+` : ''}
 [이 섹션의 CARE 쓰기 규칙]
 ${params.writingRule || '(없음)'}
 
@@ -113,11 +118,16 @@ export function buildStudyWriteReviseUserPrompt(params: {
   qaText: string;
   priorInstructions: string;
   instruction: string;
+  hanjaGlossary?: string;
 }): string {
   return `대상 섹션: ${params.sectionId} (${params.sectionName})
 
 [이 섹션의 CARE 세부 항목]
 ${params.careItems}
+${params.hanjaGlossary ? `
+[한자 표기 목록 — 이 용어들은 아래 한자를 그대로 병기하고 "[한자 확인]"을 달지 않는다]
+${params.hanjaGlossary}
+` : ''}
 
 [이 섹션의 CARE 쓰기 규칙]
 ${params.writingRule || '(없음)'}

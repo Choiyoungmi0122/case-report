@@ -20,6 +20,7 @@ import { StudyWriteCareCheck, StudyWriteSectionState, StudyWriteState } from '..
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER, careItemsText, careWritingRule } from './careItems';
 import { allQuestions, buildRecordText } from './interview';
 import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbound';
+import { applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
 
 /**
  * 실험용 Write ⑤~⑥: 답변을 반영한 섹션 초안(SW-D), 지시로 고쳐 쓰기(SW-R), CARE 점검(SW-C).
@@ -82,6 +83,8 @@ export async function runDraftForSection(params: {
   const recordText = buildRecordText(caseData);
   const currentDraft = currentDraftOf(caseData, sectionId);
   const qaText = await buildQaText(state, sectionId);
+  // 처방명·변증명 한자는 용어 사전 것을 쓴다 (기록·답변에 나온 것만 목록으로)
+  const glossary = glossaryForTexts([recordText, currentDraft, qaText]);
   const output = await callLLMWithSchema(
     StudyWriteDraftOutputSchema,
     studyWriteDraftSystemPrompt,
@@ -92,12 +95,13 @@ export async function runDraftForSection(params: {
       writingRule: careWritingRule(sectionId),
       recordText,
       currentDraft,
-      qaText
+      qaText,
+      hanjaGlossary: formatHanjaGlossary(glossary)
     }),
     { model, label: `SW-D ${sectionId}` }
   );
   return {
-    draftText: dropForeignPlaceholders(output.draftText, [recordText, currentDraft, qaText]),
+    draftText: applyHanjaGlossary(dropForeignPlaceholders(output.draftText, [recordText, currentDraft, qaText]), glossary),
     usedQuestionIds: output.usedQuestionIds || [],
     notes: output.notes || [],
     model
@@ -159,6 +163,7 @@ export async function runRevise(params: {
   const recordText = buildRecordText(caseData);
   const qaText = await buildQaText(state, section.sectionId);
   const safeInstruction = await deidentifyText(instruction);
+  const glossary = glossaryForTexts([recordText, section.draftText, qaText, safeInstruction]);
   const output = await callLLMWithSchema(
     StudyWriteReviseOutputSchema,
     studyWriteReviseSystemPrompt,
@@ -171,12 +176,16 @@ export async function runRevise(params: {
       currentDraft: section.draftText,
       qaText,
       priorInstructions,
-      instruction: safeInstruction
+      instruction: safeInstruction,
+      hanjaGlossary: formatHanjaGlossary(glossary)
     }),
     { model, label: `SW-R ${section.sectionId}` }
   );
   return {
-    draftText: dropForeignPlaceholders(output.draftText, [recordText, section.draftText, qaText, safeInstruction]),
+    draftText: applyHanjaGlossary(
+      dropForeignPlaceholders(output.draftText, [recordText, section.draftText, qaText, safeInstruction]),
+      glossary
+    ),
     changeSummary: output.changeSummary,
     outOfRecordClaims: output.outOfRecordClaims || [],
     model

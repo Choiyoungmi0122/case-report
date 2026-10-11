@@ -248,16 +248,18 @@ export default function StudyWriteInterviewPage() {
           }
           if (item.kind === 'question') {
             return (
-              <div key={item.id} className="sw-bubble sw-bubble--bot">
-                <span className="sw-bubble__label">질문 {item.question.order}</span>
-                {item.question.text}
+              <div key={item.id} className="sw-msg sw-msg--bot">
+                <span className="sw-msg__label">AI · 질문 {item.question.order}</span>
+                <div className="sw-bubble sw-bubble--bot">{item.question.text}</div>
               </div>
             );
           }
           const { question } = item;
           const isEditing = editingId === question.id;
           return (
-            <div key={item.id} className="sw-bubble sw-bubble--user">
+            <div key={item.id} className="sw-msg sw-msg--user">
+              <span className="sw-msg__label">나</span>
+              <div className="sw-bubble sw-bubble--user">
               {isEditing ? (
                 <div className="sw-bubble__edit">
                   <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} rows={3} />
@@ -272,7 +274,6 @@ export default function StudyWriteInterviewPage() {
                 </div>
               ) : (
                 <>
-                  <span className="sw-bubble__label sw-bubble__label--me">나</span>
                   {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
                   {!locked ? (
                     <button
@@ -288,6 +289,7 @@ export default function StudyWriteInterviewPage() {
                   ) : null}
                 </>
               )}
+              </div>
             </div>
           );
         })}
