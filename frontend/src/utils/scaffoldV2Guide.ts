@@ -108,3 +108,80 @@ export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string; 
     example: '예: 교육한 자가 치료를 실제로 했는지 보여 주는 기록이 없다.'
   }
 };
+
+/** AI 초안 문장 검토 사용법 (V2-08). 화면 상단에 짧게 보여 준다. */
+export const REVIEW_STEPS_V2: Array<{ title: string; body: string }> = [
+  {
+    title: '비교하며 읽고, 다시 볼 문장을 눌러 표시',
+    body: '위의 내 초안과 견주어 읽습니다. 내 초안에 없던 내용, 기록과 달라 보이는 문장, 확실하지 않은 문장을 누르면 번호가 붙은 카드가 아래에 생깁니다. 다시 누르면 표시가 풀립니다.'
+  },
+  {
+    title: '카드에서 종류 고르기',
+    body: '왜 표시했는지 네 가지 중 하나를 고릅니다. 각 종류의 뜻은 버튼 아래에 나옵니다.'
+  },
+  {
+    title: '이유 적고 기록 근거 연결 → 저장',
+    body: '“내 초안에 더하고 싶음”은 이유가 선택이고, 나머지는 이유를 적거나 기록 근거를 하나 이상 연결해야 저장됩니다. 왼쪽 기록 검색으로 구절을 찾은 뒤 “기록 근거 연결하기”에서 고르세요.'
+  }
+];
+
+export const REVIEW_NOT_FLAGGED_NOTE_V2 =
+  '표시하지 않은 문장은 “수용”으로 기록되지 않습니다. 표시한 문장과 그 이유만 저장됩니다. 표시할 문장이 없으면 그대로 아래 정리로 진행해도 됩니다.';
+
+/** 표시한 문장의 종류별 뜻과 이유 작성 힌트 (V2-08). 값은 기존 DRAFT_FLAG_OPTIONS와 같다. */
+export const DRAFT_FLAG_GUIDE_V2: Record<string, { description: string; reasonHint: string }> = {
+  want_to_add: {
+    description: 'AI 초안에는 있는데 내 초안에 없던 내용이라, 내 초안에 더하고 싶다.',
+    reasonHint: '어떤 점을 더하고 싶은지 한 줄로 적어 두면 나중에 내 초안을 고칠 때 도움이 됩니다. (선택)'
+  },
+  differs_from_record: {
+    description: '이 문장이 왼쪽 기록과 다르거나, 기록에 없는 내용을 적었다.',
+    reasonHint: '기록의 어느 부분과 어떻게 다른지 적고, 그 구절을 기록 근거로 연결하세요.'
+  },
+  needs_additional_confirmation: {
+    description: '기록만으로는 맞는지 확인하기 어려워 환자·보호자·다른 기록으로 더 확인해야 한다.',
+    reasonHint: '무엇을 어떻게 확인해야 하는지 적으세요.'
+  },
+  needs_instructor_review: {
+    description: '해석이나 표현이 적절한지 교수님께 물어보고 싶다.',
+    reasonHint: '무엇이 궁금한지 적으세요. 마지막 정리의 “교수님께 확인하고 싶은 것”에도 모아 보여 줍니다.'
+  }
+};
+
+/**
+ * 사후 회고 세 문항 (V2-09). 저장 필드는 V1과 같은 postAiReflection을 재사용한다.
+ *  - changedJudgment  ← 내 초안에서 빠졌거나 부족했던 내용 (필수)
+ *  - missingInDraft   ← AI 초안에서 부족하거나 의심스러운 내용 (선택)
+ *  - unresolvedQuestion ← 교수님·전문가에게 확인하고 싶은 것 (선택)
+ * V1에서는 changedJudgment가 "내 초안과 AI 초안을 비교해 보니"(포괄), missingInDraft가 "AI 초안에 빠진 내용"이었다.
+ * 분석 시 버전별로 문항 뜻이 다르다는 점을 docs/scaffold_v2_changelog.md에 적어 두었다.
+ */
+export const REFLECTION_PROMPTS_V2: Array<{
+  field: 'changedJudgment' | 'missingInDraft' | 'unresolvedQuestion';
+  label: string;
+  required: boolean;
+  placeholder: string;
+  editKey: string;
+}> = [
+  {
+    field: 'changedJudgment',
+    label: '내 초안에서 빠졌거나 부족했던 내용',
+    required: true,
+    placeholder: 'AI 초안과 견주어 보니 내 초안에 없거나 모자랐던 것. 예: 한약의 용량과 복용 기간을 쓰지 않았다 / 큰 차이 없음',
+    editKey: 'comparison_note'
+  },
+  {
+    field: 'missingInDraft',
+    label: 'AI 초안에서 부족하거나 의심스러운 내용 (선택)',
+    required: false,
+    placeholder: '기록에는 있는데 AI 초안에 없는 것, 기록과 다르거나 확실하지 않아 그대로 쓰면 안 되겠다고 생각한 것.',
+    editKey: 'missing_in_draft'
+  },
+  {
+    field: 'unresolvedQuestion',
+    label: '교수님이나 전문가에게 확인하고 싶은 것 (선택)',
+    required: false,
+    placeholder: '기록만으로 판단하기 어려워 물어보고 싶은 것, 증례보고에 어떻게 써야 할지 상의하고 싶은 것.',
+    editKey: 'unresolved_question'
+  }
+];

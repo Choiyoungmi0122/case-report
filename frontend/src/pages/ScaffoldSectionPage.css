@@ -1340,3 +1340,142 @@ body.scaffold-pane-resizing textarea {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Scaffold V2 (v3.0) 공개 후 화면: 검토 사용법, 문장 번호, 카드 단계, 회고 */
+/* ------------------------------------------------------------------ */
+
+.scaffold-review-howto {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #c9d8f5;
+  border-radius: 8px;
+  background: #f3f7ff;
+}
+
+.scaffold-review-howto ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scaffold-review-howto li {
+  display: grid;
+  gap: 2px;
+  color: #1f2f3d;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.scaffold-review-howto li strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17324d;
+  font-size: 15px;
+}
+
+.scaffold-review-howto__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2a55b0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scaffold-review-howto p {
+  margin: 10px 0 0;
+  color: #3c5a94;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.scaffold-ai-sentence__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-right: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 800;
+  vertical-align: 2px;
+}
+
+.scaffold-ai-sentence.is-flagged .scaffold-ai-sentence__num {
+  background: #d9822b;
+  color: #fff;
+}
+
+.scaffold-ai-sentence.is-flagged.is-add .scaffold-ai-sentence__num {
+  background: #2f8055;
+}
+
+.scaffold-flag-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scaffold-flag-card__num {
+  padding: 3px 10px;
+  border: 1px solid #d9822b;
+  border-radius: 999px;
+  background: #fff;
+  color: #7a4300;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.scaffold-flag-card.is-add .scaffold-flag-card__num {
+  border-color: #2f8055;
+  color: #1c5a3a;
+}
+
+.scaffold-flag-card__head-hint {
+  color: #6b7c90;
+  font-size: 13px;
+}
+
+.scaffold-flag-card__step {
+  display: grid;
+  gap: 2px;
+  color: #17324d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.scaffold-flag-card__step small {
+  color: #5a6c81;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.scaffold-flag-card__kind-desc {
+  margin: -4px 0 0;
+  color: #5c4a22;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.scaffold-required-mark {
+  color: #b42318;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}

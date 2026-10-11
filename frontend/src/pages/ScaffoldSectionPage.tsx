@@ -14,7 +14,14 @@ import {
   type EmrAnchor
 } from '../components/scaffold/emrSearch';
 import { PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
-import { SUFFICIENCY_OPTION_GUIDE_V2, TI_GUIDE_V2 } from '../utils/scaffoldV2Guide';
+import {
+  DRAFT_FLAG_GUIDE_V2,
+  REFLECTION_PROMPTS_V2,
+  REVIEW_NOT_FLAGGED_NOTE_V2,
+  REVIEW_STEPS_V2,
+  SUFFICIENCY_OPTION_GUIDE_V2,
+  TI_GUIDE_V2
+} from '../utils/scaffoldV2Guide';
 import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
@@ -613,6 +620,11 @@ export default function ScaffoldSectionPage() {
     sectionReflection.postAiReflection?.missingInDraft || ''
   ]);
 
+  // V2 회고 자동 저장: 방금 보낸 값이 그대로 돌아온 경우에는 입력 칸을 다시 맞추지 않는다.
+  // (저장 요청 뒤에 이어서 친 글자가 서버 응답으로 지워지는 것을 막는다.)
+  const lastAutosavedReflectionRef = useRef<string | null>(null);
+  const reflectionAutosaveTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     setKeyInformationItems(
       sectionReflection.learnerKeyInformationItems || sectionReflection.learnerIdentifiedKeyInfo || []
@@ -620,6 +632,13 @@ export default function ScaffoldSectionPage() {
     setMissingInformationItems(sectionReflection.learnerIdentifiedMissingItems || []);
     setNoRelevantEvidenceConfirmed(Boolean(sectionReflection.noRelevantEvidenceConfirmed));
     setAuthoringNotes(sectionReflection.learnerNotes || '');
+    const savedPost = JSON.stringify({
+      changedJudgment: sectionReflection.postAiReflection?.changedJudgment || '',
+      unresolvedQuestion: sectionReflection.postAiReflection?.unresolvedQuestion || '',
+      transferPlan: sectionReflection.postAiReflection?.transferPlan || '',
+      missingInDraft: sectionReflection.postAiReflection?.missingInDraft || ''
+    });
+    if (lastAutosavedReflectionRef.current === savedPost) return;
     setChangedJudgmentReflection(sectionReflection.postAiReflection?.changedJudgment || '');
     setUnresolvedQuestionReflection(sectionReflection.postAiReflection?.unresolvedQuestion || '');
     setTransferPlanReflection(sectionReflection.postAiReflection?.transferPlan || '');
@@ -874,7 +893,7 @@ export default function ScaffoldSectionPage() {
       const stored = existingReviewMap.get(itemId);
       const savedFlag = isFlaggedDraftSentence(stored) ? stored : undefined;
       const kind = (judgmentDrafts[itemId] || savedFlag?.judgment || '') as string;
-      return { sentence, itemId, savedFlag, isOpen: Boolean(openFlagIds[itemId]), kind };
+      return { sentence, itemId, savedFlag, isOpen: Boolean(openFlagIds[itemId]), kind, number: index + 1 };
     })
     .filter((item) => item.savedFlag || item.isOpen);
 
@@ -921,7 +940,26 @@ export default function ScaffoldSectionPage() {
     return () => window.clearTimeout(timer);
   }, [sourceAnchor]);
   // V2: CARE 기준·예시 상자는 접었다 펼 수 있고, 머리말 버튼으로 언제든 다시 연다.
+  // AI 초안이 공개된 뒤에는 비교에 집중하도록 기본으로 접는다.
   const [careGuideOpen, setCareGuideOpen] = useState(true);
+  useEffect(() => {
+    if (sectionProgress.draftRevealed) setCareGuideOpen(false);
+  }, [sectionProgress.draftRevealed, sectionId]);
+  // V2: 공개 직후 서버 저장이 끝나기 전에 다시 불러오면 초안이 비어 보일 수 있다. 잠시 뒤 몇 번 더 불러온다.
+  const draftReloadAttemptsRef = useRef(0);
+  useEffect(() => {
+    if (!isV2 || !sectionProgress.draftRevealed || draftSentences.length > 0) {
+      draftReloadAttemptsRef.current = 0;
+      return;
+    }
+    if (draftReloadAttemptsRef.current >= 3) return;
+    const timer = window.setTimeout(() => {
+      draftReloadAttemptsRef.current += 1;
+      void loadData(false);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isV2, sectionProgress.draftRevealed, draftSentences.length]);
   const careGuideRef = useRef<HTMLDetailsElement | null>(null);
   const reopenCareGuide = () => {
     setCareGuideOpen(true);
@@ -1180,15 +1218,18 @@ export default function ScaffoldSectionPage() {
    * 이전에는 화면 상태로만 존재해서 새로고침하면 사라졌고,
    * preRevealSnapshot(서버가 reveal 시점에 reflection에서 생성)도 비어 있었다.
    */
-  const persistSectionReflection = async (overrides?: {
-    learnerNotes?: string;
-    postAiReflection?: {
-      changedJudgment: string;
-      unresolvedQuestion: string;
-      transferPlan: string;
-      missingInDraft?: string;
-    };
-  }) => {
+  const persistSectionReflection = async (
+    overrides?: {
+      learnerNotes?: string;
+      postAiReflection?: {
+        changedJudgment: string;
+        unresolvedQuestion: string;
+        transferPlan: string;
+        missingInDraft?: string;
+      };
+    },
+    options?: { silent?: boolean }
+  ) => {
     if (!caseId || !sectionId) return null;
 
     // 이 엔드포인트는 보내지 않은 필드를 undefined로 덮어쓴다.
@@ -1224,11 +1265,37 @@ export default function ScaffoldSectionPage() {
       learnerNotes: overrides?.learnerNotes !== undefined ? overrides.learnerNotes : authoringNotes
     });
     patchScaffoldState(nextState.scaffoldState);
-    await logScaffoldEvent('learner_reflection_saved', {
-      keyInfoCount: keyInformationItems.length,
-      missingCount: missingInformationItems.length
-    });
+    if (!options?.silent) {
+      await logScaffoldEvent('learner_reflection_saved', {
+        keyInfoCount: keyInformationItems.length,
+        missingCount: missingInformationItems.length
+      });
+    }
     return nextState;
+  };
+
+  // V2-09: 회고는 입력이 1.5초 멈추면 자동 저장한다. 완료 버튼을 누르기 전에 새로고침해도 남는다.
+  const scheduleReflectionAutosave = (next: {
+    changedJudgment: string;
+    unresolvedQuestion: string;
+    transferPlan: string;
+    missingInDraft: string;
+  }) => {
+    if (!isV2 || !sectionProgress.draftRevealed) return;
+    if (reflectionAutosaveTimerRef.current) window.clearTimeout(reflectionAutosaveTimerRef.current);
+    reflectionAutosaveTimerRef.current = window.setTimeout(() => {
+      reflectionAutosaveTimerRef.current = null;
+      const payload = {
+        changedJudgment: next.changedJudgment.trim(),
+        unresolvedQuestion: next.unresolvedQuestion.trim(),
+        transferPlan: next.transferPlan.trim(),
+        missingInDraft: next.missingInDraft.trim()
+      };
+      lastAutosavedReflectionRef.current = JSON.stringify(payload);
+      persistSectionReflection({ postAiReflection: payload }, { silent: true }).catch((err: any) => {
+        console.error('Failed to autosave reflection:', err);
+      });
+    }, 1500);
   };
 
   /** Step 1 → Step 2: 기록 검토 완료를 저장한다. */
@@ -1589,8 +1656,16 @@ export default function ScaffoldSectionPage() {
   const handleCompleteSection = async () => {
     if (!caseId || !sectionId) return;
     if (!postAiReflectionComplete && draftSentences.length > 0) {
-      setError('내 초안과 AI 초안을 비교해 본 내용을 적어주세요. 차이가 없다면 “큰 차이 없음”으로 적을 수 있습니다.');
+      setError(
+        isV2
+          ? '내 초안에서 빠졌거나 부족했던 내용을 적어주세요. 없었다면 “큰 차이 없음”으로 적을 수 있습니다.'
+          : '내 초안과 AI 초안을 비교해 본 내용을 적어주세요. 차이가 없다면 “큰 차이 없음”으로 적을 수 있습니다.'
+      );
       return;
+    }
+    if (reflectionAutosaveTimerRef.current) {
+      window.clearTimeout(reflectionAutosaveTimerRef.current);
+      reflectionAutosaveTimerRef.current = null;
     }
     setSavingProgressKey('draftReviewCompleted');
     setError(null);
@@ -2596,11 +2671,28 @@ export default function ScaffoldSectionPage() {
                 {/* AI Draft: 문장을 눌러 다시 볼 문장으로 표시한다 */}
                 <div className="scaffold-ai-draft">
                   <div className="scaffold-ai-draft__badge">AI가 쓴 초안</div>
-                  <p className="scaffold-ai-draft__hint">
-                    위의 내 초안과 무엇이 다른지 비교하며 읽어 보세요. 내 초안에 없던 내용은 무엇인지, 기록과
-                    달라 보이는 문장은 없는지 살펴보세요. 내 초안에 더하고 싶은 문장, 다시 확인하고 싶은 문장은
-                    눌러서 표시할 수 있고, 다시 누르면 표시가 풀립니다.
-                  </p>
+                  {isV2 ? (
+                    <div className="scaffold-review-howto" aria-label="문장 검토 방법">
+                      <ol>
+                        {REVIEW_STEPS_V2.map((step, stepIndex) => (
+                          <li key={step.title}>
+                            <strong>
+                              <span className="scaffold-review-howto__num">{stepIndex + 1}</span>
+                              {step.title}
+                            </strong>
+                            <span>{step.body}</span>
+                          </li>
+                        ))}
+                      </ol>
+                      <p>{REVIEW_NOT_FLAGGED_NOTE_V2}</p>
+                    </div>
+                  ) : (
+                    <p className="scaffold-ai-draft__hint">
+                      위의 내 초안과 무엇이 다른지 비교하며 읽어 보세요. 내 초안에 없던 내용은 무엇인지, 기록과
+                      달라 보이는 문장은 없는지 살펴보세요. 내 초안에 더하고 싶은 문장, 다시 확인하고 싶은 문장은
+                      눌러서 표시할 수 있고, 다시 누르면 표시가 풀립니다.
+                    </p>
+                  )}
                   <div className="scaffold-ai-draft__text">
                     {draftSentences.length === 0
                       ? renderClinicalAnonymizedText(detail?.currentDraft || sectionDraftEntry?.draftText) ||
@@ -2612,13 +2704,16 @@ export default function ScaffoldSectionPage() {
                           return (
                             <button
                               key={itemId}
+                              id={`ai-sentence-${index + 1}`}
                               type="button"
                               className={`scaffold-ai-sentence${flagged ? ' is-flagged' : ''}${
                                 flag?.kind === 'want_to_add' ? ' is-add' : ''
-                              }`}
+                              }${isV2 ? ' is-numbered' : ''}`}
                               onClick={() => toggleDraftFlag(itemId)}
                               aria-pressed={flagged}
+                              aria-label={isV2 ? `문장 ${index + 1}` : undefined}
                             >
+                              {isV2 ? <span className="scaffold-ai-sentence__num" aria-hidden="true">{index + 1}</span> : null}
                               {renderClinicalAnonymizedText(sentence)}
                             </button>
                           );
@@ -2649,15 +2744,37 @@ export default function ScaffoldSectionPage() {
                         return (
                           <div
                             key={item.itemId}
+                            id={`flag-card-${item.number}`}
                             className={`scaffold-flag-card${judgment === 'want_to_add' ? ' is-add' : ''}`}
                           >
+                            {isV2 ? (
+                              <div className="scaffold-flag-card__head">
+                                <button
+                                  type="button"
+                                  className="scaffold-flag-card__num"
+                                  onClick={() =>
+                                    document.getElementById(`ai-sentence-${item.number}`)?.scrollIntoView({ block: 'center' })
+                                  }
+                                  title="AI 초안에서 이 문장 위치 보기"
+                                >
+                                  문장 {item.number}
+                                </button>
+                                <span className="scaffold-flag-card__head-hint">
+                                  {item.savedFlag ? '저장됨' : '아직 저장되지 않음'}
+                                  {judgment ? ` · ${DRAFT_FLAG_OPTIONS.find((option) => option.value === judgment)?.label || ''}` : ''}
+                                </span>
+                              </div>
+                            ) : null}
                             <blockquote>{renderClinicalAnonymizedText(item.sentence)}</blockquote>
+                            {isV2 ? <div className="scaffold-flag-card__step">① 왜 표시했나요? 종류를 고르세요.</div> : null}
                             <div className="scaffold-flag-card__types" role="group" aria-label="표시한 이유의 종류">
                               {DRAFT_FLAG_OPTIONS.map((option) => (
                                 <button
                                   key={option.value}
                                   type="button"
                                   className={judgment === option.value ? 'is-active' : ''}
+                                  title={isV2 ? DRAFT_FLAG_GUIDE_V2[option.value]?.description : undefined}
+                                  aria-label={isV2 ? option.label : undefined}
                                   onClick={() =>
                                     {
                                       logUiAction('sentence_flag_kind_selected', { judgment: option.value });
@@ -2669,6 +2786,17 @@ export default function ScaffoldSectionPage() {
                                 </button>
                               ))}
                             </div>
+                            {isV2 && judgment && DRAFT_FLAG_GUIDE_V2[judgment] ? (
+                              <p className="scaffold-flag-card__kind-desc">{DRAFT_FLAG_GUIDE_V2[judgment].description}</p>
+                            ) : null}
+                            {isV2 ? (
+                              <div className="scaffold-flag-card__step">
+                                ② 이유{reasonOptional ? ' (선택)' : ''}
+                                {judgment && DRAFT_FLAG_GUIDE_V2[judgment] ? (
+                                  <small>{DRAFT_FLAG_GUIDE_V2[judgment].reasonHint}</small>
+                                ) : null}
+                              </div>
+                            ) : null}
                             <textarea
                               value={note}
                               onChange={(event) =>
@@ -2683,6 +2811,12 @@ export default function ScaffoldSectionPage() {
                                     : '원기록의 어느 부분과 어떻게 다른지, 또는 무엇을 확인해야 하는지 적어 주세요.'
                               }
                             />
+                            {isV2 ? (
+                              <div className="scaffold-flag-card__step">
+                                ③ 기록 근거 연결{reasonOptional ? ' (선택)' : ' (이유 대신 연결해도 됩니다)'}
+                                <small>왼쪽 기록 검색으로 관련 구절을 찾은 뒤, 아래에서 그 구절이 든 기록을 고르세요. 선택한 근거는 이유와 함께 저장됩니다.</small>
+                              </div>
+                            ) : null}
                             <ScaffoldEvidenceSelector
                               collapsible
                               choices={evidenceChoices}
@@ -2784,10 +2918,55 @@ export default function ScaffoldSectionPage() {
                     <div>
                       <div className="scaffold-post-ai-reflection__eyebrow">정리</div>
                       <h3 id="post-ai-reflection-title">AI 초안을 읽고 난 뒤</h3>
-                      <p>내가 쓴 초안과 AI 초안을 비교하면서 알게 된 것을 짧게 적어 주세요.</p>
+                      <p>
+                        {isV2
+                          ? '내 초안과 AI 초안을 비교하면서 알게 된 것을 세 갈래로 나눠 짧게 적어 주세요. 적는 동안 자동으로 저장됩니다.'
+                          : '내가 쓴 초안과 AI 초안을 비교하면서 알게 된 것을 짧게 적어 주세요.'}
+                      </p>
                     </div>
 
-                    <label>
+                    {isV2
+                      ? REFLECTION_PROMPTS_V2.map((prompt) => {
+                          const values = {
+                            changedJudgment: changedJudgmentReflection,
+                            missingInDraft: missingInDraftReflection,
+                            unresolvedQuestion: unresolvedQuestionReflection
+                          };
+                          const setters = {
+                            changedJudgment: setChangedJudgmentReflection,
+                            missingInDraft: setMissingInDraftReflection,
+                            unresolvedQuestion: setUnresolvedQuestionReflection
+                          };
+                          const value = values[prompt.field];
+                          return (
+                            <label key={prompt.field}>
+                              <span>
+                                {prompt.label}
+                                {prompt.required ? <em className="scaffold-required-mark"> 필수</em> : null}
+                              </span>
+                              <textarea
+                                value={value}
+                                onChange={(event) => {
+                                  setters[prompt.field](event.target.value);
+                                  scheduleReflectionAutosave({
+                                    changedJudgment: changedJudgmentReflection,
+                                    unresolvedQuestion: unresolvedQuestionReflection,
+                                    transferPlan: transferPlanReflection,
+                                    missingInDraft: missingInDraftReflection,
+                                    [prompt.field]: event.target.value
+                                  });
+                                }}
+                                onFocus={() => beginFieldEdit(prompt.editKey, value)}
+                                onBlur={() => endFieldEdit(prompt.editKey, value)}
+                                placeholder={prompt.placeholder}
+                                rows={3}
+                              />
+                            </label>
+                          );
+                        })
+                      : null}
+
+                    <label style={isV2 ? { display: 'none' } : undefined}>
                       <span>AI 초안에 빠진 내용이 있나요? (선택)</span>
                       <textarea
                         value={missingInDraftReflection}
@@ -2799,7 +2978,7 @@ export default function ScaffoldSectionPage() {
                       />
                     </label>
 
-                    <label>
+                    <label style={isV2 ? { display: 'none' } : undefined}>
                       <span>내 초안과 AI 초안을 비교해 보니</span>
                       <textarea
                         value={changedJudgmentReflection}
@@ -2811,7 +2990,7 @@ export default function ScaffoldSectionPage() {
                       />
                     </label>
 
-                    <label>
+                    <label style={isV2 ? { display: 'none' } : undefined}>
                       <span>교수님께 확인하고 싶은 것 (선택)</span>
                       <textarea
                         value={unresolvedQuestionReflection}
@@ -2841,7 +3020,11 @@ export default function ScaffoldSectionPage() {
                       표시한 문장 {unsavedFlagCount}개를 저장하거나 표시를 취소해 주세요.
                     </p>
                   ) : draftSentences.length > 0 && !postAiReflectionComplete ? (
-                    <p className="scaffold-post-ai-reflection__helper">‘내 초안과 AI 초안을 비교해 보니’를 적으면 완료할 수 있습니다.</p>
+                    <p className="scaffold-post-ai-reflection__helper">
+                      {isV2
+                        ? '‘내 초안에서 빠졌거나 부족했던 내용’을 적으면 완료할 수 있습니다. 부족한 것이 없었다면 “큰 차이 없음”으로 적어도 됩니다.'
+                        : '‘내 초안과 AI 초안을 비교해 보니’를 적으면 완료할 수 있습니다.'}
+                    </p>
                   ) : null}
                 </div>
               </div>
