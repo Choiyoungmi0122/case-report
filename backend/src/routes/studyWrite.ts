@@ -412,7 +412,10 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
           {
             id: `swc-${randomUUID()}`,
             role: 'assistant',
-            text: changed ? revised.changeSummary : `${revised.changeSummary} (초안은 바뀌지 않았습니다)`,
+            // 본문이 그대로면 모델이 "삭제했다"고 써도 믿지 않고 사실대로 알린다
+            text: changed
+              ? revised.changeSummary
+              : '초안을 바꾸지 않았습니다. 지시에 해당하는 내용이 이 섹션에 없거나 이미 반영되어 있습니다. 다른 섹션의 내용이면 그 섹션에서 요청해 주세요.',
             at: now,
             resultVersion: changed ? version : undefined
           }
