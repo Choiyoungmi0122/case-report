@@ -678,36 +678,110 @@
   color: #7a4b00;
 }
 
-.sw-draft__answer {
+/* 내 답변: 이 섹션에 쓰인 답만, 질문은 작게·답은 크게 */
+.sw-draft__answers {
+  padding: 14px 16px;
+}
+
+.sw-answers__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eef1f4;
-  font-size: 13px;
 }
 
-.sw-draft__answer strong {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: 600;
-  color: #42566b;
-}
-
-.sw-draft__answer p {
+.sw-answers__head p {
   margin: 0;
-  color: #17324d;
+  font-size: 13px;
+  color: #5a6c81;
+  line-height: 1.5;
 }
 
-.sw-draft__answer p em {
+.sw-draft__side .sw-answers__head .is-link {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2f6ea5;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sw-answer {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid #e3e8ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sw-answer__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sw-answer__no {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2f6ea5;
+  white-space: nowrap;
+}
+
+.sw-answer__sections {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
   color: #8492a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sw-draft__side .sw-answer__edit {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2f6ea5;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-answer__question {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5a6c81;
+}
+
+.sw-answer__text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #1f2a3d;
+  white-space: pre-wrap;
+}
+
+.sw-answer__text em {
+  color: #8492a3;
+  font-style: normal;
 }
 
 .sw-draft__answer-edit textarea {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid #c8d2dd;
-  border-radius: 8px;
+  border-radius: 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: vertical;
 }
 
 .sw-draft__answer-edit div {

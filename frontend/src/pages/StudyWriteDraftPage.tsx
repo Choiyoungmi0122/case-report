@@ -58,6 +58,8 @@ export default function StudyWriteDraftPage() {
   const [uploading, setUploading] = useState(false);
   const [editingAnswerId, setEditingAnswerId] = useState<string | null>(null);
   const [answerDraft, setAnswerDraft] = useState('');
+  // 내 답변 탭: 기본은 이 섹션에 쓰인 답만, 원하면 전체
+  const [showAllAnswers, setShowAllAnswers] = useState(false);
   const [dirtySectionIds, setDirtySectionIds] = useState<string[]>([]);
   const [regenerating, setRegenerating] = useState(false);
   const kicked = useRef(false);
@@ -492,47 +494,69 @@ export default function StudyWriteDraftPage() {
           ) : null}
 
           {tab === 'answers' ? (
-            <div className="sw-draft__answers">
-              <p className="sw-draft__care-hint">
-                질의응답에서 한 답입니다. {locked ? '최종 수정 단계라 고칠 수 없습니다.' : '고치면 관련 섹션을 다시 쓸 수 있습니다.'}
-              </p>
-              {questions.map((question) => (
-                <div key={question.id} className="sw-draft__answer">
-                  <strong>
-                    질문 {question.order}. {question.text}
-                  </strong>
-                  {editingAnswerId === question.id ? (
-                    <div className="sw-draft__answer-edit">
-                      <textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} rows={3} />
-                      <div>
-                        <button type="button" onClick={() => void saveAnswer(question)}>
-                          저장
-                        </button>
-                        <button type="button" className="is-secondary" onClick={() => setEditingAnswerId(null)}>
-                          취소
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
+            (() => {
+              const sectionName = (id: string) => data?.sections.find((item) => item.sectionId === id)?.name || id;
+              const relevant = section
+                ? questions.filter((question) => question.priority === 'case' || question.targetSectionIds.includes(section.sectionId))
+                : questions;
+              const shown = showAllAnswers ? questions : relevant;
+              return (
+                <div className="sw-draft__answers">
+                  <div className="sw-answers__head">
                     <p>
-                      {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
-                      {!locked ? (
-                        <button
-                          type="button"
-                          className="is-link"
-                          onClick={() => {
-                            setEditingAnswerId(question.id);
-                            setAnswerDraft(question.answer);
-                          }}
-                        >
-                          수정
-                        </button>
-                      ) : null}
+                      {showAllAnswers
+                        ? `질의응답 답 전체 ${questions.length}개.`
+                        : `이 섹션을 쓸 때 참고한 답 ${relevant.length}개.`}{' '}
+                      {locked ? '최종 수정 단계라 고칠 수 없습니다.' : '고치면 관련 섹션을 다시 쓸 수 있습니다.'}
                     </p>
-                  )}
+                    {questions.length !== relevant.length ? (
+                      <button type="button" className="is-link" onClick={() => setShowAllAnswers((value) => !value)}>
+                        {showAllAnswers ? '이 섹션 것만' : `전체 보기 (${questions.length})`}
+                      </button>
+                    ) : null}
+                  </div>
+                  {shown.length === 0 ? <p className="sw-draft__empty">이 섹션에 쓰인 답이 없습니다.</p> : null}
+                  {shown.map((question) => (
+                    <article key={question.id} className="sw-answer">
+                      <header className="sw-answer__head">
+                        <span className="sw-answer__no">질문 {question.order}</span>
+                        <span className="sw-answer__sections">{question.targetSectionIds.map(sectionName).join(' · ')}</span>
+                        {!locked && editingAnswerId !== question.id ? (
+                          <button
+                            type="button"
+                            className="is-link sw-answer__edit"
+                            onClick={() => {
+                              setEditingAnswerId(question.id);
+                              setAnswerDraft(question.answer);
+                            }}
+                          >
+                            수정
+                          </button>
+                        ) : null}
+                      </header>
+                      <p className="sw-answer__question">{question.text}</p>
+                      {editingAnswerId === question.id ? (
+                        <div className="sw-draft__answer-edit">
+                          <textarea value={answerDraft} onChange={(event) => setAnswerDraft(event.target.value)} rows={4} autoFocus />
+                          <div>
+                            <button type="button" onClick={() => void saveAnswer(question)}>
+                              저장
+                            </button>
+                            <button type="button" className="is-secondary" onClick={() => setEditingAnswerId(null)}>
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="sw-answer__text">
+                          {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
+                        </p>
+                      )}
+                    </article>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()
           ) : null}
         </aside>
       </div>
