@@ -397,6 +397,15 @@ function detectTokenCandidates(text: string): Array<{ surface: string; start: nu
   return Array.from(candidates.values());
 }
 
+const LATIN_OR_DIGIT = /[A-Za-z0-9]/;
+
+/** 일치 구간의 첫·끝 글자가 영문·숫자이면, 바로 바깥 글자도 영문·숫자가 아니어야 한다. */
+function hasLatinWordBoundary(text: string, start: number, end: number): boolean {
+  if (LATIN_OR_DIGIT.test(text[start] || '') && start > 0 && LATIN_OR_DIGIT.test(text[start - 1])) return false;
+  if (LATIN_OR_DIGIT.test(text[end - 1] || '') && end < text.length && LATIN_OR_DIGIT.test(text[end])) return false;
+  return true;
+}
+
 function rangesOverlap(a: { start: number; end: number }, b: { start: number; end: number }) {
   return a.start < b.end && b.start < a.end;
 }
@@ -442,6 +451,11 @@ export async function normalizeTextWithTerms(
 ): Promise<NormalizeTextResult> {
   const normalizedInputText = normalizeUnicodeText(text);
   const directMatches: DetectedMatch[] = [];
+  // 비식별 자리표시([PATIENT_NAME_1] 등)는 용어가 아니다. 토큰 후보처럼 직접 일치에서도 건너뛴다.
+  const placeholderRanges = Array.from(normalizedInputText.matchAll(DEIDENTIFIED_PLACEHOLDER_REGEX)).map((match) => ({
+    start: match.index || 0,
+    end: (match.index || 0) + match[0].length
+  }));
 
   for (const variant of directMatchVariants) {
     if (!variant.variant) continue;
@@ -451,6 +465,14 @@ export async function normalizeTextWithTerms(
       const end = start + surface.length;
 
       if (directMatches.some((existing) => rangesOverlap(existing, { start, end }))) {
+        continue;
+      }
+      if (placeholderRanges.some((range) => rangesOverlap(range, { start, end }))) {
+        continue;
+      }
+      // 영문·숫자 표기는 단어 경계가 있어야 일치로 본다. 이전에는 "AT"(acupuncture treatment)가 PATIENT·DATE 안에서,
+      // "TA"가 HOSPITAL 안에서 잡혔다 (2026-10-12). 한글 표기는 조사가 붙으므로 경계를 보지 않는다.
+      if (!hasLatinWordBoundary(normalizedInputText, start, end)) {
         continue;
       }
 

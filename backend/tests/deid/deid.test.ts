@@ -94,18 +94,27 @@ async function run() {
   ]);
   assert.equal(colonSpans.replacementMap[0]?.originalText, 'A:1');
 
+  // 전문용어 확인 흐름. 2026-10-11 사용자 결정: 글자 일부만 겹치는 표현("귀비" ⊂ "귀비탕")은 같은 용어라는 근거가
+  // 못 되므로 묻지 않고 원문을 둔다. 확인 요청은 오타·약어처럼 같은 용어를 다르게 쓴 것에만 생긴다.
+  const TYPO_FORMULA = '시가용골모려탕'; // 시호가용골모려탕의 오타
   const preprocessed = await preprocessVisitsForChain1([
     {
       index: 1,
       date: '2024-03-02',
-      text: `${PATIENT_NAME} \uD658\uC790\uB294 ${GUIBI} \uBCF5\uC6A9 \uD6C4 PHQ-9 \uD3C9\uAC00\uB97C \uC2DC\uD589\uD558\uC600\uB2E4.`
+      text: `${PATIENT_NAME} 환자는 ${GUIBI} 복용 후 PHQ-9 평가를 시행하였다. ${TYPO_FORMULA} 복용.`
     }
   ]);
   assert.equal(preprocessed.reviewRequired, null);
   assert.ok(preprocessed.deidentifiedEMRs[0]?.deidentifiedText.includes('[PATIENT_NAME_1]'));
-  assert.equal(preprocessed.pendingTermConfirmations.length, 1);
+  assert.ok(preprocessed.deidentifiedEMRs[0]?.deidentifiedText.includes(`${GUIBI} 복용`), '부분 일치 표현은 원문 그대로');
+  assert.equal(preprocessed.pendingTermConfirmations.length, 1, JSON.stringify(preprocessed.pendingTermConfirmations));
   assert.equal(preprocessed.pendingTermConfirmations[0]?.status, 'PENDING');
-  assert.ok((preprocessed.pendingTermConfirmations[0]?.candidates || []).length >= 2);
+  assert.ok(JSON.stringify(preprocessed.pendingTermConfirmations[0]).includes(TYPO_FORMULA));
+  assert.ok(JSON.stringify(preprocessed.pendingTermConfirmations[0]?.candidates || []).includes('시호가용골모려탕'));
+  // 자리표시 안의 영문(PATIENT 의 "AT")은 용어로 잡히지 않는다 (2026-10-12 수정)
+  const placeholderClause = preprocessed.preparedVisits[0]?.clauses.find((clause: any) => clause.sourceText.includes('[PATIENT_NAME_1]'));
+  assert.ok(placeholderClause);
+  assert.ok(!placeholderClause!.terms.some((term: any) => term.surface === 'AT'), 'PATIENT 안의 AT 를 용어로 보지 않는다');
 
   const shared = await deidentifyCaseEMRs([
     { text: `${PATIENT_NAME} 환자가 ${HOSPITAL}에 내원하였다.` },

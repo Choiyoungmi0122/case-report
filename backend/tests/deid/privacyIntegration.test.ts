@@ -14,7 +14,9 @@ async function run() {
       {
         index: 1,
         date: '2024-03-02',
-        text: `${RAW_NAME} 환자가 ${RAW_HOSPITAL}에 내원하였다. 연락처는 ${RAW_PHONE}이다. moodscore 기록 및 PHQ9 검사를 시행하였다.`
+        // "Weizhonx"는 위중(Weizhong)의 오타로, 사전 유사 일치라 판정기까지 간다. 2026-10-11부터 의미 유사 후보는
+        // 판정기로 보내지 않으므로, 이 표현이 없으면 판정기 경로의 비식별 검사가 돌지 않는다.
+        text: `${RAW_NAME} 환자가 ${RAW_HOSPITAL}에 내원하였다. 연락처는 ${RAW_PHONE}이다. moodscore 기록 및 PHQ9 검사를 시행하였다. Weizhonx 혈에 자침하였다.`
       }
     ],
     {
@@ -65,6 +67,8 @@ async function run() {
   assert.ok(!joinedSemantic.includes('[PATIENT_NAME_1]'));
   assert.ok(!joinedSemantic.includes('[PHONE_1]'));
   assert.ok(joinedSemantic.includes('moodscore') || joinedSemantic.includes('PHQ9'));
+  assert.ok(joinedResolver.includes('Weizhonx'));
+  assert.ok(!joinedResolver.includes('PATIENT_NAME') && !joinedResolver.includes('[PHONE_1]'));
 
   console.log('privacyIntegration tests passed');
 }
