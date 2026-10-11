@@ -61,6 +61,27 @@ export default function StudyWriteDraftPage() {
   const [answerDraft, setAnswerDraft] = useState('');
   // 내 답변 탭: 기본은 이 섹션에 쓰인 답만, 원하면 전체
   const [showAllAnswers, setShowAllAnswers] = useState(false);
+  // CARE 점검의 "기록에 없음" 항목에 정보를 직접 넣는 입력칸 (열린 항목 코드와 내용)
+  const [careInfoCode, setCareInfoCode] = useState<string | null>(null);
+  const [careInfoText, setCareInfoText] = useState('');
+  const [careInfoSaving, setCareInfoSaving] = useState(false);
+
+  /** 넣은 정보를 저장하고 이 섹션만 다시 쓴다 */
+  const submitCareInfo = async (sectionId: string, code: string) => {
+    if (!caseId || !careInfoText.trim()) return;
+    setCareInfoSaving(true);
+    setError(null);
+    try {
+      await caseApi.addStudyWriteCareInfo(caseId, sectionId, { code, answer: careInfoText.trim() });
+      setData(await caseApi.generateStudyWriteDrafts(caseId, [sectionId]));
+      setCareInfoCode(null);
+      setCareInfoText('');
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+    } finally {
+      setCareInfoSaving(false);
+    }
+  };
   const [dirtySectionIds, setDirtySectionIds] = useState<string[]>([]);
   const [regenerating, setRegenerating] = useState(false);
   const kicked = useRef(false);
@@ -455,6 +476,39 @@ export default function StudyWriteDraftPage() {
                           >
                             수정 요청으로 넣기
                           </button>
+                        ) : null}
+                        {item.status === 'not_in_record' && !locked && careInfoCode !== item.code ? (
+                          <button
+                            type="button"
+                            className="sw-care-item__action"
+                            disabled={running || careInfoSaving}
+                            onClick={() => {
+                              setCareInfoCode(item.code);
+                              setCareInfoText('');
+                            }}
+                          >
+                            이 정보 입력하기
+                          </button>
+                        ) : null}
+                        {item.status === 'not_in_record' && !locked && careInfoCode === item.code ? (
+                          <div className="sw-care-item__input">
+                            <textarea
+                              value={careInfoText}
+                              autoFocus
+                              rows={3}
+                              placeholder="알고 있는 내용을 적어 주세요. 저장하면 이 섹션을 다시 씁니다."
+                              disabled={careInfoSaving}
+                              onChange={(event) => setCareInfoText(event.target.value)}
+                            />
+                            <div>
+                              <button type="button" disabled={careInfoSaving || !careInfoText.trim()} onClick={() => void submitCareInfo(section.sectionId, item.code)}>
+                                {careInfoSaving ? '저장 중…' : '저장하고 다시 쓰기'}
+                              </button>
+                              <button type="button" className="is-secondary" disabled={careInfoSaving} onClick={() => setCareInfoCode(null)}>
+                                취소
+                              </button>
+                            </div>
+                          </div>
                         ) : null}
                       </div>
                     </li>

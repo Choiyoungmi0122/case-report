@@ -647,6 +647,30 @@
   line-height: 1.55;
 }
 
+.sw-care-item__input {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sw-care-item__input textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #c98a2b;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.sw-care-item__input > div {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .sw-draft__side .sw-care-item__action {
   margin-top: 8px;
   padding: 6px 12px;

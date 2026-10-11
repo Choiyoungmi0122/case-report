@@ -100,6 +100,8 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
       skipped: skipped.length,
       /** "자료 확인 필요"로 보류된 채 남은 질문 수 (제출 시점 기준) */
       deferred: deferred.length,
+      /** CARE 점검에서 사용자가 직접 넣은 정보 수 */
+      careInfoAdded: questions.filter((question) => question.source === 'care_check').length,
       skipReasons,
       answerEdits: edits,
       medianAnswerSeconds: answerSeconds.length ? answerSeconds.sort((a, b) => a - b)[Math.floor(answerSeconds.length / 2)] : null,

@@ -798,7 +798,7 @@ export interface StudyWriteQuestion {
   roundNo: number;
   order: number;
   text: string;
-  source: 'fixed' | 'generated';
+  source: 'fixed' | 'generated' | 'care_check';
   targetSectionIds: string[];
   careItem?: string;
   priority: 'required' | 'optional' | 'case';
@@ -1651,6 +1651,12 @@ export const caseApi = {
 
   deleteStudyWriteAttachment: async (caseId: string, attachmentId: string) => {
     const response = await api.delete<{ success: boolean }>(`/study-write/cases/${caseId}/attachments/${attachmentId}`);
+    return response.data;
+  },
+
+  /** CARE 점검의 "기록에 없음" 항목에 사용자가 정보를 직접 넣는다 */
+  addStudyWriteCareInfo: async (caseId: string, sectionId: string, body: { code: string; answer: string }) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/care-info`, body);
     return response.data;
   },
 

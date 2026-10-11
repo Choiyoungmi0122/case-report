@@ -158,7 +158,58 @@ export function answerQuestion(
 }
 
 export function remainingQuestionCount(state: StudyWriteState): number {
-  return Math.max(0, state.questionBudget.maxTotal - allQuestions(state).length);
+  // CARE 점검에서 사용자가 직접 넣은 정보는 질문 상한에 넣지 않는다
+  const asked = allQuestions(state).filter((question) => question.source !== 'care_check').length;
+  return Math.max(0, state.questionBudget.maxTotal - asked);
+}
+
+/**
+ * CARE 점검에서 "기록에 없음"으로 뜬 항목에 사용자가 정보를 직접 넣는다. 질의응답의 답과 같은 자리에
+ * 저장돼 초안·점검 체인에 그대로 쓰인다 (사용자 결정 2026-10-12). 질문 상한(9개)과는 별개다.
+ * 같은 섹션·항목에 다시 넣으면 답을 바꾸고 이력을 남긴다.
+ */
+export function addCareInfoAnswer(
+  state: StudyWriteState,
+  params: { sectionId: string; code: string; label: string; required: boolean; answer: string }
+): StudyWriteState {
+  if (state.answersLockedAt) {
+    throw new Error('최종 수정 단계에 들어가 정보를 더 넣을 수 없습니다.');
+  }
+  const answer = String(params.answer || '').trim();
+  if (!answer) throw new Error('내용을 적어 주세요.');
+  const now = new Date().toISOString();
+  const rounds = state.rounds.map((round) => ({ ...round, questions: [...round.questions] }));
+  let round = rounds.find((item) => item.kind === 'care_check');
+  if (!round) {
+    round = { roundNo: rounds.length + 1, kind: 'care_check', startedAt: now, questions: [] };
+    rounds.push(round);
+  }
+  const existing = round.questions.find((question) => question.careItem === params.code && question.targetSectionIds.includes(params.sectionId));
+  if (existing) {
+    existing.editHistory = [...existing.editHistory, { previousAnswer: existing.answer, previousStatus: existing.status, editedAt: now }];
+    existing.status = 'answered';
+    existing.answer = answer;
+    existing.answeredAt = now;
+    delete existing.skipReason;
+  } else {
+    round.questions.push({
+      id: `swq-${randomUUID()}`,
+      roundNo: round.roundNo,
+      order: allQuestions(state).length + 1,
+      text: `[CARE 점검 추가 입력] ${params.code} ${params.label}`,
+      source: 'care_check',
+      targetSectionIds: [params.sectionId],
+      careItem: params.code,
+      priority: params.required ? 'required' : 'optional',
+      status: 'answered',
+      answer,
+      askedAt: now,
+      answeredAt: now,
+      editHistory: []
+    });
+  }
+  round.completedAt = now;
+  return { ...state, rounds, updatedAt: now };
 }
 
 export function canOpenNextRound(state: StudyWriteState): { ok: boolean; reason?: string } {

@@ -3,6 +3,7 @@ import multer from 'multer';
 import { CaseModel } from '../models/caseModel';
 import { inspectRecordFile, MAX_FILE_BYTES } from '../studyWrite/recordImport';
 import {
+  addCareInfoAnswer,
   answerQuestion,
   canOpenNextRound,
   createInitialStudyWriteState,
@@ -15,7 +16,7 @@ import {
 } from '../studyWrite/interview';
 import { StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
-import { CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
+import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
 import {
   createAttachment,
   deleteAttachment,
@@ -546,6 +547,34 @@ router.delete('/cases/:caseId/attachments/:attachmentId', async (req: Request, r
 // ⑦ 최종 수정 (답 잠금) · 제출 · ⑧ Word
 
 /** 최종 수정에 들어간다. 이때부터 질의응답 답은 고칠 수 없다 (직접 편집한 글이 덮이지 않게). */
+/**
+ * CARE 점검에서 "기록에 없음"인 항목에 사용자가 정보를 직접 넣는다. 저장만 하고, 섹션 재생성은
+ * 화면이 /drafts/generate 로 따로 요청한다.
+ */
+router.post('/cases/:caseId/sections/:sectionId/care-info', async (req: Request, res: Response) => {
+  try {
+    const { caseId, sectionId } = req.params;
+    const code = String(req.body?.code || '').trim();
+    const answer = String(req.body?.answer || '');
+    if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
+    const def = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((item) => item.code === code);
+    if (!def) return res.status(400).json({ error: '알 수 없는 CARE 항목입니다.' });
+    const result = await serialize(caseId, async () => {
+      const caseData = await loadCase(caseId);
+      if (!caseData) return null;
+      const state = normalizeStudyWriteState(caseData.studyWrite);
+      if (state.submittedAt) throw new Error('이미 제출한 사례입니다.');
+      const next = addCareInfoAnswer(state, { sectionId, code, label: def.label, required: def.required, answer });
+      await saveState(caseData.id, next);
+      return buildDraftsResponse(caseData, next, await listAttachments(caseData.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '저장하지 못했습니다.' });
+  }
+});
+
 router.post('/cases/:caseId/lock-answers', async (req: Request, res: Response) => {
   try {
     const result = await serialize(req.params.caseId, async () => {

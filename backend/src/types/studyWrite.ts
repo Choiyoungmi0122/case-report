@@ -25,8 +25,8 @@ export interface StudyWriteQuestion {
   /** 질문 순서 (1부터, 전체 기준) */
   order: number;
   text: string;
-  /** 'fixed' 는 1회차 고정 질문, 'generated' 는 체인이 만든 질문 */
-  source: 'fixed' | 'generated';
+  /** 'fixed' 는 1회차 고정 질문, 'generated' 는 체인이 만든 질문, 'care_check' 는 CARE 점검에서 사용자가 직접 넣은 정보 */
+  source: 'fixed' | 'generated' | 'care_check';
   /** 답이 쓰일 CARE 섹션 */
   targetSectionIds: string[];
   /** CARE 세부 항목 (예: 11d, 9b). 고정 질문은 비울 수 있다 */
@@ -46,8 +46,8 @@ export interface StudyWriteQuestion {
 
 export interface StudyWriteRound {
   roundNo: number;
-  /** 'case' 는 사례 전체 질문, 'gap' 은 기록 빈칸 질문 */
-  kind: 'case' | 'gap';
+  /** 'case' 는 사례 전체 질문, 'gap' 은 기록 빈칸 질문, 'care_check' 는 CARE 점검에서 사용자가 더한 정보 */
+  kind: 'case' | 'gap' | 'care_check';
   questions: StudyWriteQuestion[];
   startedAt: string;
   completedAt?: string;
