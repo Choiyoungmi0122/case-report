@@ -3,7 +3,7 @@ import { loadTerminologyEntries, terminologyValidationIssues } from '../../src/r
 
 function run() {
   const loaded = loadTerminologyEntries();
-  assert.equal(loaded.entries.length, 36);
+  assert.equal(loaded.entries.length, 438);
   assert.ok(loaded.dataHash.length > 10);
   assert.equal(loaded.validation.hasErrors, false);
   assert.ok(
