@@ -21,7 +21,19 @@ export const StudyWriteCareCheckOutputSchema = z.object({
       status: z.enum(['present', 'in_record_not_in_draft', 'not_in_record', 'not_applicable']),
       hint: z.string().default('')
     })
-  )
+  ),
+  /** 하위 요소 판정 (SW-C v3). 하위 요소를 붙이지 않은 섹션은 빈 배열 */
+  subItems: z
+    .array(
+      z.object({
+        id: z.string(),
+        status: z.enum(['present', 'in_record_not_in_draft', 'not_in_record', 'not_applicable']),
+        hint: z.string().default(''),
+        /** 조건이 붙은 요소만: 이 사례에 조건이 맞는지. false 면 코드가 해당 없음으로 둔다 */
+        conditionMet: z.boolean().nullable().optional()
+      })
+    )
+    .default([])
 });
 
 export type StudyWriteDraftOutput = z.infer<typeof StudyWriteDraftOutputSchema>;

@@ -186,9 +186,12 @@ export async function generateCareItemQuestion(params: {
   required: boolean;
 }): Promise<{ question: string; hint: string; generated: boolean }> {
   const section = params.state.sections?.[params.sectionId];
-  const item = section?.careCheck?.items.find((entry) => entry.code === params.code);
+  // 항목 또는 하위 요소(체크리스트 v2)의 점검 설명
+  const item =
+    section?.careCheck?.items.find((entry) => entry.code === params.code) ||
+    section?.careCheck?.items.flatMap((entry) => entry.subItems || []).find((entry) => entry.id === params.code);
   const fallback = {
-    question: `${params.label.split(/[.(]/)[0].trim()}에 대해 이 증례에서 알고 있는 내용을 적어 주세요.`,
+    question: `${(params.label.match(/하위 요소 "([^"]+)"/)?.[1] || params.label.split(/[.(]/)[0]).trim()}에 대해 이 증례에서 알고 있는 내용을 적어 주세요.`,
     hint: '',
     generated: false
   };

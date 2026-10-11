@@ -43,7 +43,8 @@
     "test:privacy-render": "tsx tests/privacy/publicationRenderer.test.ts",
     "test:privacy-docx": "tsx tests/privacy/docxPlaceholders.test.ts",
     "test:study-write": "tsx tests/studyWrite/recordImport.test.ts",
-    "test:study-write-care": "tsx tests/studyWrite/careUnchecked.test.ts"
+    "test:study-write-care": "tsx tests/studyWrite/careUnchecked.test.ts",
+    "test:study-write-subelements": "tsx tests/studyWrite/careSubElements.test.ts"
   },
   "keywords": [],
   "author": "",

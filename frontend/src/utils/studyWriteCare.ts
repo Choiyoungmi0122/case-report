@@ -78,3 +78,50 @@ export function complianceLevel(value: CareCompliance | null): 'good' | 'mid' | 
 export function uncheckedSuffix(value: CareCompliance | null): string {
   return value && value.unchecked > 0 ? ` · 판정 없음 ${value.unchecked}` : '';
 }
+
+/**
+ * 하위 요소(체크리스트 v2) 준수율. 항목 단위와 달리 "해당 없음"은 분모에서 뺀다(조건이 맞지 않거나 쓰지 않은 개입).
+ * 판정 없음도 분모에서 뺀다. 하위 요소가 없으면 null.
+ */
+export type CareSubCompliance = {
+  /** 해당되는(판정 받고 해당 없음이 아닌) 하위 요소 수 */
+  applicable: number;
+  present: number;
+  pct: number;
+  requiredApplicable: number;
+  requiredPresent: number;
+  notApplicable: number;
+  unchecked: number;
+};
+
+type SubItemLike = { status: StudyWriteCareItemStatus; required: boolean };
+
+export function subCompliance(subItems: SubItemLike[] | undefined): CareSubCompliance | null {
+  if (!subItems || subItems.length === 0) return null;
+  const judged = subItems.filter((sub) => sub.status !== 'unchecked');
+  const applicable = judged.filter((sub) => sub.status !== 'not_applicable');
+  const required = applicable.filter((sub) => sub.required);
+  const present = applicable.filter((sub) => sub.status === 'present').length;
+  return {
+    applicable: applicable.length,
+    present,
+    pct: applicable.length ? Math.round((present / applicable.length) * 100) : 100,
+    requiredApplicable: required.length,
+    requiredPresent: required.filter((sub) => sub.status === 'present').length,
+    notApplicable: judged.length - applicable.length,
+    unchecked: subItems.length - judged.length
+  };
+}
+
+/** 섹션 전체의 하위 요소 준수율 */
+export function sectionSubCompliance(section: Pick<StudyWriteSection, 'careCheck'> | null | undefined): CareSubCompliance | null {
+  const subs = (section?.careCheck?.items || []).flatMap((item) => item.subItems || []);
+  return subCompliance(subs);
+}
+
+/** 항목은 "있음"인데 해당되는 필수 하위 요소가 빠졌으면 "일부"로 보여 준다 (저장된 판정은 그대로) */
+export function isPartialItem(item: { status: StudyWriteCareItemStatus; subItems?: SubItemLike[] }): boolean {
+  if (item.status !== 'present') return false;
+  const c = subCompliance(item.subItems);
+  return Boolean(c && c.requiredPresent < c.requiredApplicable);
+}

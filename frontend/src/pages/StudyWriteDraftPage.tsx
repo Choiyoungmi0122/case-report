@@ -5,6 +5,7 @@ import {
   caseApi,
   StudyWriteAttachment,
   StudyWriteCareItemStatus,
+  StudyWriteCareSubItem,
   StudyWriteDraftsResponse,
   StudyWriteQuestion,
   StudyWriteSection
@@ -17,7 +18,10 @@ import {
   complianceLevel,
   effectiveCareStatus,
   isCareSatisfied,
+  isPartialItem,
   overallCareCompliance,
+  sectionSubCompliance,
+  subCompliance,
   uncheckedSuffix
 } from '../utils/studyWriteCare';
 import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
@@ -47,6 +51,21 @@ const STATUS_META: Record<StudyWriteCareItemStatus, { mark: string; note: string
   not_in_record: { mark: '✕', note: '기록에도 답변에도 없음. 알고 있으면 내 답변에 보충' },
   not_applicable: { mark: '–', note: '이 증례에는 해당 없음' },
   unchecked: { mark: '?', note: '점검 결과를 받지 못함(없다는 뜻이 아님). 위의 "전체 점검하기"로 다시 점검' }
+};
+
+/** 하위 요소를 붙인 섹션 (backend careSubElements.CARE_SUB_ELEMENT_SECTIONS) */
+const SUB_ELEMENT_SECTIONS = ['PATIENT_INFORMATION', 'DIAGNOSTIC_ASSESSMENT', 'THERAPEUTIC_INTERVENTIONS', 'FOLLOW_UP_OUTCOMES'];
+
+/** 9b 개입 묶음 이름 (backend/src/studyWrite/careSubElements.ts 의 MODALITY_LABELS 와 같다) */
+const MODALITY_LABEL: Record<string, string> = {
+  herbal: '한약',
+  acupuncture: '침·전침',
+  pharmacopuncture: '약침',
+  moxibustion: '뜸',
+  cupping: '부항',
+  western: '양약',
+  lifestyle: '생활 지도·상담',
+  other: '그 밖의 치료'
 };
 
 function missingRequiredCount(section: StudyWriteSection) {
@@ -101,6 +120,21 @@ export default function StudyWriteDraftPage() {
   // 그 항목을 쓰기 위해 AI 가 만든 질문 (버튼을 누르면 먼저 묻는다)
   const [careQuestion, setCareQuestion] = useState<{ code: string; question: string; hint: string } | null>(null);
   const [careQuestionLoading, setCareQuestionLoading] = useState(false);
+
+  // CARE 점검만 다시 (초안은 그대로)
+  const [careRechecking, setCareRechecking] = useState(false);
+  const recheckCare = async (sectionId: string) => {
+    if (!caseId) return;
+    setCareRechecking(true);
+    setError(null);
+    try {
+      setData(await caseApi.recheckStudyWriteCare(caseId, sectionId));
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '점검하지 못했습니다.');
+    } finally {
+      setCareRechecking(false);
+    }
+  };
 
   /** "이 정보 입력하기": 빈 칸 대신 그 항목을 쓰기 위한 질문을 먼저 받아 보여 준다 */
   const openCareQuestion = async (sectionId: string, code: string) => {
@@ -718,13 +752,142 @@ export default function StudyWriteDraftPage() {
                   const required = items.filter((item) => item.required);
                   const optional = items.filter((item) => !item.required);
                   const okCount = (list: typeof items) => list.filter((item) => isCareSatisfied(effectiveCareStatus(item))).length;
+                  /** 수정 요청·정보 입력 버튼과 입력칸. 항목(예: "9b")과 하위 요소(예: "9b-H4")에 같이 쓴다 */
+                  const renderActions = (code: string, requestLabel: string, status: StudyWriteCareItemStatus) => (
+                    <>
+                      {status === 'in_record_not_in_draft' && !locked ? (
+                        <button
+                          type="button"
+                          className="sw-care-item__action"
+                          onClick={() => {
+                            setInstruction(`${requestLabel} 내용을 기록에서 찾아 이 섹션에 넣어 줘.`);
+                            setTab('chat');
+                            setFocusComposerAt(Date.now());
+                          }}
+                        >
+                          수정 요청으로 넣기
+                        </button>
+                      ) : null}
+                      {status === 'not_in_record' && !locked && careInfoCode !== code ? (
+                        <button
+                          type="button"
+                          className="sw-care-item__action"
+                          disabled={running || careInfoSaving || careQuestionLoading}
+                          onClick={() => void openCareQuestion(section.sectionId, code)}
+                        >
+                          이 정보 입력하기
+                        </button>
+                      ) : null}
+                      {status === 'not_in_record' && !locked && careInfoCode === code ? (
+                        <div className="sw-care-item__input">
+                          <div className="sw-care-item__question">
+                            <span>AI 질문</span>
+                            {careQuestionLoading || careQuestion?.code !== code ? (
+                              <p className="is-loading">이 항목을 쓰기 위해 무엇을 여쭤볼지 고르는 중…</p>
+                            ) : (
+                              <>
+                                <p>{careQuestion.question}</p>
+                                {careQuestion.hint ? <small>답에 들어가면 좋은 것: {careQuestion.hint}</small> : null}
+                              </>
+                            )}
+                          </div>
+                          <textarea
+                            value={careInfoText}
+                            autoFocus
+                            rows={3}
+                            placeholder="답을 적어 주세요. 저장하면 이 섹션을 다시 씁니다."
+                            disabled={careInfoSaving || careQuestionLoading}
+                            onChange={(event) => setCareInfoText(event.target.value)}
+                          />
+                          <div>
+                            <button
+                              type="button"
+                              disabled={careInfoSaving || careQuestionLoading || !careInfoText.trim()}
+                              onClick={() => void submitCareInfo(section.sectionId, code)}
+                            >
+                              {careInfoSaving ? '저장 중…' : '답하고 다시 쓰기'}
+                            </button>
+                            <button
+                              type="button"
+                              className="is-secondary"
+                              disabled={careInfoSaving}
+                              onClick={() => {
+                                setCareInfoCode(null);
+                                setCareQuestion(null);
+                              }}
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                  /** 하위 요소 한 줄 */
+                  const renderSub = (sub: StudyWriteCareSubItem) => (
+                    <li key={sub.id} className={`sw-care-sub__row is-${sub.status}`}>
+                      <span className="sw-care-sub__mark" aria-label={STATUS_LABEL[sub.status]}>
+                        {STATUS_META[sub.status].mark}
+                      </span>
+                      <div className="sw-care-sub__body">
+                        <div className="sw-care-sub__head">
+                          <span className={`sw-draft__tag${sub.required ? ' is-required' : ''}`}>
+                            {sub.id} {sub.required ? '필수' : '선택'}
+                          </span>
+                          <strong>{sub.label}</strong>
+                          <em className="sw-care-sub__state">{STATUS_LABEL[sub.status]}</em>
+                        </div>
+                        <p className="sw-care-sub__criterion">
+                          {sub.criterion}
+                          {sub.condition ? ` · 조건: ${sub.condition}` : ''}
+                        </p>
+                        {sub.hint ? <p className="sw-care-item__hint">{renderClinicalAnonymizedText(dated(sub.hint))}</p> : null}
+                        {renderActions(sub.id, `${sub.groupLabel ? `${sub.groupLabel} ` : ''}${sub.label}`, sub.status)}
+                      </div>
+                    </li>
+                  );
+                  /** 항목 아래 하위 요소 (체크리스트 v2). 빠진 것이 있으면 펼쳐 둔다 */
+                  const renderSubs = (subs: StudyWriteCareSubItem[]) => {
+                    const c = subCompliance(subs);
+                    if (!c) return null;
+                    const missingRequired = c.requiredApplicable - c.requiredPresent;
+                    const groups: Array<{ label: string; items: StudyWriteCareSubItem[] }> = [];
+                    for (const sub of subs) {
+                      const last = groups[groups.length - 1];
+                      if (last && last.label === sub.groupLabel) last.items.push(sub);
+                      else groups.push({ label: sub.groupLabel, items: [sub] });
+                    }
+                    return (
+                      <details className="sw-care-sub" open={c.present < c.applicable || c.unchecked > 0}>
+                        <summary>
+                          하위 요소 {c.present} / {c.applicable} 있음
+                          {missingRequired > 0 ? <b> · 필수 {missingRequired}개 빠짐</b> : null}
+                          {c.notApplicable > 0 ? ` · 해당 없음 ${c.notApplicable}` : ''}
+                          {c.unchecked > 0 ? ` · 판정 없음 ${c.unchecked}` : ''}
+                        </summary>
+                        {groups.map((group) => (
+                          <div key={group.label || 'base'} className="sw-care-sub__group">
+                            {group.label ? <h5>{group.label}</h5> : null}
+                            <ul>{group.items.map(renderSub)}</ul>
+                          </div>
+                        ))}
+                      </details>
+                    );
+                  };
                   const renderItem = (rawItem: (typeof items)[number]) => {
                     const item = { ...rawItem, status: effectiveCareStatus(rawItem) };
+                    const subs = rawItem.subItems || [];
+                    // 하위 요소 판정이 있으면 버튼은 하위 요소마다 단다 (질문이 더 좁아진다)
+                    const hasJudgedSubs = subs.some((sub) => sub.status !== 'unchecked');
+                    const partial = isPartialItem(item);
+                    const mark = partial ? '◐' : STATUS_META[item.status].mark;
+                    const stateLabel = partial ? '일부' : STATUS_LABEL[item.status];
+                    const note = partial ? '항목은 들어 있지만 필수 하위 요소가 빠짐. 아래 목록 참고' : STATUS_META[item.status].note;
                     return (
-                    <li key={item.code} className={`sw-care-item is-${item.status}`}>
-                      <div className="sw-care-item__status" aria-label={STATUS_LABEL[item.status]}>
-                        <span className="sw-care-item__mark">{STATUS_META[item.status].mark}</span>
-                        <span className="sw-care-item__state">{STATUS_LABEL[item.status]}</span>
+                    <li key={item.code} className={`sw-care-item is-${partial ? 'partial' : item.status}`}>
+                      <div className="sw-care-item__status" aria-label={stateLabel}>
+                        <span className="sw-care-item__mark">{mark}</span>
+                        <span className="sw-care-item__state">{stateLabel}</span>
                       </div>
                       <div className="sw-care-item__body">
                         <div className="sw-care-item__head">
@@ -733,74 +896,10 @@ export default function StudyWriteDraftPage() {
                           </span>
                           <strong>{item.label}</strong>
                         </div>
-                        <p className="sw-care-item__note">{STATUS_META[item.status].note}</p>
+                        <p className="sw-care-item__note">{note}</p>
                         {item.hint ? <p className="sw-care-item__hint">{renderClinicalAnonymizedText(dated(item.hint))}</p> : null}
-                        {item.status === 'in_record_not_in_draft' && !locked ? (
-                          <button
-                            type="button"
-                            className="sw-care-item__action"
-                            onClick={() => {
-                              setInstruction(`${item.label.split('.')[0].split('(')[0].trim()} 내용을 기록에서 찾아 이 섹션에 넣어 줘.`);
-                              setTab('chat');
-                              setFocusComposerAt(Date.now());
-                            }}
-                          >
-                            수정 요청으로 넣기
-                          </button>
-                        ) : null}
-                        {item.status === 'not_in_record' && !locked && careInfoCode !== item.code ? (
-                          <button
-                            type="button"
-                            className="sw-care-item__action"
-                            disabled={running || careInfoSaving || careQuestionLoading}
-                            onClick={() => void openCareQuestion(section.sectionId, item.code)}
-                          >
-                            이 정보 입력하기
-                          </button>
-                        ) : null}
-                        {item.status === 'not_in_record' && !locked && careInfoCode === item.code ? (
-                          <div className="sw-care-item__input">
-                            <div className="sw-care-item__question">
-                              <span>AI 질문</span>
-                              {careQuestionLoading || careQuestion?.code !== item.code ? (
-                                <p className="is-loading">이 항목을 쓰기 위해 무엇을 여쭤볼지 고르는 중…</p>
-                              ) : (
-                                <>
-                                  <p>{careQuestion.question}</p>
-                                  {careQuestion.hint ? <small>답에 들어가면 좋은 것: {careQuestion.hint}</small> : null}
-                                </>
-                              )}
-                            </div>
-                            <textarea
-                              value={careInfoText}
-                              autoFocus
-                              rows={3}
-                              placeholder="답을 적어 주세요. 저장하면 이 섹션을 다시 씁니다."
-                              disabled={careInfoSaving || careQuestionLoading}
-                              onChange={(event) => setCareInfoText(event.target.value)}
-                            />
-                            <div>
-                              <button
-                                type="button"
-                                disabled={careInfoSaving || careQuestionLoading || !careInfoText.trim()}
-                                onClick={() => void submitCareInfo(section.sectionId, item.code)}
-                              >
-                                {careInfoSaving ? '저장 중…' : '답하고 다시 쓰기'}
-                              </button>
-                              <button
-                                type="button"
-                                className="is-secondary"
-                                disabled={careInfoSaving}
-                                onClick={() => {
-                                  setCareInfoCode(null);
-                                  setCareQuestion(null);
-                                }}
-                              >
-                                취소
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
+                        {!hasJudgedSubs ? renderActions(item.code, item.label.split('.')[0].split('(')[0].trim(), item.status) : null}
+                        {renderSubs(subs)}
                       </div>
                     </li>
                     );
@@ -821,6 +920,24 @@ export default function StudyWriteDraftPage() {
                             </div>
                           ) : null;
                         })()}
+                        {(() => {
+                          const sc = sectionSubCompliance(section);
+                          return sc ? (
+                            <div
+                              className={`sw-care-summary__box sw-care-summary__box--sub${
+                                sc.requiredPresent < sc.requiredApplicable ? ' is-missing' : ' is-ok'
+                              }`}
+                              title="해당 없음과 판정 없음은 분모에서 뺍니다. 위 준수율(항목 단위)과 따로 셉니다."
+                            >
+                              <span>하위 요소</span>
+                              <strong>{sc.pct}%</strong>
+                              <em>
+                                {sc.present} / {sc.applicable} 있음 · 필수 {sc.requiredPresent} / {sc.requiredApplicable}
+                                {sc.unchecked > 0 ? ` · 판정 없음 ${sc.unchecked}` : ''}
+                              </em>
+                            </div>
+                          ) : null;
+                        })()}
                         <div className={`sw-care-summary__box${okCount(required) === required.length ? ' is-ok' : ' is-missing'}`}>
                           <span>필수</span>
                           <strong>
@@ -836,6 +953,32 @@ export default function StudyWriteDraftPage() {
                           <em>{optional.length === 0 ? '없음' : `${optional.length - okCount(optional)}개 빠짐`}</em>
                         </div>
                       </div>
+                      {!data?.submittedAt ? (
+                        <div className="sw-care-recheck">
+                          {SUB_ELEMENT_SECTIONS.includes(section.sectionId) && section.careCheck.checklistVersion !== 'care-checklist:v2' ? (
+                            <span>이 점검은 하위 요소 기준이 생기기 전 결과입니다.</span>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="sw-care-item__action"
+                            disabled={careRechecking || running || careInfoSaving}
+                            onClick={() => void recheckCare(section.sectionId)}
+                          >
+                            {careRechecking ? '점검 중…' : 'CARE 다시 점검'}
+                          </button>
+                        </div>
+                      ) : null}
+                      {section.careCheck.modalities && section.careCheck.modalities.checked.length + section.careCheck.modalities.skipped.length > 0 ? (
+                        <p className="sw-care-modalities">
+                          하위 요소를 점검한 개입:{' '}
+                          {section.careCheck.modalities.checked.map((key) => MODALITY_LABEL[key] || key).join(', ') || '없음'}
+                          {section.careCheck.modalities.skipped.length > 0
+                            ? ` · 기록·답변·초안에서 찾지 못해 점검하지 않은 개입: ${section.careCheck.modalities.skipped
+                                .map((key) => MODALITY_LABEL[key] || key)
+                                .join(', ')}`
+                            : ''}
+                        </p>
+                      ) : null}
                       {required.length > 0 ? (
                         <>
                           <h4 className="sw-care-group">필수 항목</h4>

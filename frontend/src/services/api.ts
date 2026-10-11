@@ -854,10 +854,34 @@ export interface StudyWriteState {
 /** unchecked: 점검 응답에 그 항목의 판정이 없었음(없음이 아님). backend/src/types/studyWrite.ts 참고 */
 export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
+/** 항목 아래 하위 요소 판정 (체크리스트 v2: 환자 정보·진단 평가·치료 개입·추적 관찰) */
+export interface StudyWriteCareSubItem {
+  id: string;
+  label: string;
+  required: boolean;
+  group: string;
+  groupLabel: string;
+  criterion: string;
+  source: string;
+  condition?: string;
+  conditionMet?: boolean;
+  status: StudyWriteCareItemStatus;
+  hint: string;
+}
+
 export interface StudyWriteCareCheck {
   checkedAt: string;
   promptVersion: string;
-  items: Array<{ code: string; label: string; required: boolean; status: StudyWriteCareItemStatus; hint: string }>;
+  checklistVersion?: string;
+  modalities?: { checked: string[]; skipped: string[] };
+  items: Array<{
+    code: string;
+    label: string;
+    required: boolean;
+    status: StudyWriteCareItemStatus;
+    hint: string;
+    subItems?: StudyWriteCareSubItem[];
+  }>;
 }
 
 export interface StudyWriteDraftVersion {
@@ -1684,6 +1708,12 @@ export const caseApi = {
   },
 
   /** CARE 점검의 "없음" 항목을 쓰기 위한 질문을 받는다 (저장하지 않음) */
+  /** 초안은 그대로 두고 CARE 점검만 다시 */
+  recheckStudyWriteCare: async (caseId: string, sectionId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/care-check`);
+    return response.data;
+  },
+
   askStudyWriteCareQuestion: async (caseId: string, sectionId: string, code: string) => {
     const response = await api.post<{ code: string; question: string; hint: string; generated: boolean }>(
       `/study-write/cases/${caseId}/sections/${sectionId}/care-question`,

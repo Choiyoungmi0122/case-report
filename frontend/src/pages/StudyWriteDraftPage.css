@@ -1116,3 +1116,146 @@
     max-height: none;
   }
 }
+
+/* CARE 하위 요소 (체크리스트 v2) */
+.sw-care-item.is-partial {
+  border-left-color: #d98a12;
+  background: #fffaf0;
+}
+
+.sw-care-item.is-partial .sw-care-item__status {
+  background: #fde9bf;
+  color: #7a4b00;
+}
+
+.sw-care-summary__box--sub {
+  grid-column: 1 / -1;
+}
+
+.sw-care-modalities {
+  margin: -6px 0 12px;
+  font-size: 12.5px;
+  color: #5a6c81;
+}
+
+.sw-care-sub {
+  margin-top: 10px;
+  border-top: 1px dashed #d6dde6;
+  padding-top: 8px;
+}
+
+.sw-care-sub > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #3d4b5c;
+}
+
+.sw-care-sub > summary b {
+  color: #a93b24;
+}
+
+.sw-care-sub__group h5 {
+  margin: 10px 0 4px;
+  font-size: 12.5px;
+  color: #3d4b5c;
+}
+
+.sw-care-sub ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sw-care-sub__row {
+  display: flex;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid #e3e8ee;
+  border-left-width: 4px;
+  background: #fff;
+  font-size: 12.5px;
+}
+
+.sw-care-sub__row.is-present {
+  border-left-color: #2f8f4a;
+}
+
+.sw-care-sub__row.is-in_record_not_in_draft {
+  border-left-color: #d98a12;
+  background: #fffaf0;
+}
+
+.sw-care-sub__row.is-not_in_record {
+  border-left-color: #c8402a;
+  background: #fff5f2;
+}
+
+.sw-care-sub__row.is-not_applicable {
+  border-left-color: #b8c2cf;
+  color: #6b7a8c;
+}
+
+.sw-care-sub__row.is-unchecked {
+  border-left-color: #8a94a6;
+  border-left-style: dashed;
+  background: #f7f8fa;
+}
+
+.sw-care-sub__mark {
+  flex: none;
+  width: 18px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.sw-care-sub__row.is-present .sw-care-sub__mark {
+  color: #1f6b35;
+}
+
+.sw-care-sub__row.is-in_record_not_in_draft .sw-care-sub__mark {
+  color: #7a4b00;
+}
+
+.sw-care-sub__row.is-not_in_record .sw-care-sub__mark {
+  color: #a93b24;
+}
+
+.sw-care-sub__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sw-care-sub__head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sw-care-sub__state {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sw-care-sub__criterion {
+  margin: 3px 0 0;
+  color: #6b7a8c;
+  font-size: 12px;
+}
+
+.sw-care-recheck {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: -4px 0 10px;
+  font-size: 12.5px;
+  color: #7a4b00;
+}

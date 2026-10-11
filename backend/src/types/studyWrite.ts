@@ -77,16 +77,41 @@ export interface StudyWriteQuestionBudget {
  */
 export type StudyWriteCareItemStatus = 'present' | 'in_record_not_in_draft' | 'not_in_record' | 'not_applicable' | 'unchecked';
 
+/**
+ * 항목 아래 하위 요소의 판정 (체크리스트 v2, studyWrite/careSubElements.ts). 2026-10-12부터
+ * 환자 정보·진단 평가·치료 개입·추적 관찰 및 결과에만 붙는다. 항목 판정과 따로 매긴다.
+ */
+export interface StudyWriteCareSubItem {
+  id: string;
+  label: string;
+  required: boolean;
+  /** 9b 개입 묶음 (base 는 묶음 없음) */
+  group: string;
+  groupLabel: string;
+  criterion: string;
+  source: string;
+  condition?: string;
+  /** 조건이 붙은 요소에서 모델이 판정한 조건 충족 여부. false 면 status 는 not_applicable */
+  conditionMet?: boolean;
+  status: StudyWriteCareItemStatus;
+  hint: string;
+}
+
 export interface StudyWriteCareCheck {
   checkedAt: string;
   promptVersion: string;
   promptTemplateHash?: string;
+  /** 'care-checklist:v1' 항목만, 'care-checklist:v2' 하위 요소까지. 없으면 v1 */
+  checklistVersion?: string;
+  /** 9b 개입 묶음: 점검한 것과, 기록·답변·초안에서 찾지 못해 점검하지 않은 것 */
+  modalities?: { checked: string[]; skipped: string[] };
   items: Array<{
     code: string;
     label: string;
     required: boolean;
     status: StudyWriteCareItemStatus;
     hint: string;
+    subItems?: StudyWriteCareSubItem[];
   }>;
 }
 

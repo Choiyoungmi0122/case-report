@@ -24,6 +24,16 @@ import { createOutboundDeidContext, deidentifyOutboundText } from '../deid/outbo
 import { promptMeta } from '../llm/promptRegistry';
 import { acupointCodesForTexts, applyHanjaGlossary, formatHanjaGlossary, glossaryForTexts } from './hanja';
 import { dropAbsenceSentences } from './absenceFilter';
+import {
+  CARE_CHECKLIST_VERSION,
+  conditionByEvidence,
+  detectModalities,
+  hasModalityGroupsFor,
+  skippedModalities,
+  subElementsForSection,
+  subElementsText
+} from './careSubElements';
+import { terminologyEntries } from '../rag/loader';
 
 /** 부재 문장 필터를 쓰지 않는 섹션: 서론·고찰(공백·한계 서술), 동의(답변 그대로) */
 const ABSENCE_FILTER_SKIP = new Set(['INTRODUCTION', 'DISCUSSION_CONCLUSION', 'INFORMED_CONSENT']);
@@ -133,6 +143,25 @@ export async function runDraftForSection(params: {
   };
 }
 
+/** 하위 요소 id 표기 정규화: " 9b-h4 ", "9b–H4", "9bH4" → "9B-H4" */
+export function normalizeSubElementId(raw: string): string {
+  const compact = String(raw || '').toUpperCase().replace(/[\s\u2010-\u2015]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const match = compact.match(/^(\d{1,2}[A-D]?)-?([A-Z]?\d{1,2})$/);
+  return match ? `${match[1]}-${match[2]}` : compact;
+}
+
+let herbalNameCache: string[] | null = null;
+/** 용어 사전의 처방명. "○○산", "○○음"처럼 낱말 꼴로 가려낼 수 없는 처방을 찾는 데 쓴다 */
+function herbalPrescriptionNames(): string[] {
+  if (!herbalNameCache) {
+    herbalNameCache = terminologyEntries
+      .filter((entry) => entry.category === 'herbal_prescription')
+      .map((entry) => String(entry.standardTerm || '').trim())
+      .filter((name) => name.length >= 2);
+  }
+  return herbalNameCache;
+}
+
 export async function runCareCheck(params: {
   caseData: any;
   state: StudyWriteState;
@@ -141,6 +170,19 @@ export async function runCareCheck(params: {
 }): Promise<StudyWriteCareCheck> {
   const { caseData, state, sectionId, draftText } = params;
   const defs = CARE_ITEMS_BY_SECTION[sectionId] || [];
+  const recordText = buildRecordText(caseData);
+  const qaText = await buildQaText(state, sectionId, createOutboundDeidContext());
+  // 하위 요소(체크리스트 v2): 9b 개입 묶음은 기록·답변·초안에 나온 것만 점검한다
+  const itemCodes = defs.map((def) => def.code);
+  // 개입 묶음은 9b 가 있는 섹션(치료 개입)에만 있다
+  const hasModalityGroups = itemCodes.some((code) => hasModalityGroupsFor(code));
+  const modalities = hasModalityGroups ? detectModalities([recordText, qaText, draftText].join('\n'), herbalPrescriptionNames()) : [];
+  const subDefs = subElementsForSection(sectionId, itemCodes, modalities);
+  const conditionText = [recordText, qaText, draftText].join('\n');
+  // 낱말로 조건을 가린 요소: 맞지 않으면 묻지 않고 해당 없음, 맞으면 프롬프트에 충족으로 적는다
+  const evidenceById = new Map(subDefs.map((sub) => [sub.id, conditionByEvidence(sub, conditionText)] as const));
+  const promptSubDefs = subDefs.filter((sub) => evidenceById.get(sub.id) !== false);
+  const conditionMetIds = new Set(subDefs.filter((sub) => evidenceById.get(sub.id) === true).map((sub) => sub.id));
   const output = await callLLMWithSchema(
     StudyWriteCareCheckOutputSchema,
     studyWriteCareCheckSystemPrompt,
@@ -148,12 +190,50 @@ export async function runCareCheck(params: {
       sectionId,
       sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
       careItems: careItemsText(sectionId),
-      recordText: buildRecordText(caseData),
+      recordText,
       currentDraft: draftText,
-      qaText: await buildQaText(state, sectionId, createOutboundDeidContext())
+      qaText,
+      subElements: subElementsText(promptSubDefs, conditionMetIds)
     }),
     { model: getModelForChain('chain4'), label: `SW-C ${sectionId}` }
   );
+  const subById = new Map<string, (typeof output.subItems)[number]>();
+  for (const sub of output.subItems || []) {
+    const key = normalizeSubElementId(sub.id);
+    if (key && !subById.has(key)) subById.set(key, sub);
+  }
+  const subMissing = promptSubDefs.filter((sub) => !subById.has(normalizeSubElementId(sub.id))).map((sub) => sub.id);
+  if (subMissing.length > 0) console.warn(`[SW-C ${sectionId}] no sub-element verdict for ${subMissing.join(', ')}`);
+  const subItemsFor = (code: string) =>
+    subDefs
+      .filter((sub) => sub.itemCode === code)
+      .map((sub) => {
+        const found = subById.get(normalizeSubElementId(sub.id));
+        // 조건: 낱말로 가릴 수 있는 것은 코드가, 나머지는 모델(conditionMet)이 정한다.
+        // 맞지 않으면 해당 없음 (모델이 status 를 not_in_record 로 둔 경우도)
+        const byEvidence = evidenceById.get(sub.id) ?? null;
+        const conditionMet = byEvidence !== null ? byEvidence : typeof found?.conditionMet === 'boolean' ? found.conditionMet : undefined;
+        const conditionFalse = Boolean(sub.condition && conditionMet === false && (found || byEvidence === false));
+        // 코드가 조건 충족이라 했는데 모델이 해당 없음으로 둔 것은 판정을 다시 받아야 한다
+        const conditionConflict = byEvidence === true && found?.status === 'not_applicable';
+        return {
+          id: sub.id,
+          label: sub.label,
+          required: sub.required,
+          group: sub.group,
+          groupLabel: sub.groupLabel,
+          criterion: sub.criterion,
+          source: sub.source,
+          ...(sub.condition ? { condition: sub.condition } : {}),
+          status: conditionFalse
+            ? ('not_applicable' as const)
+            : conditionConflict
+              ? ('unchecked' as const)
+              : found?.status || ('unchecked' as const),
+          hint: conditionFalse ? '' : conditionConflict ? '기록에 해당 내용이 있어 다시 점검이 필요합니다.' : found?.hint || '',
+          ...(sub.condition && typeof conditionMet === 'boolean' ? { conditionMet } : {})
+        };
+      });
   // 정의된 항목 순서대로 맞춘다. 코드 표기("9a.", "CARE 9a", "9-a")는 숫자+영문으로 정규화해 맞춘다.
   // 모델이 빠뜨린 항목은 'unchecked'(판정 없음)로 둔다. "없음"으로 두면 기록에 없는 것처럼 보인다
   // (docs/prompt_chain_review_v1.md §5-1 4번).
@@ -168,14 +248,20 @@ export async function runCareCheck(params: {
     checkedAt: new Date().toISOString(),
     promptVersion: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION,
     promptTemplateHash: promptMeta('SW_C').promptTemplateHash,
+    checklistVersion: subDefs.length > 0 ? CARE_CHECKLIST_VERSION : 'care-checklist:v1',
+    ...(hasModalityGroups
+      ? { modalities: { checked: modalities, skipped: [...new Set(skippedModalities(sectionId, itemCodes, modalities))] } }
+      : {}),
     items: defs.map((def) => {
       const found = byCode.get(normalizeCareItemCode(def.code));
+      const subItems = subItemsFor(def.code);
       return {
         code: def.code,
         label: def.label,
         required: def.required,
         status: found?.status || 'unchecked',
-        hint: found?.hint || (found ? '' : '점검 결과를 받지 못했습니다. "전체 점검하기"로 다시 점검하면 판정됩니다.')
+        hint: found?.hint || (found ? '' : '점검 결과를 받지 못했습니다. "전체 점검하기"로 다시 점검하면 판정됩니다.'),
+        ...(subItems.length > 0 ? { subItems } : {})
       };
     })
   };

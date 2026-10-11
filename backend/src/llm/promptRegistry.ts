@@ -52,6 +52,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *    고정 연구 사례(학생 V1, V2)는 고정 초안을 먼저 돌려주므로(routes/scaffold.ts) 영향이 없다.
  *  - SW-Q2 v4 / SW-D v4 / SW-R v4: 2026-10-12 `3d6e831` 국내 한의 증례보고 5편의 서술 관례 반영(docs/case_report_style_basis_v1.md).
  *  - SW-Q3 v1: 2026-10-12 CARE 점검의 "없음" 항목 하나를 쓰기 위한 질문 (새 체인).
+ *  - SW-C v3: 2026-10-12 하위 요소 판정(subItems) 추가. 환자 정보·진단 평가·치료 개입·추적 관찰만 (docs/care_subelements_v1.md).
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',

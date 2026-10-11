@@ -12,7 +12,7 @@ import { effectiveCareStatus, isCareJudged, isCareSatisfied } from './careStatus
  * 준수율의 분모는 판정을 받은 항목이다: 판정 없음(unchecked, 2026-10-11 판의 "판정 못 받음" 포함)은
  * 충족도 누락도 아니므로 careUnchecked 로 따로 센다.
  */
-function careSummaryFields(rawItems: Array<{ status: string; hint?: string; required: boolean }>) {
+function careSummaryFields(rawItems: Array<{ status: string; hint?: string; required: boolean; subItems?: Array<{ status: string; required: boolean }> }>) {
   const items = rawItems.map((item) => ({ ...item, status: effectiveCareStatus(item) }));
   const judged = items.filter((item) => isCareJudged(item.status));
   const judgedRequired = judged.filter((item) => item.required);
@@ -27,7 +27,31 @@ function careSummaryFields(rawItems: Array<{ status: string; hint?: string; requ
       : null,
     careRequiredMissing: judged.filter((item) => item.required && !isCareSatisfied(item.status)).length,
     careOptionalMissing: judged.filter((item) => !item.required && !isCareSatisfied(item.status)).length,
-    careInRecordNotInDraft: judged.filter((item) => item.status === 'in_record_not_in_draft').length
+    careInRecordNotInDraft: judged.filter((item) => item.status === 'in_record_not_in_draft').length,
+    ...careSubSummaryFields(rawItems)
+  };
+}
+
+/**
+ * 하위 요소(체크리스트 v2) 집계. 해당 없음은 분모에서 뺀다(항목 단위 준수율과 다르다).
+ * 하위 요소가 없는 섹션·옛 점검 결과는 careSubTotal 0, 나머지 null.
+ */
+function careSubSummaryFields(rawItems: Array<{ subItems?: Array<{ status: string; required: boolean }> }>) {
+  const subs = rawItems.flatMap((item) => item.subItems || []);
+  const judged = subs.filter((sub) => isCareJudged(sub.status));
+  const applicable = judged.filter((sub) => sub.status !== 'not_applicable');
+  const requiredApplicable = applicable.filter((sub) => sub.required);
+  const present = applicable.filter((sub) => sub.status === 'present').length;
+  return {
+    careSubTotal: subs.length,
+    careSubUnchecked: subs.length - judged.length,
+    careSubNotApplicable: judged.length - applicable.length,
+    careSubPresent: present,
+    careSubPct: applicable.length ? Math.round((present / applicable.length) * 100) : null,
+    careSubRequiredPct: requiredApplicable.length
+      ? Math.round((requiredApplicable.filter((sub) => sub.status === 'present').length / requiredApplicable.length) * 100)
+      : null,
+    careSubRequiredMissing: requiredApplicable.filter((sub) => sub.status !== 'present').length
   };
 }
 

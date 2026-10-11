@@ -10,7 +10,7 @@ import { sharedPrinciples } from './common';
 
 export const STUDY_WRITE_DRAFT_PROMPT_VERSION = 'SW-D:v4';
 export const STUDY_WRITE_REVISE_PROMPT_VERSION = 'SW-R:v4';
-export const STUDY_WRITE_CARE_CHECK_PROMPT_VERSION = 'SW-C:v2';
+export const STUDY_WRITE_CARE_CHECK_PROMPT_VERSION = 'SW-C:v3';
 
 // 공통 원칙 P1~P7 은 common.ts 의 문구를 그대로 쓴다(다른 체인과 같은 말). 실험용 Write 에만 있는 규칙은 P8·P9 로 잇는다.
 const PRINCIPLES = `${sharedPrinciples(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'])}
@@ -192,13 +192,24 @@ ${PRINCIPLES}
    - "not_applicable": 이 사례에 해당하지 않는다 (예: 환자 관점을 적을 환자의 말이 전혀 없음).
 2. 초안에 "[확인 필요: …]" 또는 "[문헌 보완 필요]" 표시만 있고 내용이 없으면 present 가 아닙니다.
 3. hint 는 한 문장, 참여자에게 보이는 글입니다. "기록 4회차에 K-MMSE 결과지가 있습니다"처럼 어디를 보면 되는지 알려 줍니다.
+4. 항목(items)은 하위 요소와 상관없이 항목 설명을 기준으로 판정합니다.
+5. [점검할 하위 요소]가 있으면 하위 요소마다도 같은 네 값 중 하나를 고릅니다(subItems).
+   - 판단은 각 요소의 ":" 뒤 기준을 따릅니다. 기준의 일부만 있으면 present 가 아닙니다(예: 처방명만 있고 1첩 용량이 없으면 9b-H2 는 present 가 아님).
+   - "(조건: …)"이 붙은 요소는 conditionMet 에 조건이 이 사례에 맞는지를 먼저 적습니다. 기록·답변·초안 어디에도 조건을 뒷받침하는 내용이 없으면 false 입니다(예: 인종·민족이 어디에도 없으면 5a-5 는 false, 이상반응이 없었으면 10d-2·10d-3 은 false, 전침을 하지 않았으면 9b-A6 은 false). false 이면 status 는 not_applicable 입니다. true 일 때만 기준으로 present·in_record_not_in_draft·not_in_record 를 고릅니다. 조건이 없는 요소는 conditionMet 을 쓰지 않습니다.
+   - 묶음 머리글(예: "[9b 한약] 적용: …")의 개입이 이 사례에 실제로 없으면 그 묶음의 요소를 모두 not_applicable 로 둡니다. 낱말이 비슷해 잘못 들어온 묶음일 수 있습니다.
+   - 처방이 여러 개인 묶음은 모든 처방에 그 요소가 있어야 present 입니다. 일부 처방에만 있으면 hint 에 빠진 처방을 적습니다.
+   - hint 는 present·not_applicable 이면 빈 문자열, 나머지는 무엇이 빠졌고 어디를 보면 되는지 한 문장.
 
 출력 형식:
 {
   "items": [
     { "code": "<세부 항목 번호>", "status": "present" | "in_record_not_in_draft" | "not_in_record" | "not_applicable", "hint": "<한 문장 또는 빈 문자열>" }
+  ],
+  "subItems": [
+    { "id": "<하위 요소 id, 예: 9b-H4>", "status": "present" | "in_record_not_in_draft" | "not_in_record" | "not_applicable", "hint": "<한 문장 또는 빈 문자열>", "conditionMet": true | false (조건이 붙은 요소만) }
   ]
-}`;
+}
+하위 요소 목록이 없으면 subItems 는 빈 배열입니다.`;
 
 export function buildStudyWriteCareCheckUserPrompt(params: {
   sectionId: string;
@@ -207,11 +218,14 @@ export function buildStudyWriteCareCheckUserPrompt(params: {
   recordText: string;
   currentDraft: string;
   qaText: string;
+  /** 하위 요소 목록 (careSubElements.subElementsText). 없으면 빈 문자열 */
+  subElements?: string;
 }): string {
+  const subBlock = params.subElements ? `\n\n[점검할 하위 요소]\n${params.subElements}` : '';
   return `대상 섹션: ${params.sectionId} (${params.sectionName})
 
 [점검할 CARE 세부 항목]
-${params.careItems}
+${params.careItems}${subBlock}
 
 [비식별 진료 기록 전문]
 ${params.recordText || '(없음)'}
@@ -222,5 +236,5 @@ ${params.qaText || '(없음)'}
 [현재 초안]
 ${params.currentDraft || '(초안 없음)'}
 
-세부 항목마다 판정하세요. 항목 수와 code 는 위 목록과 같아야 합니다.`;
+세부 항목마다 판정하세요. 항목 수와 code 는 위 목록과 같아야 합니다.${params.subElements ? ' 하위 요소도 빠짐없이 subItems 에 판정하고, id 는 목록과 같게 씁니다.' : ' subItems 는 빈 배열로 둡니다.'}`;
 }

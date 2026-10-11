@@ -56,7 +56,8 @@ export const CHAIN_LIMITS: Record<string, ChainLimits> = {
   'SW-Q2': { timeoutMs: 90_000, maxOutputTokens: 3_000 },
   'SW-D': { timeoutMs: 180_000, maxOutputTokens: 6_000 },
   'SW-R': { timeoutMs: 180_000, maxOutputTokens: 6_000 },
-  'SW-C': { timeoutMs: 90_000, maxOutputTokens: 4_000 },
+  // SW-C v3 은 하위 요소(치료 개입은 묶음에 따라 60개 안팎)까지 판정해 출력이 길어진다 (2026-10-12)
+  'SW-C': { timeoutMs: 120_000, maxOutputTokens: 8_000 },
   TERMINOLOGY: { timeoutMs: 30_000, maxOutputTokens: 1_000 }
 };
 

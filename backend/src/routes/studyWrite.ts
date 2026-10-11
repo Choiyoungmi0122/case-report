@@ -17,6 +17,7 @@ import {
 } from '../studyWrite/interview';
 import { StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
+import { findSubElement } from '../studyWrite/careSubElements';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
 import {
@@ -512,6 +513,46 @@ router.put('/cases/:caseId/sections/:sectionId/draft', async (req: Request, res:
   }
 });
 
+/**
+ * 초안은 그대로 두고 CARE 점검만 다시 돌린다. 하위 요소(체크리스트 v2)가 생기기 전에 점검한 섹션을
+ * 새 기준으로 보거나, 판정 없음 항목을 다시 판정할 때 쓴다. 초안 버전은 바뀌지 않는다.
+ */
+router.post('/cases/:caseId/sections/:sectionId/care-check', async (req: Request, res: Response) => {
+  try {
+    const { caseId, sectionId } = req.params;
+    if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
+    const before = await loadCase(caseId);
+    if (!before) return res.status(404).json({ error: 'Case not found' });
+    const beforeState = normalizeStudyWriteState(before.studyWrite);
+    if (beforeState.submittedAt) return res.status(400).json({ error: '이미 제출한 사례입니다.' });
+    const draftText = beforeState.sections?.[sectionId]?.draftText || '';
+    if (!draftText.trim()) return res.status(400).json({ error: '점검할 초안이 없습니다.' });
+    const careCheck = await runCareCheck({ caseData: before, state: beforeState, sectionId, draftText });
+    const result = await serialize(caseId, async () => {
+      const latest = await loadCase(caseId);
+      if (!latest) return null;
+      const state = normalizeStudyWriteState(latest.studyWrite);
+      const current = state.sections?.[sectionId];
+      // 점검하는 사이 초안이 바뀌었으면 저장하지 않는다 (옛 초안의 판정이 된다)
+      if (!current || current.draftText !== draftText) {
+        throw new Error('점검하는 사이 초안이 바뀌었습니다. 다시 점검해 주세요.');
+      }
+      const now = new Date().toISOString();
+      const merged: StudyWriteState = {
+        ...state,
+        sections: { ...(state.sections || {}), [sectionId]: { ...current, careCheck } },
+        updatedAt: now
+      };
+      await saveState(latest.id, merged);
+      return buildDraftsResponse(latest, merged, await listAttachments(latest.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '점검하지 못했습니다.' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 표·그림 첨부
 
@@ -598,12 +639,26 @@ router.delete('/cases/:caseId/attachments/:attachmentId', async (req: Request, r
  * 화면이 /drafts/generate 로 따로 요청한다.
  */
 /** CARE 점검의 "없음" 항목을 쓰기 위한 질문을 만든다 (SW-Q3). 저장하지 않는다. */
+/**
+ * CARE 점검에서 "이 정보 입력하기"의 대상: 항목(예: "9b") 또는 하위 요소(예: "9b-H4", 체크리스트 v2).
+ * 하위 요소면 항목 번호·묶음·기준을 붙인 설명을 질문 체인에 넘긴다.
+ */
+function careTargetDef(sectionId: string, code: string): { label: string; required: boolean } | null {
+  const item = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((entry) => entry.code === code);
+  if (item) return { label: item.label, required: item.required };
+  const sub = findSubElement(sectionId, code);
+  if (!sub) return null;
+  const group = sub.groupLabel ? `${sub.groupLabel} ` : '';
+  const condition = sub.condition ? ` (조건: ${sub.condition})` : '';
+  return { label: `${sub.itemCode} ${group}하위 요소 "${sub.label}": ${sub.criterion}${condition}`, required: sub.required };
+}
+
 router.post('/cases/:caseId/sections/:sectionId/care-question', async (req: Request, res: Response) => {
   try {
     const { caseId, sectionId } = req.params;
     const code = String(req.body?.code || '').trim();
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
-    const def = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((item) => item.code === code);
+    const def = careTargetDef(sectionId, code);
     if (!def) return res.status(400).json({ error: '알 수 없는 CARE 항목입니다.' });
     const caseData = await loadCase(caseId);
     if (!caseData) return res.status(404).json({ error: 'Case not found' });
@@ -631,7 +686,7 @@ router.post('/cases/:caseId/sections/:sectionId/care-info', async (req: Request,
     const answer = String(req.body?.answer || '');
     const question = typeof req.body?.question === 'string' ? req.body.question : undefined;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
-    const def = (CARE_ITEMS_BY_SECTION[sectionId] || []).find((item) => item.code === code);
+    const def = careTargetDef(sectionId, code);
     if (!def) return res.status(400).json({ error: '알 수 없는 CARE 항목입니다.' });
     const result = await serialize(caseId, async () => {
       const caseData = await loadCase(caseId);
