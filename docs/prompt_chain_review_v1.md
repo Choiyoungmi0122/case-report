@@ -134,7 +134,22 @@
 | 8 | 재시도·시간·토큰 상한 | 완료 | `new OpenAI({ maxRetries: 0, timeout })` — 재시도는 앱에서만(전송 오류 2회, 지수 백오프 0.5→1→2초). 체인별 상한표 `CHAIN_LIMITS`(라벨 접두어: CHAIN1 180s/8k, CHAIN2 90s/3k, CHAIN3 240s/8k, CHAIN4·5 120s/4k, CHAIN6 120s/6k, CHAIN7 300s/16k, SECTION 90s/3k, SW-Q2 90s/3k, SW-D·SW-R 180s/6k, SW-C 90s/4k, TERMINOLOGY 30s/1k), 요청마다 `max_completion_tokens`와 request `timeout` 전달. `finish_reason=length`는 재시도 없이 `llm_output_truncated`. `shouldRetryLLMError`는 ZodError·SyntaxError·LLMOutputError를 제외. 토큰 사용량은 수정 호출까지 합산해 `onUsage`로 보고, 사용량 JSONL에는 `(repair)` 표시 |
 | 9 | 스키마와 프롬프트 일치·휴리스틱 표기 | 완료 | 모델 출력 스키마를 분리: `Chain3ModelOutputSchema`(evidenceLinks·unsupportedClaims 없음), `Chain6ModelOutputSchema`(updatedDraftText만), `FinalDraftModelOutputSchema`(sectionTraceability 없음). 저장 형태(`SectionDraftSchema`, `Chain6SectionUpdateOutputSchema`, `FinalDraftSchema`)는 그대로 두고 `buildDraftTraceability`가 덧붙인다. 그 성격(문자 2-gram 겹침, 임계 0.4)을 코드 주석, 미지원 문장 `reason` 문구("자동 문자 일치 검사에서 … 찾지 못했습니다. 실제 근거 여부는 기록을 확인해 판단하세요."), Scaffold 섹션 화면의 대체 문구, DOCX "Evidence Traceability" 부록 머리말에 밝힘. 고정 사례의 저장된 `reason`은 바뀌지 않는다 |
 
-검증: `npm run test:llm-client`(신설: 스키마 정규화, 수정 호출 1회·전송 재시도·400 즉시 실패·잘린 출력, 체인 상한, 근거 범위, 갱신 상태 규칙), `test:prompt-registry`, `test:study`, `test:study-integration`, `test:study-write`, `test:research-export`, `test:export`, `test:optimization`, `test:common-questions`, `test:workflow`, `test:privacy-outbound`, `test:privacy-payload`, `test:timeline-import` 통과. 백엔드·프론트 `tsc` 통과. 실제 LLM 호출로 수정 호출의 성공률은 재지 않았다.
+검증(2순위): `npm run test:llm-client`(신설: 스키마 정규화, 수정 호출 1회·전송 재시도·400 즉시 실패·잘린 출력, 체인 상한, 근거 범위, 갱신 상태 규칙), `test:prompt-registry`, `test:study`, `test:study-integration`, `test:study-write`, `test:research-export`, `test:export`, `test:optimization`, `test:common-questions`, `test:workflow`, `test:privacy-outbound`, `test:privacy-payload`, `test:timeline-import` 통과. 백엔드·프론트 `tsc` 통과. 실제 LLM 호출로 수정 호출의 성공률은 재지 않았다.
+
+## 5-4. 진행 상태 (2026-10-12, 3순위 작업)
+
+고정 연구 사례는 CHAIN1을 돌리지 않고(저장된 스냅샷), 실험용 Scaffold 공개 경로(`routes/scaffold.ts`)는 손대지 않았다. 학생 V1·Scaffold V2 자료에는 영향이 없다.
+
+| # | 항목 | 상태 | 내용 |
+|---|---|---|---|
+| 10 | CHAIN1 재정규화·입력 해시 | 완료 | 카드를 만들 때 사전 치환을 다시 돌리던 것을 없앰. 절과 맞으면 그 절의 `normalizedText`(원문에 사용자가 확정한 용어만 반영)와 용어를 쓰고, 맞는 절이 없으면 원문 그대로 두고 `rewriteText:false`로 용어만 찾는다. 모델이 바꿔 낸 `normalizedText`는 쓰지 않는다. `buildChain1InputHash`가 존재하지 않는 방문 단위 필드 대신 절 단위 본문·섹션 힌트·용어를 해시한다(용어 확정이 바뀌면 CHAIN1이 다시 돈다) |
+| 11 | CHAIN7 | 완료 | 공통 질문 답변(`__COMMON__`)을 질의응답 입력에 "공통 질문(여러 섹션에 해당)"으로 포함. 앞부분 입력으로 저자가 쓴 제목·고찰에 `authoredBy: 'user'`를 남기고 최종 구성이 덮어쓰지 않으며 최종 원고 본문도 저자 원문으로 맞춤. 저자 핵심어가 있으면 본문 KEYWORDS로 유지. CHAIN7이 쓴 섹션은 `authoredBy: 'chain7'`로 표시해 다음 구성 때 다시 씀(이전에는 한 번 생성된 고찰이 저자 원문처럼 굳었다). 표시 없는 옛 문서의 고찰은 이전 동작대로 둔다. 저장 직전에 최신 문서를 다시 읽어 그 위에 반영(구성 중 들어온 답변 보존). 캐시 해시는 **저장 뒤 상태**로 계산하고, 구성 중 입력이 바뀌었으면 캐시를 남기지 않고 stale 상태를 유지. 생성 메타데이터의 `CHAIN7:v1` 하드코딩을 레지스트리 값으로 교체 |
+| 12 | 캐시 정리·쓰기 경쟁·판정기 | 완료 | `caseModel.recordChainRun`: `chainCache.X`·`sectionAdequacyReviews.X`를 점 경로 `$set`, 성능 로그를 `$push … $slice:-200`으로 원자 병합(필드가 null인 옛 문서는 읽어서 합치는 대체 경로). 섹션 검토·섹션 답변·공통 답변·앞부분 입력·CHAIN7 작업/캐시 적중/실패가 이것을 쓴다. 같은 섹션 검토가 동시에 오면 진행 중인 호출을 공유(케이스·섹션·입력 해시 기준). 검토 입력 해시에 `sectionHints` 포함. 읽는 곳이 없던 CHAIN6 캐시 항목은 더 쓰지 않는다(성능 로그는 남김). `CHAIN3_STUDY_REVEAL` 캐시 쓰기는 실험 경로라 그대로 두었다(출처 기록 용도). 용어 판정기: 같은 표현·후보 조합 메모이제이션(진행 중 호출 공유, 5,000개), 60초 안에 3회 실패하면 120초 동안 호출하지 않음, 판정기 실패는 ASK_USER 대신 **원문 유지**(KEEP_ORIGINAL)로 처리해 확인 요청 폭주를 막음 |
+| 13 | 정리 | 완료 | 용어 판정기 프롬프트를 한국어로 옮김(`TERM:v2`, 판단 기준 동일). 일반 Write 섹션 화면 안내문(`uiHints`)·남은 질문 없음 사유·CHAIN7 상태 설명·실패 메시지·판정기 사유를 한국어로. `chains.ts`의 쓰지 않는 별칭 export 11개 삭제(`buildSectionDraftTraceability`는 테스트가 써서 유지). `schemas/chain5_final.ts` → `schemas/chain7_final.ts` |
+
+정책 변화 두 가지(연구자 확인 권장): (가) 용어 판정기 장애 시 저자에게 묻지 않고 원문을 둔다. 본문을 바꾸지 않는 정책(2026-10-11)과 맞지만, 장애 동안 오타·약어 확인 기회가 사라진다. (나) 기존 일반 Write 사례는 해시 변경으로 다음 처리 때 CHAIN1·CHAIN7·검토가 한 번씩 다시 돈다.
+
+검증(3순위): `npm run test:chain-hygiene`(신설: 카드 본문 비치환, CHAIN1 해시, CHAIN7 반영 규칙, 판정기 메모·차단·원문 유지), `npm run test:chain-state-integration`(신설, 테스트 전용 DB: 동시 쓰기 3건 보존, 키 삭제, 로그 200개 제한, 잘못된 키 거부, null 필드 대체 경로). 그 밖의 백엔드 스위트 27개와 백엔드·프론트 `tsc` 통과. `test:deid`(106행)·`test:privacy`(55행)는 실패하지만 HEAD(`ecf81c5`)에서도 같은 줄에서 실패하는 기존 문제다(2026-10-11 용어 정규화 결정 이후 기대값이 맞지 않음).
 
 ## 6. 점검 방법
 

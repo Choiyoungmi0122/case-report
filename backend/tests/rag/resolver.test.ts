@@ -92,7 +92,8 @@ async function run() {
       }
     }
   });
-  assert.equal(llmFailureFallback.decision, 'ASK_USER');
+  // 판정기 장애 시 확인 요청을 쏟아내지 않고 원문을 둔다 (2026-10-12)
+  assert.equal(llmFailureFallback.decision, 'KEEP_ORIGINAL');
 
   const keepOriginal = await resolveRetrievedTerminology({
     original: 'weak semantic',

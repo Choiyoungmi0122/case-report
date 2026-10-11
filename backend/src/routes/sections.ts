@@ -2,7 +2,6 @@ import express, { Request, Response } from 'express';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, QnAPair } from '../types';
 import {
-  appendPerformanceLog,
   buildChainCacheEntry,
   buildChainProgress,
   buildPerformanceLog,
@@ -22,7 +21,7 @@ import { summarizeError } from '../utils/errorSummary';
 import { normalizeQuestionComparisonKey, normalizeQuestionText } from '../questions/questionTemplates';
 import { runSectionAdequacyReview, runSectionDraftUpdate } from '../llm/chains';
 import { getRelevantEvidence } from '../llm/evidenceScope';
-import { refreshQuestionState } from '../questions/questionState';
+import { buildQuestionStateCacheEntries, refreshQuestionState } from '../questions/questionState';
 
 const router = express.Router();
 const caseModel = new CaseModel();
@@ -231,12 +230,20 @@ function buildReviewInputHash(params: {
     params.currentDraft || '',
     '::evidence::',
     ...(params.evidenceCards || []).map((card) =>
-      [card.id || '', card.normalizedText || card.sourceText || '', JSON.stringify(card.tags || [])].join('|')
+      [
+        card.id || '',
+        card.normalizedText || card.sourceText || '',
+        JSON.stringify(card.tags || []),
+        JSON.stringify(card.sectionHints || [])
+      ].join('|')
     ),
     '::history::',
     ...((params.qnaHistory || []).map((item) => `${item.question || ''}|${item.answer || ''}`))
   ]);
 }
+
+/** 같은 섹션 검토가 동시에 두 번 돌지 않게, 진행 중인 검토를 (케이스, 섹션, 입력 해시)로 공유한다. */
+const inFlightReviews = new Map<string, Promise<any>>();
 
 async function ensureAdequacyReview(params: {
   caseId: string;
@@ -249,30 +256,37 @@ async function ensureAdequacyReview(params: {
 }) {
   const inputHash = buildReviewInputHash(params);
   const existing = !params.forceRefresh ? getStoredAdequacyReview(params.caseData, params.sectionId) : null;
-  if (
-    existing &&
-    existing.reviewInputHash === inputHash &&
-    hasChainCacheHit(params.caseData, `REVIEW:${params.sectionId}`, inputHash)
-  ) {
-    await caseModel.updateCase(params.caseId, {
-      chainCache: {
-        ...(params.caseData.chainCache || {}),
-        [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, existing, `REVIEW:${params.sectionId}`)
-      },
-      chainPerformanceLogs: appendPerformanceLog(
-        params.caseData.chainPerformanceLogs || [],
+  const chainKey = `REVIEW:${params.sectionId}`;
+  if (existing && existing.reviewInputHash === inputHash && hasChainCacheHit(params.caseData, chainKey, inputHash)) {
+    await caseModel.recordChainRun(params.caseId, {
+      cacheEntries: { [chainKey]: buildChainCacheEntry(inputHash, existing, chainKey) },
+      performanceLogs: [
         buildPerformanceLog({
-          chainName: `REVIEW:${params.sectionId}`,
+          chainName: chainKey,
           startedAt: new Date().toISOString(),
           inputHash,
           cacheHit: true,
           llmCallCount: 0
         })
-      )
-    } as any);
+      ]
+    });
     return existing;
   }
 
+  const flightKey = `${params.caseId}:${params.sectionId}:${inputHash}`;
+  const pending = inFlightReviews.get(flightKey);
+  if (pending) return pending;
+  const job = runAdequacyReviewAndStore(params, inputHash);
+  inFlightReviews.set(flightKey, job);
+  try {
+    return await job;
+  } finally {
+    inFlightReviews.delete(flightKey);
+  }
+}
+
+async function runAdequacyReviewAndStore(params: Parameters<typeof ensureAdequacyReview>[0], inputHash: string) {
+  const chainKey = `REVIEW:${params.sectionId}`;
   const startedAt = new Date().toISOString();
   let reviewUsage: any = null;
   await caseModel.updateCase(params.caseId, {
@@ -298,27 +312,23 @@ async function ensureAdequacyReview(params: {
     reviewInputHash: inputHash
   };
 
-  await caseModel.updateCase(params.caseId, {
-    sectionAdequacyReviews: {
-      ...(params.caseData.sectionAdequacyReviews || {}),
-      [params.sectionId]: snapshot
-    },
-    chainCache: {
-      ...(params.caseData.chainCache || {}),
-      [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot, `REVIEW:${params.sectionId}`)
-    },
-    chainPerformanceLogs: appendPerformanceLog(
-      params.caseData.chainPerformanceLogs || [],
+  const cacheEntry = buildChainCacheEntry(inputHash, snapshot, chainKey);
+  await caseModel.recordChainRun(params.caseId, {
+    sectionAdequacyReviews: { [params.sectionId]: snapshot },
+    cacheEntries: { [chainKey]: cacheEntry },
+    performanceLogs: [
       buildPerformanceLog({
-        chainName: `REVIEW:${params.sectionId}`,
+        chainName: chainKey,
         startedAt,
         inputHash,
         cacheHit: false,
         llmCallCount: 1,
         tokenUsage: reviewUsage
       })
-    ),
-    chainProgress: buildChainProgress(undefined, [`REVIEW:${params.sectionId}`], [])
+    ]
+  });
+  await caseModel.updateCase(params.caseId, {
+    chainProgress: buildChainProgress(undefined, [chainKey], [])
   } as any);
 
   params.caseData.sectionAdequacyReviews = {
@@ -327,7 +337,7 @@ async function ensureAdequacyReview(params: {
   };
   params.caseData.chainCache = {
     ...(params.caseData.chainCache || {}),
-    [`REVIEW:${params.sectionId}`]: buildChainCacheEntry(inputHash, snapshot, `REVIEW:${params.sectionId}`)
+    [chainKey]: cacheEntry
   };
 
   return snapshot;
@@ -437,8 +447,8 @@ function buildSectionUiHints(params: {
   if (hasDraft && hasQnaHistory && !hasSectionQuestions && !hasSectionMissingInfo) {
     return {
       stage: 'refined_no_questions',
-      subtitle: 'There are no more unanswered AI questions for this section.',
-      emptyMessage: 'No additional section-specific questions remain.',
+      subtitle: '이 섹션에 남은 AI 질문이 없습니다.',
+      emptyMessage: '이 섹션에 더 답할 질문이 없습니다.',
       hideStartButton: true
     };
   }
@@ -446,8 +456,8 @@ function buildSectionUiHints(params: {
   if (hasDraft && !hasQnaHistory && !hasSectionQuestions && !hasSectionMissingInfo) {
     return {
       stage: 'draft_created',
-      subtitle: 'A draft exists, and there are currently no AI follow-up questions for this section.',
-      emptyMessage: 'No additional section-specific questions are available right now.',
+      subtitle: '초안이 작성되어 있고, 지금은 이 섹션의 추가 AI 질문이 없습니다.',
+      emptyMessage: '지금은 이 섹션의 추가 질문이 없습니다.',
       hideStartButton: true
     };
   }
@@ -455,8 +465,8 @@ function buildSectionUiHints(params: {
   if (hasSectionQuestions || hasSectionMissingInfo) {
     return {
       stage: 'questions_available',
-      subtitle: 'AI-generated questions are available to refine this section.',
-      emptyMessage: 'No additional section-specific questions are available right now.',
+      subtitle: '이 섹션을 보완할 AI 질문이 있습니다.',
+      emptyMessage: '지금은 이 섹션의 추가 질문이 없습니다.',
       hideStartButton: false
     };
   }
@@ -464,11 +474,11 @@ function buildSectionUiHints(params: {
   return {
     stage: hasDraft ? 'draft_created' : 'empty',
     subtitle: hasDraft
-      ? 'Review the current draft and answer additional AI questions if they appear.'
-      : 'Not enough evidence is available to draft this section yet.',
+      ? '현재 초안을 확인하고, 추가 AI 질문이 나오면 답해 주세요.'
+      : '아직 이 섹션의 초안을 쓸 만한 기록 근거가 없습니다.',
     emptyMessage: hasDraft
-      ? 'No additional section-specific questions are available right now.'
-      : 'No section-specific questions are available right now.',
+      ? '지금은 이 섹션의 추가 질문이 없습니다.'
+      : '지금은 이 섹션의 질문이 없습니다.',
     hideStartButton: hasDraft
   };
 }
@@ -817,7 +827,7 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         sectionMissingInfo,
         commonMissingInfo: commonPayload.commonMissingInfo,
         commonQnaHistory: commonPayload.commonQnaHistory,
-        insufficiencyReason: nextQuestion ? null : 'No additional section-specific AI questions remain.',
+        insufficiencyReason: nextQuestion ? null : '이 섹션에 남은 AI 질문이 없습니다.',
         qnaHistory,
         uiHints
       }));
@@ -918,6 +928,38 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
     // 캐시 적중 시 새 배열이 돌아온다. 저장은 돌아온 상태로 한다.
     sectionStates = globalState.sectionStates;
 
+    // CHAIN6 캐시 항목은 남기지 않는다(읽는 곳이 없었다. 갱신된 초안은 sectionDrafts 에, 실행 기록은 성능 로그에 있다).
+    // CHAIN4/5 캐시와 로그는 원자적으로 병합해 동시에 돈 다른 요청의 항목을 지우지 않는다.
+    await caseModel.recordChainRun(id, {
+      cacheEntries: buildQuestionStateCacheEntries(globalState),
+      performanceLogs: [
+        buildPerformanceLog({
+          chainName: 'CHAIN6',
+          startedAt: chain6StartedAt,
+          inputHash: chain6InputHash,
+          cacheHit: false,
+          llmCallCount: 1,
+          tokenUsage: chain6Usage
+        }),
+        buildPerformanceLog({
+          chainName: 'CHAIN4',
+          startedAt: globalState.cacheMeta.startedAt || new Date().toISOString(),
+          inputHash: globalState.cacheMeta.chain4InputHash,
+          cacheHit: globalState.cacheMeta.chain4CacheHit,
+          llmCallCount: globalState.cacheMeta.chain4CacheHit ? 0 : 1,
+          tokenUsage: chain4Usage
+        }),
+        buildPerformanceLog({
+          chainName: 'CHAIN5',
+          startedAt: globalState.cacheMeta.startedAt || new Date().toISOString(),
+          inputHash: globalState.cacheMeta.chain5InputHash,
+          cacheHit: globalState.cacheMeta.chain5CacheHit,
+          llmCallCount: globalState.cacheMeta.chain5CacheHit ? 0 : 1,
+          tokenUsage: chain5Usage
+        })
+      ]
+    });
+
     await caseModel.updateCase(id, {
       sectionDrafts,
       sectionStates,
@@ -935,60 +977,6 @@ router.post('/:id/sections/:sectionId/next', async (req: Request, res: Response)
         errorMessage: undefined
       },
       staleState: buildStaleState('ANSWER_UPDATED'),
-      chainCache: {
-        ...(anyCase.chainCache || {}),
-        CHAIN6: buildChainCacheEntry(chain6InputHash, {
-          sectionId: section,
-          updatedDraftText: draftEntry.draftText || '',
-          evidenceLinks: draftEntry.evidenceLinks || [],
-          unsupportedClaims: draftEntry.unsupportedClaims || []
-        }, 'CHAIN6'),
-        CHAIN4: buildChainCacheEntry(globalState.cacheMeta.chain4InputHash, {
-          commonMissingItems: globalState.commonMissingItems,
-          sectionMissingBySection: sectionStates.map((item) => ({
-            sectionId: item.sectionId,
-            missingInfoBullets: item.missingInfoBullets || []
-          }))
-        }, 'CHAIN4'),
-        CHAIN5: buildChainCacheEntry(globalState.cacheMeta.chain5InputHash, {
-          commonQuestionSets: globalState.commonQuestionSets,
-          sectionQuestionsBySection: sectionStates.map((item) => ({
-            sectionId: item.sectionId,
-            recommendedQuestions: item.recommendedQuestions || []
-          }))
-        }, 'CHAIN5')
-      },
-      chainPerformanceLogs: appendPerformanceLog(
-        appendPerformanceLog(
-          appendPerformanceLog(
-            anyCase.chainPerformanceLogs || [],
-            buildPerformanceLog({
-              chainName: 'CHAIN6',
-              startedAt: chain6StartedAt,
-              inputHash: chain6InputHash,
-              cacheHit: false,
-              llmCallCount: 1,
-              tokenUsage: chain6Usage
-            })
-          ),
-          buildPerformanceLog({
-            chainName: 'CHAIN4',
-            startedAt: globalState.cacheMeta.startedAt || new Date().toISOString(),
-            inputHash: globalState.cacheMeta.chain4InputHash,
-            cacheHit: globalState.cacheMeta.chain4CacheHit,
-            llmCallCount: globalState.cacheMeta.chain4CacheHit ? 0 : 1,
-            tokenUsage: chain4Usage
-          })
-        ),
-        buildPerformanceLog({
-          chainName: 'CHAIN5',
-          startedAt: globalState.cacheMeta.startedAt || new Date().toISOString(),
-          inputHash: globalState.cacheMeta.chain5InputHash,
-          cacheHit: globalState.cacheMeta.chain5CacheHit,
-          llmCallCount: globalState.cacheMeta.chain5CacheHit ? 0 : 1,
-          tokenUsage: chain5Usage
-        })
-      ),
       chainProgress: buildChainProgress(undefined, ['CHAIN6', 'CHAIN4', 'CHAIN5'], [])
     });
     await caseModel.saveSectionInteraction(id, {

@@ -18,7 +18,7 @@ import { shouldRetryLLMError } from '../../src/utils/errorSummary';
 import { Chain3ModelOutputSchema } from '../../src/llm/schemas/chain3_draft';
 import { Chain4MissingOutputSchema } from '../../src/llm/schemas/chain4_missing';
 import { Chain5QuestionOutputSchema } from '../../src/llm/schemas/chain5_questions';
-import { FinalDraftModelOutputSchema } from '../../src/llm/schemas/chain5_final';
+import { FinalDraftModelOutputSchema } from '../../src/llm/schemas/chain7_final';
 import { SectionAdequacyReviewOutputSchema } from '../../src/llm/schemas/section_adequacy_review';
 import { StudyWriteGapQuestionsOutputSchema } from '../../src/llm/schemas/studyWrite_questions';
 import { coerceCareSection } from '../../src/llm/schemas/common';

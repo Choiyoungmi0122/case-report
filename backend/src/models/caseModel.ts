@@ -1,4 +1,4 @@
-import { Case, SectionInteraction, CareSection } from '../types';
+import { Case, SectionInteraction, CareSection, ChainCacheEntry, ChainPerformanceLog } from '../types';
 import {
   CaseModel as CaseMongoModel,
   SectionInteractionModel,
@@ -295,6 +295,66 @@ export class CaseModel {
     if ((updates as any).studyWrite !== undefined) updateData.studyWrite = (updates as any).studyWrite;
 
     await CaseMongoModel.updateOne({ id }, { $set: updateData }).exec();
+  }
+
+  /**
+   * 체인 캐시 항목·성능 로그·섹션 검토를 **원자적으로 병합**한다.
+   *
+   * 이전에는 요청 시작 때 읽은 문서에서 `chainCache: { ...old, X }`, `chainPerformanceLogs: [...old, log]` 를 만들어
+   * 통째로 덮어써, 동시에 돈 다른 요청(예: 다른 섹션 검토, 긴 CHAIN7 작업 중의 답변)의 항목이 사라졌다
+   * (docs/prompt_chain_review_v1.md §2-8). 여기서는 `$set: { 'chainCache.X': … }` 와 `$push … $slice: -200` 만 쓴다.
+   * 값이 null 인 키는 지운다.
+   */
+  async recordChainRun(
+    id: string,
+    params: {
+      cacheEntries?: Record<string, ChainCacheEntry | null>;
+      performanceLogs?: ChainPerformanceLog[];
+      sectionAdequacyReviews?: Record<string, unknown>;
+    }
+  ): Promise<void> {
+    const set: Record<string, unknown> = {};
+    const unset: Record<string, ''> = {};
+    const assignAll = (field: string, values: Record<string, unknown> | undefined) => {
+      for (const [key, value] of Object.entries(values || {})) {
+        if (!key || key.includes('.') || key.startsWith('$')) throw new Error(`invalid ${field} key: ${key}`);
+        if (value === null) unset[`${field}.${key}`] = '';
+        else if (value !== undefined) set[`${field}.${key}`] = value;
+      }
+    };
+    assignAll('chainCache', params.cacheEntries as Record<string, unknown> | undefined);
+    assignAll('sectionAdequacyReviews', params.sectionAdequacyReviews);
+    const logs = (params.performanceLogs || []).filter(Boolean);
+
+    const update: Record<string, unknown> = {};
+    if (Object.keys(set).length > 0) update.$set = set;
+    if (Object.keys(unset).length > 0) update.$unset = unset;
+    if (logs.length > 0) update.$push = { chainPerformanceLogs: { $each: logs, $slice: -200 } };
+    if (Object.keys(update).length === 0) return;
+
+    try {
+      await CaseMongoModel.updateOne({ id }, update).exec();
+    } catch (error) {
+      // 옛 문서에서 필드가 null 이면 점 경로 갱신이 실패한다. 그때만 읽어서 합친 값으로 쓴다.
+      const doc: any = await CaseMongoModel.findOne({ id }).lean().exec();
+      if (!doc) throw error;
+      const chainCache = { ...(doc.chainCache || {}) };
+      for (const [key, value] of Object.entries(params.cacheEntries || {})) {
+        if (value === null) delete chainCache[key];
+        else if (value !== undefined) chainCache[key] = value;
+      }
+      const reviews = { ...(doc.sectionAdequacyReviews || {}), ...(params.sectionAdequacyReviews || {}) };
+      await CaseMongoModel.updateOne(
+        { id },
+        {
+          $set: {
+            chainCache,
+            sectionAdequacyReviews: reviews,
+            chainPerformanceLogs: [...(Array.isArray(doc.chainPerformanceLogs) ? doc.chainPerformanceLogs : []), ...logs].slice(-200)
+          }
+        }
+      ).exec();
+    }
   }
 
   async getSectionInteraction(caseId: string, sectionId: CareSection): Promise<SectionInteraction | null> {

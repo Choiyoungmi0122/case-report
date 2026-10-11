@@ -21,7 +21,7 @@ function validateDecision(
     return {
       decision: 'ASK_USER',
       confidence: clampConfidence(decision.confidence),
-      reason: 'Resolver selected a term outside the retrieved candidate set.'
+      reason: '판정기가 검색된 후보 밖의 용어를 골랐습니다.'
     };
   }
 
@@ -41,7 +41,7 @@ export async function resolveRetrievedTerminology(params: {
     return {
       decision: 'KEEP_ORIGINAL',
       confidence: 1,
-      reason: 'No retrieved terminology candidate was available.'
+      reason: '검색된 용어 후보가 없습니다.'
     };
   }
 
@@ -56,7 +56,7 @@ export async function resolveRetrievedTerminology(params: {
       decision: 'USE_CANDIDATE',
       selectedTermId: primary.termId,
       confidence: primary.score,
-      reason: `Deterministic ${primary.matchType} match.`
+      reason: `사전 ${primary.matchType} 일치로 확정했습니다.`
     };
   }
 
@@ -67,7 +67,7 @@ export async function resolveRetrievedTerminology(params: {
     return {
       decision: 'KEEP_ORIGINAL',
       confidence: primary.score,
-      reason: 'Semantic similarity is not evidence of the same term; original text is kept.'
+      reason: '뜻이 비슷한 것은 같은 용어라는 근거가 아니므로 원문을 둡니다.'
     };
   }
 
@@ -77,7 +77,7 @@ export async function resolveRetrievedTerminology(params: {
     return {
       decision: 'KEEP_ORIGINAL',
       confidence: primary.score,
-      reason: 'Partial string overlap is not evidence of the same term; original text is kept.'
+      reason: '글자 일부가 겹치는 것은 같은 용어라는 근거가 아니므로 원문을 둡니다.'
     };
   }
 
@@ -90,7 +90,7 @@ export async function resolveRetrievedTerminology(params: {
     return {
       decision: 'KEEP_ORIGINAL',
       confidence: primary.score,
-      reason: `${primary.matchType} score is too weak to normalize safely.`
+      reason: `${primary.matchType} 점수가 낮아 원문을 둡니다.`
     };
   }
 
@@ -104,7 +104,7 @@ export async function resolveRetrievedTerminology(params: {
       decision: 'USE_CANDIDATE',
       selectedTermId: primary.termId,
       confidence: primary.score,
-      reason: 'Single high-confidence fuzzy match.'
+      reason: '후보가 하나이고 유사도가 높아 확정했습니다.'
     };
   }
 
@@ -118,13 +118,20 @@ export async function resolveRetrievedTerminology(params: {
       );
       return validateDecision(resolved, candidates);
     } catch (error) {
-      console.warn('[RAG] LLM resolver failed, falling back to ASK_USER:', error);
+      // 판정기 장애 때 ASK_USER 로 떨어지면 기록마다 확인 요청이 수십 개씩 쏟아졌다. 본문은 바꾸지 않으므로
+      // (rewriteText:false) 원문을 두는 것이 안전하다. 장애는 로그로 남긴다 (2026-10-12).
+      console.warn('[RAG] LLM resolver failed, keeping original text:', (error as Error)?.message || error);
+      return {
+        decision: 'KEEP_ORIGINAL',
+        confidence: primary.score,
+        reason: '용어 판정기를 호출하지 못해 원문을 둡니다.'
+      };
     }
   }
 
   return {
     decision: 'ASK_USER',
     confidence: primary.score,
-    reason: `Multiple plausible ${primary.matchType} candidates require confirmation.`
+    reason: `${primary.matchType} 후보가 여럿이라 확인이 필요합니다.`
   };
 }

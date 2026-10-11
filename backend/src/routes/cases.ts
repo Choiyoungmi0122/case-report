@@ -59,7 +59,11 @@ import {
 } from '../config/researchMetadata';
 import { promptMeta } from '../llm/promptRegistry';
 import { getRelevantEvidence } from '../llm/evidenceScope';
-import { refreshQuestionState, RefreshQuestionStateParams } from '../questions/questionState';
+import {
+  buildQuestionStateCacheEntries,
+  refreshQuestionState,
+  RefreshQuestionStateParams
+} from '../questions/questionState';
 import { DEFAULT_STUDY_CASE_ID, DEFAULT_STUDY_CASE_VERSION, getStudyCaseTemplate } from '../study/cases/defaultStudyCase';
 import { getFixedStudyCaseAnalysis } from '../study/cases/studyCaseSnapshot';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
@@ -309,7 +313,12 @@ function buildCondensedQnaHistory(params: {
   ).map((item) => JSON.parse(item));
 }
 
+/**
+ * 저자가 직접 쓴 섹션(앞부분 입력: 제목·고찰)을 기록한다. `authoredBy: 'user'` 인 섹션은 CHAIN7 최종 구성이 덮어쓰지 않는다.
+ * 비워서 저장하면 표시를 지워 다음 최종 구성이 다시 쓰게 한다.
+ */
 function upsertSectionDraftText(sectionDrafts: any[], sectionId: CareSection, draftText: string) {
+  const authored = Boolean(String(draftText || '').trim());
   const existing = (sectionDrafts || []).find((draft: any) => draft.sectionId === sectionId);
   if (existing) {
     existing.draftText = draftText;
@@ -317,6 +326,8 @@ function upsertSectionDraftText(sectionDrafts: any[], sectionId: CareSection, dr
     existing.evidenceCardIdsUsed = existing.evidenceCardIdsUsed || [];
     existing.evidenceLinks = existing.evidenceLinks || [];
     existing.unsupportedClaims = existing.unsupportedClaims || [];
+    if (authored) existing.authoredBy = 'user';
+    else delete existing.authoredBy;
     return;
   }
 
@@ -327,8 +338,78 @@ function upsertSectionDraftText(sectionDrafts: any[], sectionId: CareSection, dr
     timelineEventIdsUsed: [],
     openIssues: [],
     evidenceLinks: [],
-    unsupportedClaims: []
+    unsupportedClaims: [],
+    ...(authored ? { authoredBy: 'user' } : {})
   });
+}
+
+/**
+ * CHAIN7 결과를 섹션 초안·상태에 반영한다(제자리 수정). 반환값은 최종 원고(fullTextBySection 이 저자 원문으로 맞춰진 것).
+ *  - `authoredBy: 'user'` 섹션은 저자 원문을 그대로 두고, 최종 원고 본문도 그 원문으로 맞춘다.
+ *  - 2026-10-12 이전 문서(표시 없음)의 고찰은 이전 동작대로 기존 본문을 둔다.
+ *  - CHAIN7 이 쓴 섹션에는 `authoredBy: 'chain7'` 을 남겨 다음 구성 때 다시 쓰게 한다
+ *    (이전에는 한 번 생성된 고찰이 저자 원문처럼 굳어 다시 생성되지 않았다).
+ *  - 저자가 앞부분 입력에 적은 핵심어(draftsBySection.KEYWORDS)가 있으면 본문 KEYWORDS 를 그것으로 둔다.
+ */
+export function applyFinalDraftToSections(params: {
+  finalDraft: any;
+  sectionDrafts: any[];
+  sectionStates: any[];
+  authoredKeywords?: string;
+}) {
+  const { finalDraft, sectionDrafts, sectionStates } = params;
+  finalDraft.fullTextBySection = { ...(finalDraft.fullTextBySection || {}) };
+  if (String(params.authoredKeywords || '').trim()) {
+    finalDraft.fullTextBySection.KEYWORDS = String(params.authoredKeywords).trim();
+  }
+
+  for (const sectionId of NON_CORE_GENERATED_SECTIONS) {
+    const existingDraft = sectionDrafts.find((draft) => draft.sectionId === sectionId);
+    const existingText = String(existingDraft?.draftText || '');
+    const keepAuthored =
+      Boolean(existingText.trim()) &&
+      (existingDraft?.authoredBy === 'user' ||
+        (!existingDraft?.authoredBy && sectionId === CareSection.DISCUSSION_CONCLUSION));
+
+    let text: string;
+    if (keepAuthored) {
+      text = existingText;
+      finalDraft.fullTextBySection[sectionId] = existingText;
+    } else {
+      text = finalDraft.fullTextBySection?.[sectionId] || '';
+      if (existingDraft) {
+        existingDraft.draftText = text;
+        existingDraft.authoredBy = 'chain7';
+      } else {
+        sectionDrafts.push({
+          sectionId,
+          evidenceCardIdsUsed: [] as string[],
+          draftText: text,
+          openIssues: [] as string[],
+          evidenceLinks: [] as Array<{ sentence: string; evidenceCardIds: string[] }>,
+          unsupportedClaims: [] as Array<{ sentence: string; reason: string }>,
+          authoredBy: 'chain7'
+        });
+      }
+    }
+
+    const existingState = sectionStates.find((state) => state.sectionId === sectionId);
+    const nextState = {
+      sectionId,
+      status: text.trim() ? 'READY' : 'IMPOSSIBLE',
+      rationaleText: !text.trim()
+        ? '현재 기록만으로는 이 항목을 작성하기 어렵습니다.'
+        : keepAuthored
+          ? '저자가 작성한 내용을 그대로 둡니다.'
+          : '최종 원고 구성 단계에서 작성한 섹션입니다.',
+      missingInfoBullets: existingState?.missingInfoBullets || [],
+      recommendedQuestions: []
+    };
+    if (existingState) Object.assign(existingState, nextState);
+    else sectionStates.push(nextState);
+  }
+
+  return finalDraft;
 }
 
 function cloneJson<T>(value: T): T {
@@ -817,7 +898,12 @@ function buildProcessInputHash(
   ]);
 }
 
-function buildChain1InputHash(preparedVisits: any[]): string {
+/**
+ * CHAIN1 의 실제 입력은 절(clause) 단위 본문·섹션 힌트·용어다(buildNarrativeVisitPromptText).
+ * 2026-10-12 이전에는 방문 단위의 `sectionHints`·`terms`(존재하지 않는 필드)를 읽어, 용어 확정이 바뀌어도 해시가 같아
+ * CHAIN1 캐시가 적중했다. 고정 연구 사례는 저장된 스냅샷을 쓰므로 이 해시와 무관하다.
+ */
+export function buildChain1InputHash(preparedVisits: any[]): string {
   return hashJoinedParts(
     (preparedVisits || []).map((visit) =>
       [
@@ -825,14 +911,18 @@ function buildChain1InputHash(preparedVisits: any[]): string {
         visit.date || '',
         visit.text || '',
         visit.normalizedText || '',
-        JSON.stringify(visit.sectionHints || []),
         JSON.stringify(
-          (visit.terms || []).map((term: any) => ({
-            surface: term.surface,
-            normalizedTerm: term.normalizedTerm || '',
-            termId: term.termId || '',
-            status: term.status || '',
-            needsUserConfirmation: Boolean(term.needsUserConfirmation)
+          (visit.clauses || []).map((clause: any) => ({
+            source: clause.sourceText || '',
+            normalized: clause.normalizedText || '',
+            hints: clause.sectionHints || [],
+            terms: (clause.terms || []).map((term: any) => ({
+              surface: term.surface,
+              normalizedTerm: term.normalizedTerm || '',
+              termId: term.termId || '',
+              status: term.status || '',
+              needsUserConfirmation: Boolean(term.needsUserConfirmation)
+            }))
           }))
         )
       ].join('|')
@@ -918,10 +1008,6 @@ function buildChain3PromptHash(evidenceCards: any[], sectionStates: any[]) {
     ),
     buildChain3InputHash(evidenceCards, sectionStates)
   ]);
-}
-
-function buildPromptTemplateHash(systemPrompt: string, promptVersion: string) {
-  return hashPromptParts([promptVersion, systemPrompt]);
 }
 
 function attachDraftGenerationMetadata(params: {
@@ -1725,14 +1811,19 @@ function findTargetSectionsForCommonQuestion(params: {
   return matched?.targetSectionIds || [];
 }
 
+/**
+ * CHAIN7 입력용 질의응답. 공통 질문 답변(__COMMON__)도 넣는다: 공통 답변이 대상 섹션을 찾지 못해 어느 초안에도
+ * 반영되지 않았을 때(docs/prompt_chain_review_v1.md §2-7) 최종 원고에서라도 쓰이게 한다.
+ */
 async function collectQnaHistoryBySection(caseId: string) {
   const qnaHistoryBySection: Record<string, Array<{ question: string; answer: string }>> = {};
-  const interactionResults = await caseModel.getInteractionsByKeys(caseId, ALL_CARE_SECTIONS);
+  const keys = [...ALL_CARE_SECTIONS, COMMON_INTERACTION_KEY as any];
+  const interactionResults = await caseModel.getInteractionsByKeys(caseId, keys);
   const interactionMap = new Map(
     interactionResults.map((interaction) => [interaction.sectionId, interaction])
   );
 
-  for (const sectionKey of ALL_CARE_SECTIONS) {
+  for (const sectionKey of keys) {
     const interaction = interactionMap.get(sectionKey);
     if (interaction?.qnaHistory?.length) {
       qnaHistoryBySection[sectionKey] = interaction.qnaHistory.map((item) => ({
@@ -1781,6 +1872,8 @@ async function runFinalComposeJob(params: {
       const sectionDrafts: any[] = baseCase.sectionDrafts || [];
       const evidenceCards: any[] = baseCase.evidenceCards || [];
       const qnaHistoryBySection = await collectQnaHistoryBySection(caseId);
+      // 실제로 쓴 입력의 해시 (요청 때 계산한 해시와 다를 수 있다: 대기 중에 답변이 들어온 경우)
+      const jobInputHash = buildChain7InputHash({ sectionDrafts, evidenceCards, qnaHistoryBySection, contributionAnswers });
       const chain7StartedAt = new Date().toISOString();
       let chain7Usage: any = null;
 
@@ -1807,90 +1900,70 @@ async function runFinalComposeJob(params: {
           chain7Usage = usage;
         }
       });
+      const chain7Meta = promptMeta('CHAIN7');
       (finalDraft as any).generationMetadata = buildGenerationMetadata({
         chainName: 'CHAIN7',
         provider: 'openai',
-        model: getModelForChain('chain7'),
-        actualModelVersion: getModelForChain('chain7'),
-        inputHash,
-        promptHash: hashPromptParts([chain7SystemPrompt, inputHash]),
-        promptTemplateHash: buildPromptTemplateHash(chain7SystemPrompt, 'CHAIN7:v1'),
-        promptVersion: 'CHAIN7:v1',
+        model: chain7Meta.model,
+        actualModelVersion: chain7Meta.model,
+        inputHash: jobInputHash,
+        promptHash: hashPromptParts([chain7SystemPrompt, jobInputHash]),
+        promptTemplateHash: chain7Meta.promptTemplateHash,
+        promptVersion: chain7Meta.promptVersion,
         temperature: 0,
         generatedAt: chain7StartedAt,
         cacheHit: false,
         generationStatus: 'success',
         tokenUsage: chain7Usage
       });
-      const authoredDiscussion =
-        sectionDrafts.find((draft) => draft.sectionId === CareSection.DISCUSSION_CONCLUSION)?.draftText ||
-        (baseCase.draftsBySection || {})[CareSection.DISCUSSION_CONCLUSION] ||
-        '';
-      if (authoredDiscussion.trim()) {
-        finalDraft.fullTextBySection = {
-          ...(finalDraft.fullTextBySection || {}),
-          [CareSection.DISCUSSION_CONCLUSION]: authoredDiscussion
-        };
-      }
 
-      const nextSectionDrafts = [...sectionDrafts];
-      const nextSectionStates = [...(baseCase.sectionStates || [])];
-
-      for (const sectionId of NON_CORE_GENERATED_SECTIONS) {
-        const text = finalDraft.fullTextBySection?.[sectionId] || '';
-        const existingDraft = nextSectionDrafts.find((draft) => draft.sectionId === sectionId);
-        if (existingDraft) {
-          existingDraft.draftText = text;
-        } else {
-          nextSectionDrafts.push({
-            sectionId,
-            evidenceCardIdsUsed: [] as string[],
-            draftText: text,
-            openIssues: [] as string[],
-            evidenceLinks: [] as Array<{ sentence: string; evidenceCardIds: string[] }>,
-            unsupportedClaims: [] as Array<{ sentence: string; reason: string }>
-          });
-        }
-
-        const existingState = nextSectionStates.find((state) => state.sectionId === sectionId);
-        const nextState = {
-          sectionId,
-          status: text.trim() ? 'READY' : 'IMPOSSIBLE',
-          rationaleText: text.trim()
-            ? 'This section was composed from the final manuscript generation step.'
-            : '현재 기록만으로는 이 항목을 작성하기 어렵습니다.',
-          missingInfoBullets: existingState?.missingInfoBullets || [],
-          recommendedQuestions: []
-        };
-
-        if (existingState) {
-          Object.assign(existingState, nextState);
-        } else {
-          nextSectionStates.push(nextState);
-        }
-      }
-
-      await caseModel.updateCase(caseId, {
+      // 구성에 몇 분이 걸린다. 그사이 저자가 답하거나 고친 내용을 지우지 않도록 저장 직전의 최신 문서에 반영한다.
+      const latestCase: any = (await caseModel.getCase(caseId)) || baseCase;
+      const latestQna = await collectQnaHistoryBySection(caseId);
+      const latestInputHash = buildChain7InputHash({
+        sectionDrafts: latestCase.sectionDrafts || [],
+        evidenceCards: latestCase.evidenceCards || [],
+        qnaHistoryBySection: latestQna,
+        contributionAnswers
+      });
+      const changedDuringCompose = latestInputHash !== jobInputHash;
+      const nextSectionDrafts = cloneJson(latestCase.sectionDrafts || []);
+      const nextSectionStates = cloneJson(latestCase.sectionStates || []);
+      applyFinalDraftToSections({
         finalDraft,
-        chainCache: {
-          ...(baseCase.chainCache || {}),
-          CHAIN7: buildChainCacheEntry(inputHash, finalDraft, 'CHAIN7')
-        },
-        chainProgress: buildChainProgress(undefined, ['CHAIN7'], []),
-        chainPerformanceLogs: appendPerformanceLog(
-          baseCase.chainPerformanceLogs || [],
+        sectionDrafts: nextSectionDrafts,
+        sectionStates: nextSectionStates,
+        authoredKeywords: (latestCase.draftsBySection || {}).KEYWORDS
+      });
+      // 캐시 해시는 저장 뒤의 상태로 계산한다. 이전에는 저장 전 해시를 남겨, 구성이 앞부분 섹션을 바꾼 뒤에는
+      // 다음 요청의 해시가 달라 두 번째부터 캐시가 적중하지 않았다. 작성 중 입력이 바뀌었으면 캐시를 남기지 않는다.
+      const postWriteHash = buildChain7InputHash({
+        sectionDrafts: nextSectionDrafts,
+        evidenceCards: latestCase.evidenceCards || [],
+        qnaHistoryBySection: latestQna,
+        contributionAnswers
+      });
+
+      await caseModel.recordChainRun(caseId, {
+        cacheEntries: changedDuringCompose ? {} : { CHAIN7: buildChainCacheEntry(postWriteHash, finalDraft, 'CHAIN7') },
+        performanceLogs: [
           buildPerformanceLog({
             chainName: 'CHAIN7',
             startedAt: chain7StartedAt,
-            inputHash,
+            inputHash: jobInputHash,
             cacheHit: false,
             llmCallCount: 1,
-          tokenUsage: chain7Usage
-        })
-      ),
+            tokenUsage: chain7Usage
+          })
+        ]
+      });
+      await caseModel.updateCase(caseId, {
+        finalDraft,
+        chainProgress: buildChainProgress(undefined, ['CHAIN7'], []),
         sectionDrafts: nextSectionDrafts,
         sectionStates: nextSectionStates,
-        staleState: clearStaleState(),
+        // 작성 중에 입력이 바뀌었으면 최종 원고가 최신이 아님을 그대로 둔다.
+        staleState: changedDuringCompose ? latestCase.staleState || buildStaleState('ANSWER_UPDATED') : clearStaleState(),
         finalComposeStatus: {
           status: 'COMPLETED',
           requestedAt: requestedAt || startedAt,
@@ -1899,25 +1972,27 @@ async function runFinalComposeJob(params: {
         }
       } as any);
     } catch (error: any) {
-      await caseModel.updateCase(caseId, {
-        staleState: buildStaleState('EVIDENCE_REGENERATED'),
-        chainPerformanceLogs: appendPerformanceLog(
-          baseCase?.chainPerformanceLogs || [],
+      const errorMessage = error?.message || '최종 원고를 만들지 못했습니다.';
+      await caseModel.recordChainRun(caseId, {
+        performanceLogs: [
           buildPerformanceLog({
             chainName: 'CHAIN7',
             startedAt,
             inputHash,
             cacheHit: false,
             llmCallCount: 1,
-            error: error?.message || 'Failed to compose final manuscript.'
+            error: errorMessage
           })
-        ),
+        ]
+      });
+      await caseModel.updateCase(caseId, {
+        staleState: buildStaleState('EVIDENCE_REGENERATED'),
         finalComposeStatus: {
           status: 'FAILED',
           requestedAt: requestedAt || startedAt,
           startedAt,
           completedAt: new Date().toISOString(),
-          errorMessage: error?.message || 'Failed to compose final manuscript.'
+          errorMessage
         }
       } as any);
       throw error;
@@ -2947,28 +3022,12 @@ router.patch('/:id/front-matter', async (req: Request, res: Response) => {
           })
         : null;
 
+    if (nextState) {
+      await caseModel.recordChainRun(id, { cacheEntries: buildQuestionStateCacheEntries(nextState) });
+    }
     await caseModel.updateCase(id, {
       title: normalizedTitle || undefined,
       draftsBySection: nextDraftsBySection as any,
-      chainCache: nextState
-        ? {
-            ...(anyCase.chainCache || {}),
-            CHAIN4: buildChainCacheEntry(nextState.cacheMeta.chain4InputHash, {
-              commonMissingItems: nextState.commonMissingItems,
-              sectionMissingBySection: nextState.sectionStates.map((state) => ({
-                sectionId: state.sectionId,
-                missingInfoBullets: state.missingInfoBullets || []
-              }))
-            }, 'CHAIN4'),
-            CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
-              commonQuestionSets: nextState.commonQuestionSets,
-              sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
-                sectionId: state.sectionId,
-                recommendedQuestions: state.recommendedQuestions || []
-              }))
-            }, 'CHAIN5')
-          }
-        : anyCase.chainCache || {},
       ...(nextState
         ? {
             sectionStates: nextState.sectionStates,
@@ -3232,25 +3291,9 @@ router.post('/:id/common-questions/answer', async (req: Request, res: Response) 
         errorMessage: undefined
       },
       staleState: buildStaleState('ANSWER_UPDATED'),
-      chainCache: {
-        ...(anyCase.chainCache || {}),
-        CHAIN4: buildChainCacheEntry(nextState.cacheMeta.chain4InputHash, {
-          commonMissingItems: nextState.commonMissingItems,
-          sectionMissingBySection: nextState.sectionStates.map((state) => ({
-            sectionId: state.sectionId,
-            missingInfoBullets: state.missingInfoBullets || []
-          }))
-        }, 'CHAIN4'),
-        CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
-          commonQuestionSets: nextState.commonQuestionSets,
-          sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
-            sectionId: state.sectionId,
-            recommendedQuestions: state.recommendedQuestions || []
-          }))
-        }, 'CHAIN5')
-      },
       sectionAdequacyReviews: {}
     } as any);
+    await caseModel.recordChainRun(id, { cacheEntries: buildQuestionStateCacheEntries(nextState) });
     await caseModel.saveInteractionByKey(id, {
       sectionId: COMMON_INTERACTION_KEY,
       qnaHistory: commonQnaHistory
@@ -3493,13 +3536,8 @@ router.post('/:id/final-compose', async (req: Request, res: Response) => {
       hasChainCacheHit(anyCase, 'CHAIN7', chain7InputHash);
 
     if (canReuseFinalDraft) {
-      await caseModel.updateCase(id, {
-        chainCache: {
-          ...(anyCase.chainCache || {}),
-          CHAIN7: buildChainCacheEntry(chain7InputHash, anyCase.finalDraft, 'CHAIN7')
-        },
-        chainPerformanceLogs: appendPerformanceLog(
-          anyCase.chainPerformanceLogs || [],
+      await caseModel.recordChainRun(id, {
+        performanceLogs: [
           buildPerformanceLog({
             chainName: 'CHAIN7',
             startedAt: new Date().toISOString(),
@@ -3507,7 +3545,9 @@ router.post('/:id/final-compose', async (req: Request, res: Response) => {
             cacheHit: true,
             llmCallCount: 0
           })
-        ),
+        ]
+      });
+      await caseModel.updateCase(id, {
         finalComposeStatus: {
           status: 'COMPLETED',
           requestedAt: (anyCase.finalComposeStatus as any)?.requestedAt,

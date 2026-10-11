@@ -13,7 +13,7 @@
 import { performance } from 'node:perf_hooks';
 import { CareSection } from '../types';
 import { createOutboundDeidContext, deidentifyDraftsForOutbound, deidentifyOutboundField } from '../deid/outbound';
-import { hasChainCacheHit, hashJoinedParts } from '../optimization/chainRuntime';
+import { buildChainCacheEntry, hasChainCacheHit, hashJoinedParts } from '../optimization/chainRuntime';
 import { runQuestionGeneration, runSectionMissingDetection } from '../llm/chains';
 import { getEvidenceForSections } from '../llm/evidenceScope';
 import { CommonQuestionCategory } from '../llm/schemas/chain4_missing';
@@ -110,6 +110,34 @@ export function buildQuestionStateInputHash(params: {
       ].join('|')
     )
   ]);
+}
+
+/** CHAIN4·CHAIN5 캐시 항목 (세 경로에서 똑같이 쓰던 것을 하나로). */
+export function buildQuestionStateCacheEntries(result: RefreshQuestionStateResult) {
+  return {
+    CHAIN4: buildChainCacheEntry(
+      result.cacheMeta.chain4InputHash,
+      {
+        commonMissingItems: result.commonMissingItems,
+        sectionMissingBySection: result.sectionStates.map((state) => ({
+          sectionId: state.sectionId,
+          missingInfoBullets: state.missingInfoBullets || []
+        }))
+      },
+      'CHAIN4'
+    ),
+    CHAIN5: buildChainCacheEntry(
+      result.cacheMeta.chain5InputHash,
+      {
+        commonQuestionSets: result.commonQuestionSets,
+        sectionQuestionsBySection: result.sectionStates.map((state) => ({
+          sectionId: state.sectionId,
+          recommendedQuestions: state.recommendedQuestions || []
+        }))
+      },
+      'CHAIN5'
+    )
+  };
 }
 
 /** 모델 결과를 섹션 상태에 반영한다(제자리 수정). */

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CareSection, CareSectionEnum, coerceCareSection } from './common';
 import { SectionEvidenceLinkSchema, UnsupportedClaimSchema } from './chain3_draft';
 
-// 파일명은 역사적 이유로 chain5_final 이지만 CHAIN7(최종 원고 구성)의 스키마다.
+// CHAIN7(최종 원고 구성) 스키마. 2026-10-12 이전 파일명은 chain5_final.ts 였다.
 
 export const FinalDraftSectionEnum = z.enum([...CareSectionEnum.options, 'KEYWORDS']);
 export type FinalDraftSection = z.infer<typeof FinalDraftSectionEnum>;

@@ -6,7 +6,7 @@ import { Chain3ModelOutputSchema, SectionDraft } from './schemas/chain3_draft';
 import { Chain4MissingOutputSchema, CommonMissingItem, SectionMissing } from './schemas/chain4_missing';
 import { Chain5QuestionOutputSchema, CommonQuestionSet, SectionQuestionSet } from './schemas/chain5_questions';
 import { Chain6ModelOutputSchema, Chain6SectionUpdateOutput } from './schemas/chain6_update';
-import { FinalDraftModelOutputSchema, FinalDraft } from './schemas/chain5_final';
+import { FinalDraftModelOutputSchema, FinalDraft } from './schemas/chain7_final';
 import { CareSection, CareSectionEnum } from './schemas/common';
 import { cardMatchesSection } from './evidenceScope';
 import {
@@ -319,6 +319,7 @@ function buildDraftTraceability(params: {
   return { evidenceLinks, unsupportedClaims };
 }
 
+/** 테스트에서 휴리스틱 근거 연결을 직접 확인할 때 쓴다(tests/rag/termNormalizer.test.ts). */
 export function buildSectionDraftTraceability(params: {
   draftText: string;
   evidenceCards: EvidenceCard[];
@@ -1411,7 +1412,9 @@ function buildQnaSummary(qnaHistoryBySection: Record<string, Array<{ question: s
         history.length > 0
           ? history.map((item) => `- Q: ${item.question}\n  A: ${item.answer}`).join('\n')
           : '- (none)';
-      return `[${sectionId}]\n${items}`;
+      // 공통 질문 답변은 여러 섹션에 해당한다. 어느 섹션에 쓸지는 질문 내용으로 판단한다.
+      const heading = sectionId === '__COMMON__' ? '공통 질문(여러 섹션에 해당)' : sectionId;
+      return `[${heading}]\n${items}`;
     })
     .join('\n\n');
 }
@@ -1533,8 +1536,13 @@ async function runEvidenceSplitForVisits(
     const baseText = (card.sourceText || card.normalizedText || '').trim();
     const matchedClause = findBestClauseMatch(baseText, visit);
     const sourceText = matchedClause?.sourceText || card.sourceText || card.normalizedText || '';
-    const localNormalization = await normalizeTextWithTerms(sourceText);
-    const terms = localNormalization.terms.length > 0 ? localNormalization.terms : matchedClause?.terms || [];
+    // 카드 본문은 기록 표기를 그대로 둔다(rewriteText:false, 사용자 결정 2026-10-11). 이전에는 여기서
+    // 사전 치환을 다시 돌려 "두근거림"이 "심계"로 바뀌었고, 사용자가 전문용어 확인에서 고른 결과도 덮였다.
+    // 절과 맞으면 그 절의 용어(의미 검색·판정기·사용자 결정이 반영된 것)를 쓰고, 맞는 절이 없을 때만 사전으로 용어를 찾는다.
+    const localTerms = matchedClause
+      ? null
+      : (await normalizeTextWithTerms(sourceText, { rewriteText: false })).terms;
+    const terms = matchedClause ? matchedClause.terms : localTerms || [];
     const typeSection = EVIDENCE_TYPE_SECTION[String(card.evidenceType || '').toLowerCase()];
     const modelTags = uniqueSections([...(typeSection ? [typeSection] : []), ...((card.tags || []) as string[])]);
     const sectionHints = uniqueSections([
@@ -1543,10 +1551,8 @@ async function runEvidenceSplitForVisits(
       ...(matchedClause?.sectionHints || []),
       ...buildSectionHintsFromTerms(terms)
     ]);
-    const normalizedText =
-      localNormalization.normalizedText && localNormalization.normalizedText !== sourceText
-        ? localNormalization.normalizedText
-        : matchedClause?.normalizedText || card.normalizedText || sourceText;
+    // 절의 normalizedText 는 원문에 사용자가 확정한 용어만 반영한 것이다. 맞는 절이 없으면 원문 그대로.
+    const normalizedText = matchedClause?.normalizedText || sourceText;
 
     const groundedVisit = deidentifiedVisits.find((item) => item.index === visitIndex);
     if (!groundedVisit || !sourceText.trim() || !isGroundedInVisitText(sourceText, groundedVisit.text || '')) {
@@ -1881,14 +1887,3 @@ runtimeMeta?: ChainRuntimeMeta): Promise<FinalDraft> {
   };
 }
 
-export const runChain1_splitEvidence = runEvidenceSplit;
-export const runChain2_assess = runSectionAssessment;
-export const runChain3_initialDrafts = runInitialSectionDrafts;
-export const runChain4_detectMissing = runSectionMissingDetection;
-export const runChain5_generateQuestions = runQuestionGeneration;
-export const runChain6_updateDraft = runSectionDraftUpdate;
-export const runChain7_finalCompose = runFinalManuscriptCompose;
-export const runLegacySectionDraftUpdate = runSectionDraftUpdate;
-export const runFastSectionDraftUpdate = runSectionDraftUpdate;
-export const runFinalDraftCompose = runFinalManuscriptCompose;
-export const runChain5_finalCompose = runFinalManuscriptCompose;

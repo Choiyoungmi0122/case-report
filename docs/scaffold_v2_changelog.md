@@ -151,6 +151,7 @@
 - 바뀐 참가자 노출 문구 하나: 치료 개입 Step 3의 미지원 문장 후보에서 저장된 `reason`이 **없을 때만** 쓰는 대체 문구가 "기록 근거가 충분하지 않은 문장입니다." → "자동 문자 일치 검사에서 기록 근거를 찾지 못한 문장입니다. 실제 근거 여부는 기록을 확인해 판단하세요."로 바뀌었다(`ScaffoldSectionPage.tsx`). 고정 사례의 후보는 모두 저장된 `reason`을 가지므로 실제 화면은 달라지지 않는다.
 - Word 내보내기 중 "Evidence Traceability" 부록(일반 Write의 `final_manuscript_with_traceability` 모드)에 근거 연결이 자동 추정임을 밝히는 머리말이 붙는다. V2 학습 기록 내보내기에는 없는 부록이다.
 - 자세한 내용: `docs/prompt_chain_review_v1.md` §5-3.
+- 같은 날 3순위 정비(§5-4)는 V2 화면·자료에 영향이 없다. 실험용 Scaffold 공개 경로(`routes/scaffold.ts`)는 바꾸지 않았고, 고정 사례는 CHAIN1을 돌리지 않으며, 섹션 조회는 F단계 수정대로 저장된 검토만 돌려준다. 한국어로 바꾼 안내문은 일반 Write 섹션 화면(`SectionDetailPage`)의 것이다.
 
 ## V1 자료와 함께 분석할 때 주의
 - V1: `scaffoldVersion 'v2.0'`, 섹션 2개(추적 관찰은 연구자가 생략), 게이트 꺼짐, 메모에 회차·출처 필드 없음, 충분성 판단 이유 없음.
