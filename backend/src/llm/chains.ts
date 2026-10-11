@@ -18,6 +18,7 @@ import { chain6UpdateSystemPrompt, buildChain6UpdateUserPrompt } from './prompts
 import { chain7SystemPrompt, buildChain7UserPrompt } from './prompts/chain7_final';
 import { chainLabel, chainPrompts, PromptSet } from './promptSets';
 import { buildScaffoldChain3SystemPrompt, isScaffoldChain3Section } from './prompts/scaffold/chain3_draft';
+import { filterScaffoldDraftText, isFilterReportEmpty } from './postFilters/scaffoldDraftFilter';
 import {
   buildSectionHintsFromTerms,
   normalizeLookupKey,
@@ -1429,6 +1430,7 @@ function normalizeSectionDrafts(
     openIssues: string[];
     evidenceLinks?: Array<{ sentence: string; evidenceCardIds: string[] }>;
     unsupportedClaims?: Array<{ sentence: string; reason: string }>;
+    postFilter?: SectionDraft['postFilter'];
   }>,
   evidenceCards: EvidenceCard[]
 ): SectionDraft[] {
@@ -1681,7 +1683,16 @@ export async function runInitialSectionDrafts(
   const drafts = sectionIds
     ? (result.sectionDrafts || []).filter((draft) => sectionIds.includes(draft.sectionId))
     : result.sectionDrafts || [];
-  return normalizeSectionDrafts(drafts, evidenceCards);
+  // Scaffold 초안은 생성 뒤 한 번 더 거른다(llm/postFilters/scaffoldDraftFilter.ts). 고친 내용은 postFilter 에 남긴다.
+  // 근거 연결(휴리스틱)은 거른 본문으로 계산되도록 normalize 전에 한다.
+  const filtered =
+    runtimeMeta?.promptSet === 'scaffold'
+      ? drafts.map((draft) => {
+          const { text, report } = filterScaffoldDraftText(draft.draftText || '', evidenceCards);
+          return isFilterReportEmpty(report) ? draft : { ...draft, draftText: text, postFilter: report };
+        })
+      : drafts;
+  return normalizeSectionDrafts(filtered, evidenceCards);
 }
 
 export async function runSectionMissingDetection(params: {

@@ -38,7 +38,20 @@ export const SectionDraftSchema = z.object({
   draftText: z.string(),
   openIssues: z.array(z.string()),
   evidenceLinks: z.array(SectionEvidenceLinkSchema).default([]),
-  unsupportedClaims: z.array(UnsupportedClaimSchema).default([])
+  unsupportedClaims: z.array(UnsupportedClaimSchema).default([]),
+  /** Scaffold 초안의 생성 뒤 거르기 기록(SCAFFOLD-FILTER). 고친 것이 없으면 없다. llm/postFilters/scaffoldDraftFilter.ts */
+  postFilter: z
+    .object({
+      version: z.string(),
+      removedSentences: z.array(z.string()),
+      trimmedSentences: z.array(z.object({ before: z.string(), after: z.string() })),
+      rewrittenPhrases: z.array(z.object({ before: z.string(), after: z.string() })),
+      strippedUnits: z.array(z.string()),
+      fixedTypos: z.array(z.object({ before: z.string(), after: z.string() })),
+      flaggedNumbers: z.array(z.string()),
+      flaggedMetaSentences: z.array(z.string())
+    })
+    .optional()
 });
 
 export const Chain3OutputSchema = z.object({
