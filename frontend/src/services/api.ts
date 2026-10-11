@@ -1,4 +1,10 @@
 import axios from 'axios';
+import {
+  READ_ONLY_VIEW_HEADER,
+  READ_ONLY_VIEW_MESSAGE,
+  isReadOnlyViewRequest,
+  isTelemetryRequest
+} from '../utils/readOnlyView';
 
 const apiBaseURL = import.meta.env.VITE_API_BASE_URL || '/api';
 
@@ -9,6 +15,30 @@ const api = axios.create({
   }
 });
 
+// 연구자용 다시 보기 모드: 대상 케이스에 대한 요청에는 표시 헤더를 붙여 서버가 변경을
+// 거부하게 하고, 변경 요청은 아예 보내지 않는다. 행동 로그·타이머 같은 기록성 요청은
+// 화면이 그대로 동작하도록 성공한 것처럼 조용히 넘긴다.
+api.interceptors.request.use((config) => {
+  if (!isReadOnlyViewRequest(config.url)) return config;
+
+  config.headers.set(READ_ONLY_VIEW_HEADER, '1');
+  const method = String(config.method || 'get').toLowerCase();
+  if (method === 'get' || method === 'head') return config;
+
+  if (isTelemetryRequest(config.url)) {
+    config.adapter = async () => ({
+      data: { success: true, readOnlyView: true },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config
+    });
+    return config;
+  }
+
+  return Promise.reject(new Error(READ_ONLY_VIEW_MESSAGE));
+});
+
 // Callers surface `error.message`, which axios sets to "Request failed with status code 500" and
 // which hides the reason the API actually reported. Promote the server message onto it.
 api.interceptors.response.use(
@@ -17,6 +47,8 @@ api.interceptors.response.use(
     const serverMessage = (error?.response?.data as { error?: string } | undefined)?.error;
     if (serverMessage) {
       error.message = serverMessage;
+    } else if (error?.message === READ_ONLY_VIEW_MESSAGE) {
+      // Blocked locally by the read-only view; keep the explanation as is.
     } else if (!error?.response) {
       error.message = '서버에 연결하지 못했습니다. 백엔드가 실행 중인지 확인해 주세요.';
     }

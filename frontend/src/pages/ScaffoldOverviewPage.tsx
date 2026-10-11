@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import SessionTimer from '../components/scaffold/SessionTimer';
+import { ReadOnlyNavigatorBar, getReadOnlyOverviewPhase } from '../components/scaffold/ReadOnlyStageNavigator';
+import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import {
   caseApi,
   type ScaffoldStateResponse,
@@ -191,10 +193,21 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     };
   }, [caseId, navigate, studyMode]);
 
+  // 연구자용 다시 보기: 저장된 단계와 관계없이 '기록 읽기' 화면(방문 기록, 내 메모,
+  // AI 메모 추천)과 'CARE 항목' 화면을 오갈 수 있게 한다. 저장은 하지 않는다.
+  const readOnlyView = Boolean(caseId) && getReadOnlyViewCaseId() === caseId;
+  const readOnlyPhase = getReadOnlyOverviewPhase();
+
+  useEffect(() => {
+    if (!data || !readOnlyView) return;
+    setCurrentPhase(readOnlyPhase === 'read' ? 'case_understanding' : 'section_drafting');
+    setIntroDone(true);
+  }, [data, readOnlyView, readOnlyPhase]);
+
   useEffect(() => {
     const caseMap = data?.scaffoldState.caseMap;
     if (!caseMap) return;
-    setCurrentPhase(caseMap.currentPhase);
+    if (!readOnlyView) setCurrentPhase(caseMap.currentPhase);
     setSelectedEvidenceIds(caseMap.selectedEvidenceIds || []);
     setEvidenceReflections(caseMap.evidenceReflections || []);
     setLearnerAddedEvidence(caseMap.learnerAddedEvidence || []);
@@ -588,6 +601,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   return (
     <ScaffoldPageFrame>
       {studyMode ? <SessionTimer startedAt={data.scaffoldState.startedAt} /> : null}
+      <ReadOnlyNavigatorBar caseId={caseId} data={data} currentKey={readOnlyPhase === 'read' ? 'read' : 'overview'} />
       <main className="scaffold-v2">
         <header className="scaffold-v2__header">
           <div>
@@ -708,6 +722,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                         {suggestions.length > 0 ? (
                           <details
                             className="scaffold-v2__memo-suggest"
+                            open={readOnlyView || undefined}
                             onToggle={(event) => {
                               if (event.currentTarget.open) {
                                 void logEvent('ui_action', { kind: 'memo_suggestion_opened', visit: index + 1 });

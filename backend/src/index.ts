@@ -46,6 +46,16 @@ if (allowedCorsOrigins.length) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// 연구자용 다시 보기 화면에서 온 요청은 조회만 허용한다. 화면 쪽에서도 막지만, 참가자
+// 기록이 바뀌는 일이 없도록 서버에서 한 번 더 거부한다.
+app.use('/api', (req, res, next) => {
+  if (req.get('X-Read-Only-View') === '1' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    res.status(403).json({ error: '다시 보기 모드에서는 내용이 저장되지 않습니다.' });
+    return;
+  }
+  next();
+});
+
 app.use('/api/cases', casesRouter);
 app.use('/api/cases', sectionsRouter);
 app.use('/api/cases', scaffoldRouter);

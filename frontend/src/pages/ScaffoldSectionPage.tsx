@@ -5,6 +5,8 @@ import ScaffoldEvidenceSelector from '../components/scaffold/ScaffoldEvidenceSel
 import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldProgressHeader from '../components/scaffold/ScaffoldProgressHeader';
 import SessionTimer from '../components/scaffold/SessionTimer';
+import { ReadOnlyNavigatorBar, getReadOnlyStage } from '../components/scaffold/ReadOnlyStageNavigator';
+import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
   caseApi,
@@ -536,7 +538,7 @@ export default function ScaffoldSectionPage() {
     setEvidenceDrafts((prev) => ({ ...nextEvidence, ...prev }));
   }, [scaffoldData]);
 
-  const sectionProgress = useMemo(
+  const savedSectionProgress = useMemo(
     () =>
       scaffoldData?.scaffoldState.sectionProgress.find((item) => item.sectionId === sectionId) || {
         sectionId: sectionId || '',
@@ -547,6 +549,22 @@ export default function ScaffoldSectionPage() {
       },
     [scaffoldData, sectionId]
   );
+
+  // 연구자용 다시 보기: 저장된 기록은 그대로 두고, 'AI 초안 보기 전' 단계를 볼 때만
+  // 화면이 공개 전 모습으로 그려지도록 공개 여부를 가려서 넘긴다.
+  const readOnlyView = Boolean(caseId) && getReadOnlyViewCaseId() === caseId;
+  const readOnlyStage = getReadOnlyStage();
+  const sectionProgress = useMemo(
+    () =>
+      readOnlyView && readOnlyStage === 'pre'
+        ? { ...savedSectionProgress, draftRevealed: false }
+        : savedSectionProgress,
+    [savedSectionProgress, readOnlyView, readOnlyStage]
+  );
+
+  useEffect(() => {
+    if (readOnlyView && readOnlyStage === 'pre') setCurrentStep('step1');
+  }, [readOnlyView, readOnlyStage, sectionId]);
 
   const sectionReflection = useMemo(
     () =>
@@ -961,9 +979,32 @@ export default function ScaffoldSectionPage() {
     });
   }, [preRevealSnapshot, existingReviewMap]);
 
-  const summaryGroups = sectionProgress.draftRevealed
+  const sectionSummaryGroups = sectionProgress.draftRevealed
     ? snapshotSummaryGroups || frozenSummaryRef.current || liveSummaryGroups
     : liveSummaryGroups;
+
+  // 1단계(기록 읽기)에서 남긴 메모를 초안을 쓰는 동안에도 볼 수 있게 맨 위에 붙인다.
+  // 보여주기만 하며, 공개 전 스냅샷이나 저장되는 값에는 들어가지 않는다.
+  // 방문 회차별로 묶는다. 회차는 AI 메모 추천에서 가져온 메모의 id(…-v3-1-…)에만
+  // 남아 있으므로, 직접 쓴 메모는 '직접 쓴 메모'로 따로 묶는다.
+  const caseMemoBuckets = new Map<number, string[]>();
+  for (const note of scaffoldData?.scaffoldState.caseMap?.caseNotes || []) {
+    const text = String(note?.text || '').trim();
+    if (!text) continue;
+    const visitMatch = String(note.id || '').match(/^case-note-ai-(?:[a-z]+-)?v(\d+)-/);
+    const visitNo = visitMatch ? Number(visitMatch[1]) : 0;
+    const line = `${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}: ${text}`;
+    caseMemoBuckets.set(visitNo, [...(caseMemoBuckets.get(visitNo) || []), line]);
+  }
+  const caseMemoGroups: SelfSummaryGroup[] = Array.from(caseMemoBuckets.entries())
+    .sort(([a], [b]) => (a === 0 ? 1 : b === 0 ? -1 : a - b))
+    .map(([visitNo, items]) => ({
+      key: `case-memos-${visitNo}`,
+      label: visitNo > 0 ? `읽으며 남긴 메모 · ${visitNo}회차` : '읽으며 남긴 메모 · 직접 쓴 메모',
+      items
+    }));
+  const summaryGroups: SelfSummaryGroup[] =
+    caseMemoGroups.length > 0 ? [...caseMemoGroups, ...sectionSummaryGroups] : sectionSummaryGroups;
 
   // ===== Event Handlers =====
 
@@ -1537,6 +1578,7 @@ export default function ScaffoldSectionPage() {
         }
       />
       {studyMode ? <SessionTimer startedAt={scaffoldData?.scaffoldState.startedAt} /> : null}
+      <ReadOnlyNavigatorBar caseId={caseId} data={scaffoldData} currentKey={`${sectionId}:${readOnlyStage}`} />
       {scaffoldData?.experiment_code || scaffoldData?.experimentCode ? (
         <div style={{ margin: '10px 0 18px 0', color: '#5a6c81', fontSize: 15, fontWeight: 600 }}>
           실험번호: {scaffoldData.experiment_code || scaffoldData.experimentCode}

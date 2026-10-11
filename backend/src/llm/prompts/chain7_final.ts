@@ -1,61 +1,78 @@
+import { MANUSCRIPT_STYLE, RUBRIC_HANDLING, sharedPrinciples } from './common';
+
+const CARE_SECTION_IDS = [
+  'TITLE',
+  'ABSTRACT',
+  'INTRODUCTION',
+  'PATIENT_INFORMATION',
+  'CLINICAL_FINDINGS',
+  'TIMELINE',
+  'DIAGNOSTIC_ASSESSMENT',
+  'THERAPEUTIC_INTERVENTIONS',
+  'FOLLOW_UP_OUTCOMES',
+  'DISCUSSION_CONCLUSION',
+  'PATIENT_PERSPECTIVE',
+  'INFORMED_CONSENT'
+];
+
 export const chain7SystemPrompt = `
-You compose a publishable CARE-style Korean case report from grounded section drafts, evidence summaries, and Q&A history.
+역할:
+당신은 섹션 초안, 근거 카드, 질의응답 기록을 바탕으로 CARE 형식의 한국어 증례보고 원고 전체를 구성하고, 각 섹션이 CARE 필수 항목을 충족하는지 평가합니다.
 
-Use only:
-- section drafts
-- grounded evidence cards
-- documented Q&A history
-- explicit contribution notes if provided
+${sharedPrinciples(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'])}
 
-Global rules:
-1. Do not invent new facts, dates, numbers, diagnoses, effects, adverse events, or consent statements.
-2. Preserve conservative diagnostic wording when evidence is tentative.
-3. Prefer concise academic prose over repetitive or spreadsheet-like output.
-4. Omit optional details when not grounded.
-5. Avoid repeating the same information verbatim across multiple sections.
-   Use each clinical term exactly as it appears in the section drafts and keep it identical across all sections; do not vary its form.
-6. Do not use generic filler such as "commonly seen in clinical practice", "may reduce quality of life", "suggests a possible role", or "further systematic studies are needed" unless the wording is tightly tied to the actual case and supported by the provided material.
-7. When evidence for background interpretation is thin, prefer a short, restrained section over a broad or literature-like paragraph.
+${RUBRIC_HANDLING}
+- 근거가 없어 쓰지 못한 필수 항목은 본문에 지어내지 않고 careChecklistEvaluation에서 INSUFFICIENT 또는 MISSING으로 표시합니다.
 
-Rubric handling:
-- The CARE rubric describes what a complete report contains. It is a checklist for careChecklistEvaluation, not an instruction to fill gaps.
-- When a required rubric item has no supporting material, omit it from the text and mark the section INSUFFICIENT or MISSING instead of writing something to satisfy it.
-- Absence of a record is not evidence of absence. Do not write that adverse events, side effects, or complications were absent or "not reported" unless the evidence or Q&A explicitly says so.
+${MANUSCRIPT_STYLE}
+- 같은 내용을 여러 섹션에 그대로 반복하지 않습니다.
 
-No efficacy or causal claims (applies to TITLE, ABSTRACT, INTRODUCTION, DISCUSSION_CONCLUSION and every other section):
-- A single case cannot show that a treatment works. Report what was observed, in temporal terms only: "침 치료 기간 중 흉민과 상열감의 빈도 감소가 관찰되었다".
-- Do not write that the treatment helped, contributed to, was effective for, or was useful for the improvement, and do not write that the case "suggests" efficacy, usefulness, applicability, or a possible role. Forbidden patterns include "도움이 될 수 있음을 시사", "기여할 수 있음", "효과적", "유용성", "적용 가능성", "~에 의해 호전", "침 치료를 통해 호전".
-- Do not assert the cause of the symptoms. A trigger the patient reported stays attributed to the patient ("환자는 가족 간 갈등 이후 증상이 심해졌다고 진술하였다"), never restated as "~에 기인한" or "~로 인한".
-- The rubric's "take-away" and "conclusion" items are met by a restrained summary of the observed course plus the limitation that a single case without a comparison cannot separate treatment effect from natural course or other factors.
-- TITLE describes the patient, presentation and intervention; it must not mention improvement or outcome as a result of the intervention.
+작업 규칙:
+1. 단일 증례의 한계: 한 명의 증례로는 치료가 효과가 있었는지 알 수 없습니다. P5는 TITLE, ABSTRACT, INTRODUCTION, DISCUSSION_CONCLUSION을 포함한 모든 섹션에 적용됩니다.
+   - 쓰지 않는 표현의 예: "도움이 될 수 있음을 시사", "기여할 수 있음", "효과적", "유용성", "적용 가능성", "~에 의해 호전", "침 치료를 통해 호전"
+   - 증상의 원인을 단정하지 않습니다. 환자가 말한 유발 요인은 환자의 진술로 씁니다(예: "환자는 가족 간 갈등 이후 증상이 심해졌다고 진술하였다"). "~에 기인한", "~로 인한"으로 바꿔 쓰지 않습니다.
+   - 루브릭의 "결론"과 "take-away" 항목은 관찰된 경과의 절제된 요약과, 비교 대상이 없는 단일 증례로는 치료 효과를 자연 경과나 다른 요인과 구분할 수 없다는 한계로 충족합니다.
+2. 상투적 문장 금지: "임상에서 흔히 볼 수 있다", "삶의 질을 저하시킬 수 있다", "추가적인 체계적 연구가 필요하다" 같은 일반론은 이 증례의 자료와 직접 연결될 때만 씁니다.
 
-Critical final-manuscript timeline rule:
-- The TIMELINE section must read like an actual case-report timeline narrative.
-- Do not paste imported spreadsheet rows, visit logs, or raw table text into the manuscript body.
-- Do not output "Imported timeline table" or equivalent labels.
-- If structured timeline data exists, use it to support chronology and trend, then write a distilled narrative.
-- Mention serial scores selectively to show meaningful change; avoid row-by-row score dumping unless essential.
+섹션별 지침:
+- TITLE: 환자, 주요 증상, 개입을 간결하게 나타내고 증례보고임을 드러냅니다. 개입의 결과로서의 호전을 언급하지 않습니다.
+- KEYWORDS: 검색에 쓰이는 짧은 핵심어를 쉼표로 구분합니다. 문장 조각을 쓰지 않습니다.
+- ABSTRACT: 환자, 주요 문제, 개입, 관찰된 경과를 짧고 사실 위주로 씁니다. 관찰된 경과와 단일 증례의 한계로 끝맺고, 치료에 대한 시사점으로 끝맺지 않습니다.
+- INTRODUCTION: 문헌에 근거한 배경이 입력에 없으면 아주 짧게 씁니다. 일반 지식으로 역학이나 교과서식 배경을 쓰지 않습니다.
+- TIMELINE: 발병, 주요 전환점, 치료 기간, 추적 변화를 시간 순서의 서술로 정리합니다. "가져온 타임라인 표" 같은 표기를 쓰지 않습니다.
+- DIAGNOSTIC_ASSESSMENT: 진단 또는 의심 진단의 근거를 보수적으로 씁니다.
+- THERAPEUTIC_INTERVENTIONS: 실제로 시행한 치료와 그 변경을 방법별로 묶어 씁니다.
+- FOLLOW_UP_OUTCOMES: 의미 있는 임상 변화와 추적 경과를 요약합니다.
+- DISCUSSION_CONCLUSION: 관찰된 경과를 요약하고 단일 증례의 한계를 밝힙니다. 넓은 일반화나 외부 임상적 함의를 덧붙이지 않습니다.
+- PATIENT_PERSPECTIVE: 기록된 환자의 표현만 씁니다.
+- INFORMED_CONSENT: 동의 사실이 입력에 명시된 경우에만 씁니다.
+- 근거가 없는 섹션은 빈 문자열로 둡니다.
 
-Other section guidance that needs stronger manuscript style:
-- THERAPEUTIC_INTERVENTIONS: describe the treatment regimen and changes as coherent prose grouped by modality.
-- FOLLOW_UP_OUTCOMES: summarize clinical evolution and meaningful outcomes, not every recorded row.
-- DIAGNOSTIC_ASSESSMENT: explain the basis of diagnosis or working diagnosis conservatively.
-- DISCUSSION_CONCLUSION: synthesize significance, clinical interpretation, and limitations without repeating raw course details.
-- PATIENT_PERSPECTIVE: include only documented perspective.
-- INFORMED_CONSENT: include only explicit consent evidence.
+체크리스트 평가(careChecklistEvaluation):
+- KEYWORDS를 제외한 12개 CARE 섹션 모두에 대해 평가 항목을 반환합니다.
+- 각 섹션을 그 섹션의 루브릭 필수 항목에 비추어 엄격하게 판정합니다.
+  - FULFILLED: 필수 항목이 모두 작성된 본문에 실제로 들어 있음
+  - INSUFFICIENT: 본문은 있으나 필수 항목 중 하나 이상이 없거나 모호함(예: 감별 과정 없음, 용량·기간 없음, 문헌 연결 없음). rationale에 빠진 항목을 적습니다.
+  - MISSING: 본문이 비어 있음
 
-Conservative section rules for auto-generated final-only sections:
-- ABSTRACT: keep it compact and factual. Focus on patient, main problem, intervention, and observed course. End with the observed course and the single-case limitation, not with an implication about the treatment.
-- INTRODUCTION: if no explicit literature-grounded rationale is provided, keep this section very short. Do not write broad epidemiologic or textbook background from general knowledge.
-- DISCUSSION_CONCLUSION: keep it case-bound and cautious. Do not automatically add broad claims, external clinical implications, or generic "future research is needed" language.
-- If INTRODUCTION or DISCUSSION_CONCLUSION cannot be supported beyond the observed case, it is acceptable for them to be brief.
-
-TITLE guidance:
-- Keep the title concise and case-report appropriate.
-- Avoid overstating causality or efficacy beyond the evidence.
-
-KEYWORDS guidance:
-- Use compact search keywords, not prose fragments.
+출력 형식:
+{
+  "fullTextBySection": {
+    "TITLE": "...",
+    "KEYWORDS": "...",
+${CARE_SECTION_IDS.filter((id) => id !== 'TITLE')
+  .map((id) => `    "${id}": "..."`)
+  .join(',\n')}
+  },
+  "titleSuggestions": ["<제목 후보, 1~3개>"],
+  "keywordSuggestions": ["<핵심어, 3~7개>"],
+  "abstractSuggestion": "<ABSTRACT와 같은 내용>",
+  "careChecklistEvaluation": {
+${CARE_SECTION_IDS.map(
+  (id) => `    "${id}": { "status": "<FULFILLED | INSUFFICIENT | MISSING>", "rationale": "<판정 근거>" }`
+).join(',\n')}
+  }
+}
 `;
 
 export const buildChain7UserPrompt = (params: {
@@ -65,71 +82,18 @@ export const buildChain7UserPrompt = (params: {
   contributionAnswersText?: string;
   rubricSummary: string;
 }) => `
-Section drafts:
+입력 1. 섹션 초안:
 ${params.sectionDraftSummary}
 
-Evidence cards:
+입력 2. 섹션별 근거 카드:
 ${params.evidenceSummary}
 
-Q&A history:
+입력 3. 질의응답 기록:
 ${params.qnaSummary}
 
-Additional contribution notes:
-${params.contributionAnswersText || '(none)'}
+입력 4. 저자가 제공한 증례의 기여·의의:
+${params.contributionAnswersText || '(없음)'}
 
-CARE rubric:
+입력 5. CARE 루브릭:
 ${params.rubricSummary}
-
-Final composition instructions:
-- Return JSON only.
-- Write fullTextBySection in fluent academic Korean.
-- Include TITLE and KEYWORDS in fullTextBySection.
-- TIMELINE must be a distilled longitudinal narrative, not imported raw timeline rows.
-- FOLLOW_UP_OUTCOMES should emphasize meaningful clinical change and follow-up trend.
-- THERAPEUTIC_INTERVENTIONS should summarize what was actually done in readable prose.
-- ABSTRACT should stay factual and compact.
-- INTRODUCTION should be brief and case-tied, not literature-like.
-- DISCUSSION_CONCLUSION should summarize the observed course, stay close to the recorded facts, state the single-case limitation, and avoid generic closing phrases.
-- No section may claim or suggest that the treatment was effective or caused the change.
-- keywordSuggestions should be compact search terms.
-- careChecklistEvaluation.status must be one of FULFILLED, INSUFFICIENT, MISSING.
-- careChecklistEvaluation must contain an entry for every one of the 12 CARE sections shown in the shape below (KEYWORDS excluded), judged against that section's required rubric items. Write each rationale in Korean.
-- Checklist criteria: FULFILLED only when every required rubric item of the section is actually present in the written text. INSUFFICIENT when the section has text but at least one required item is absent or only vaguely covered (for example no differential reasoning, no dose/duration detail, no literature link); name the absent item in the rationale. MISSING when the section is empty.
-- Judge strictly. Writing a restrained section because the material was thin is correct, and the checklist should then say INSUFFICIENT rather than FULFILLED.
-
-Return JSON in this shape:
-{
-  "fullTextBySection": {
-    "TITLE": "...",
-    "KEYWORDS": "...",
-    "ABSTRACT": "...",
-    "INTRODUCTION": "...",
-    "PATIENT_INFORMATION": "...",
-    "CLINICAL_FINDINGS": "...",
-    "TIMELINE": "...",
-    "DIAGNOSTIC_ASSESSMENT": "...",
-    "THERAPEUTIC_INTERVENTIONS": "...",
-    "FOLLOW_UP_OUTCOMES": "...",
-    "DISCUSSION_CONCLUSION": "...",
-    "PATIENT_PERSPECTIVE": "...",
-    "INFORMED_CONSENT": "..."
-  },
-  "titleSuggestions": ["..."],
-  "keywordSuggestions": ["...", "...", "..."],
-  "abstractSuggestion": "...",
-  "careChecklistEvaluation": {
-    "TITLE": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "ABSTRACT": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "INTRODUCTION": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "PATIENT_INFORMATION": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "CLINICAL_FINDINGS": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "TIMELINE": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "DIAGNOSTIC_ASSESSMENT": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "THERAPEUTIC_INTERVENTIONS": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "FOLLOW_UP_OUTCOMES": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "DISCUSSION_CONCLUSION": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "PATIENT_PERSPECTIVE": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." },
-    "INFORMED_CONSENT": { "status": "<FULFILLED|INSUFFICIENT|MISSING>", "rationale": "..." }
-  }
-}
 `;

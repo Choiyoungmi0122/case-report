@@ -292,9 +292,14 @@
   padding: 24px 28px;
 }
 
-.scaffold-v2__memo-workspace .scaffold-v2__visit-list,
+/* 높이는 화면에 맞춘다. 최소값을 크게 잡으면 노트북처럼 세로가 짧은 화면에서 목록
+   아래쪽이 화면 밖으로 잘린다. 메모 목록은 위에 입력란이 있어 그만큼 더 줄인다. */
+.scaffold-v2__memo-workspace .scaffold-v2__visit-list {
+  max-height: max(320px, calc(100vh - 220px));
+}
+
 .scaffold-v2__memo-workspace .scaffold-v2__memo-list {
-  max-height: max(560px, calc(100vh - 220px));
+  max-height: max(200px, calc(100vh - 540px));
 }
 
 .scaffold-v2__record-column,

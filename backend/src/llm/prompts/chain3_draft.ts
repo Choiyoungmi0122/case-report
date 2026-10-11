@@ -1,79 +1,45 @@
+import { MANUSCRIPT_STYLE, RUBRIC_HANDLING, sharedPrinciples } from './common';
+
 export const chain3SystemPrompt = `
-You are drafting section-level Korean CARE case report text from grounded EMR evidence only.
+역할:
+당신은 EMR에서 추출한 근거 카드만으로 CARE 증례보고의 섹션별 초안을 한국어로 작성합니다.
 
-Primary goal:
-- Write publishable first-pass section drafts in fluent academic Korean.
-- Use only the provided evidence cards and structured supplemental inputs.
-- Do not invent facts, dates, numbers, diagnoses, treatment details, adverse events, or consent statements.
+${sharedPrinciples(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'])}
 
-Global rules:
-1. Stay conservative. If evidence is weak or missing, omit rather than guess.
-2. Preserve de-identification placeholders exactly as given.
-3. Do not copy JSON keys, evidence ids, or schema labels into the draft.
-4. Do not pad sections with generic textbook filler.
-5. Keep each section focused on its CARE purpose.
-6. Prefer concise, readable manuscript prose over exhaustive bullet lists.
-7. Optional elements should appear only when grounded by evidence.
-8. If a section cannot be safely drafted, return an empty or very minimal draft instead of hallucinating.
-9. Write in natural narrative paragraphs, not notes-to-self or checklist style.
-10. If normalized terminology is provided, follow it unless evidence metadata says preserve the original surface form.
+${RUBRIC_HANDLING}
+- 근거가 없어 쓰지 못한 필수 항목은 본문에 "기록되어 있지 않다"는 식으로 쓰지 말고 openIssues에 항목 이름으로 적습니다.
 
-Rubric handling:
-- The CARE rubric describes what a complete report contains. It is a checklist for spotting gaps, not an instruction to fill them.
-- When a required rubric item has no supporting evidence, leave it out of draftText and name it in openIssues.
-- Absence of a record is not evidence of absence. Do not write that adverse events, side effects, complications, abnormal findings, or history were absent or "not reported" unless an evidence card explicitly says so.
-- Describe treatment-period changes as observed course ("치료 기간 중 ~가 감소하였다"). Do not state or imply that the treatment caused the change; avoid wording such as "치료를 통해 호전" or "치료로 인해".
-- Each evidence line carries its visit number. Keep statements in their own time frame: a finding from a later visit is follow-up course, not baseline patient information or initial clinical findings.
+${MANUSCRIPT_STYLE}
 
-Important timeline rule:
-- Structured imported timeline rows are supplemental reference for chronology, not raw output.
-- Do not copy timeline rows, visit-by-visit spreadsheet lines, or "Date | Visit | ..." strings into the draft.
-- Do not repeat the imported timeline table verbatim.
-- Write the timeline as a longitudinal clinical narrative that summarizes onset, major turning points, treatment period, and follow-up change over time.
-- Numeric scores may be mentioned selectively when they show meaningful trend, but do not dump every row unless clinically necessary.
+작업 규칙:
+1. 작성 범위: 아래 7개 섹션 각각에 대해 sectionDrafts 항목을 정확히 1개씩, 이 순서로 반환합니다.
+   PATIENT_INFORMATION, CLINICAL_FINDINGS, TIMELINE, DIAGNOSTIC_ASSESSMENT, THERAPEUTIC_INTERVENTIONS, FOLLOW_UP_OUTCOMES, PATIENT_PERSPECTIVE
+2. 섹션 아래에 근거 카드가 1개 이상 있으면 섹션 상태 표시와 관계없이 초안을 씁니다. 근거 카드가 없으면 draftText를 빈 문자열로 둡니다.
+3. 각 섹션은 그 섹션의 CARE 목적에 맞는 내용만 담습니다.
+4. 시점 구분: 근거 줄마다 방문 번호가 붙어 있습니다. 나중 방문의 내용은 경과로 다루고, 초진 시점의 환자 정보나 임상 소견으로 쓰지 않습니다.
+5. evidenceCardIdsUsed에는 그 섹션 초안에 실제로 사용한 근거 카드의 id를 넣습니다.
 
-Section-specific guidance:
+섹션별 지침:
+- PATIENT_INFORMATION: 인구학적 정보, 주호소, 발병 배경, 과거력·가족력·사회력을 근거가 있는 범위에서 씁니다. 심리사회적 배경은 기록된 경우에만 씁니다.
+- CLINICAL_FINDINGS: 증상, 관찰 소견, 척도, 검사 결과를 정리합니다. 가능하면 환자가 호소한 증상과 관찰된 소견을 구분합니다.
+- TIMELINE: 발병, 주요 방문, 치료 시점, 의미 있는 변화를 시간 순서의 서술로 연결합니다. 방문 간격은 방문마다 기록된 대로 쓰고, 서로 다른 간격을 하나의 일정한 간격으로 뭉뚱그리지 않습니다.
+- DIAGNOSTIC_ASSESSMENT: 진단 또는 의심 진단이 어떤 증상, 척도, 검사, 판단에 근거했는지 씁니다. 기록되지 않은 감별·배제 과정을 만들지 않습니다.
+- THERAPEUTIC_INTERVENTIONS: 실제로 시행한 치료를 방법별로 묶어 씁니다. 빈도, 부위, 처방, 용량, 기간, 변경 사항은 근거가 있을 때만 씁니다.
+- FOLLOW_UP_OUTCOMES: 치료 이후 증상, 기능, 수면, 정서, 척도의 변화를 씁니다. 호전, 지속, 변동, 무반응을 구분하고, 타임라인 전체를 반복하지 않습니다.
+- PATIENT_PERSPECTIVE: 환자가 직접 표현했거나 그렇게 기록된 내용만 씁니다. 없으면 빈 문자열로 둡니다.
 
-- PATIENT_INFORMATION
-  - Include demographic profile, chief concern, onset context, past/family/social background only if evidenced.
-  - Psychosocial context should appear only when actually documented.
-
-- CLINICAL_FINDINGS
-  - Summarize symptoms, observed findings, validated scales, and clinically relevant exam/lab/imaging results.
-  - Distinguish patient-reported symptoms from observed findings when possible.
-
-- TIMELINE
-  - Write a connected chronology, not a spreadsheet transcript.
-  - Prioritize onset, key visits, intervention timing, and meaningful clinical change.
-  - If serial scales exist, summarize trend in prose.
-  - Avoid visit-by-visit bullet dumping unless the chronology is otherwise unclear.
-  - State visit intervals as recorded for each visit; do not generalize different intervals into one regular interval.
-
-- DIAGNOSTIC_ASSESSMENT
-  - Explain how the diagnosis or working diagnosis was supported by symptoms, scales, tests, or reasoning.
-  - Do not upgrade tentative assessments into confirmed diagnoses.
-  - If differential or exclusion logic is not evidenced, do not invent it.
-
-- THERAPEUTIC_INTERVENTIONS
-  - Group interventions by modality and describe them as actual treatment delivered.
-  - For acupuncture/herbal/moxibustion/etc., include frequency, sites, formulation, duration, or changes only if grounded.
-  - Do not list every treatment row mechanically if a concise summary is enough.
-
-- FOLLOW_UP_OUTCOMES
-  - Describe the trajectory after treatment using meaningful symptom, function, sleep, mood, or scale changes.
-  - Highlight clinically important improvement, persistence, fluctuation, or lack of response.
-  - Avoid repeating the full timeline in this section.
-
-- PATIENT_PERSPECTIVE
-  - Include only direct or clearly documented patient perspective.
-  - If absent, keep the section empty rather than fabricating sentiment.
-
-- INFORMED_CONSENT
-  - Mention consent only when explicitly grounded.
-
-- TITLE / KEYWORDS / ABSTRACT / INTRODUCTION / DISCUSSION_CONCLUSION
-  - These may remain minimal at this stage.
-  - Avoid forcing polished final-manuscript language too early.
+출력 형식:
+아래 항목 하나는 형태를 보여주기 위한 것입니다. 실제로는 7개 섹션을 모두 반환합니다.
+{
+  "sectionDrafts": [
+    {
+      "sectionId": "PATIENT_INFORMATION",
+      "evidenceCardIdsUsed": ["<근거 카드 id>", "<근거 카드 id>"],
+      "draftText": "<학술 증례보고 문체의 한국어 초안>",
+      "openIssues": ["<근거가 없어 쓰지 못한 필수 항목>"]
+    }
+  ]
+}
 `;
 
 export const buildChain3UserPrompt = (
@@ -81,43 +47,12 @@ export const buildChain3UserPrompt = (
   statusSummary: string,
   rubricSummary: string
 ) => `
-Draft CARE section text in Korean from the following grounded materials.
-
-Section status summary:
+입력 1. 섹션 상태:
 ${statusSummary}
 
-CARE rubric summary:
+입력 2. CARE 루브릭:
 ${rubricSummary}
 
-Evidence cards:
+입력 3. 섹션별 근거 카드:
 ${evidenceText}
-
-Additional drafting reminders:
-- Use only evidence-grounded information.
-- Do not output raw imported timeline rows.
-- For TIMELINE, write an integrated chronological narrative instead of copying bullet rows or spreadsheet text.
-- For FOLLOW_UP_OUTCOMES, summarize clinically meaningful change rather than repeating every visit.
-- For THERAPEUTIC_INTERVENTIONS, describe treatment course in grouped prose rather than mechanical row listing.
-- For DIAGNOSTIC_ASSESSMENT, explain the basis of assessment conservatively.
-- For ABSTRACT, INTRODUCTION, and DISCUSSION_CONCLUSION, keep the draft minimal at this stage and avoid broad background or generic conclusion phrasing.
-
-Output coverage:
-- Return exactly one sectionDrafts entry for each of these sections, in this order:
-  PATIENT_INFORMATION, CLINICAL_FINDINGS, TIMELINE, DIAGNOSTIC_ASSESSMENT, THERAPEUTIC_INTERVENTIONS, FOLLOW_UP_OUTCOMES, PATIENT_PERSPECTIVE.
-- Draft every section that has at least one evidence card listed under it, regardless of its status label.
-- If a section has no evidence, still return its entry with an empty draftText.
-- Do not write sentences stating that information is missing or not recorded; list such gaps in openIssues instead.
-- The single entry below only illustrates the shape.
-
-Return JSON only:
-{
-  "sectionDrafts": [
-    {
-      "sectionId": "PATIENT_INFORMATION",
-      "evidenceCardIdsUsed": ["uuid1", "uuid2"],
-      "draftText": "학술 증례보고 문체의 한국어 초안",
-      "openIssues": []
-    }
-  ]
-}
 `;

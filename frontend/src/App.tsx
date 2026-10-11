@@ -15,10 +15,12 @@ import ResearchHistoryPage from './pages/ResearchHistoryPage';
 import StudyWriteInterviewPage from './pages/StudyWriteInterviewPage';
 import StudyWriteDraftPage from './pages/StudyWriteDraftPage';
 import StudyWriteFinalPage from './pages/StudyWriteFinalPage';
+import ReadOnlyViewGuard from './components/ReadOnlyViewGuard';
 
 function App() {
   return (
     <BrowserRouter>
+      <ReadOnlyViewGuard />
       <Routes>
         <Route path="/" element={<ModeSelectPage />} />
         <Route path="/write" element={<CaseInputPage mode="write" />} />

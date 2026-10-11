@@ -202,6 +202,18 @@ const NON_NAME_FINAL_SYLLABLES = new Set([
 // ("설진상", "안정된"). Only consulted when the stem itself is known vocabulary.
 const STEM_SUFFIX_SYLLABLES = new Set(['상', '된', '되', '한', '할', '함', '시', '중', '후', '전']);
 
+// Syllables that occur in Korean given names. A surname-initial word whose other
+// two syllables are not both here ("진단명", "진통제", "기립근", "장시간") is an
+// ordinary word, not a name.
+const GIVEN_NAME_SYLLABLES = new Set(
+  (
+    '가강건경계고곤관광구국권규균근금기길나남노다단달대덕도동두라란람래려련령례로록류률리린림' +
+    '마만명모목무문미민박배백범병보복봉부빈사산삼상새서석선설섭성세소솔송수숙순슬승시식신실심' +
+    '아안애양언엄여연열엽영예오옥온완용우욱운웅원월위유윤율은의이익인일임자장재전정제조종주준' +
+    '중지진찬창채천철초춘충태택평표필하학한해향헌혁현형혜호홍화환효후훈휘흥희'
+  ).split('')
+);
+
 /**
  * The surname rule has no contextual marker (환자 / 씨 / 성명 ...), so on its own
  * it matches any word that merely starts with a surname syllable - "하였다",
@@ -220,6 +232,7 @@ function refineSurnameRuleSpan(span: PHISpan): PHISpan | null {
 
   if (value.length !== 3) return null;
   if (NON_NAME_FINAL_SYLLABLES.has(value[2])) return null;
+  if (!GIVEN_NAME_SYLLABLES.has(value[1]) || !GIVEN_NAME_SYLLABLES.has(value[2])) return null;
   // "설질은", "안색이": a clinical/common stem plus a particle, not a name.
   if (NAME_TRAILING_PARTICLES.has(value[2]) || STEM_SUFFIX_SYLLABLES.has(value[2])) {
     const stem = value.slice(0, 2);
