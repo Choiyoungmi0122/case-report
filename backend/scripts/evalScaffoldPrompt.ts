@@ -11,6 +11,9 @@
  *      sample:hwa-byung 저장소 샘플 입력(scripts/sampleInput.hwa-byung.json). 처음 한 번 전처리·CHAIN1·CHAIN2 를 돌려
  *                       data/prompt-eval/inputs/ 에 저장하고, 다음부터 그 입력을 그대로 쓴다(비교 조건을 같게).
  *  - --dates : 근거 줄에 방문 날짜를 붙여 보낸다(서비스 기본값은 끔).
+ *  - --sections A,B : 섹션별 생성. 그 섹션만 쓰게 한다(current 만). 예: --sections THERAPEUTIC_INTERVENTIONS
+ *  - --evidence section|all : 섹션별 생성 때 근거 목록 범위. section(기본) = 그 섹션 근거만, all = 7개 섹션 근거 전체.
+ *  - --candidate v33 : current 프롬프트에 후보 규칙을 끼운다(scripts/promptEval/candidates/scaffoldChain3V33.ts).
  *
  * 사례와 무관한 지표(모든 source): 치료 개입 근거의 숫자+단위 표기(용량·횟수·시간·규격)가 초안에 남은 비율, 초안의 숫자+단위 표기 중
  * 어느 근거 카드에도 없는 것(바뀌었거나 지어낸 값 후보), 글자·문장 수. 최종 판단은 사람이 초안을 기록과 대조해 한다.
@@ -25,12 +28,19 @@ import { callLLMWithSchema } from '../src/llm/client';
 import { buildChain3Inputs, normalizeChain3Output, preprocessVisitsForChain1, runEvidenceSplit, runSectionAssessment } from '../src/llm/chains';
 import { getModelForChain } from '../src/llm/models';
 import { Chain3ModelOutputSchema } from '../src/llm/schemas/chain3_draft';
-import { chain3SystemPrompt as currentScaffoldChain3, buildChain3UserPrompt } from '../src/llm/prompts/scaffold/chain3_draft';
+import {
+  chain3SystemPrompt as currentScaffoldChain3,
+  buildChain3UserPrompt,
+  buildScaffoldChain3SystemPrompt,
+  SCAFFOLD_CHAIN3_SECTIONS,
+  ScaffoldChain3Section
+} from '../src/llm/prompts/scaffold/chain3_draft';
 import { promptVersionLabel } from '../src/llm/promptRegistry';
 import { runWithUsageContext } from '../src/llm/usageContext';
 import { getScaffoldTerminologyRuntime } from '../src/rag/runtime';
 import { SCAFFOLD_CHAIN3_V2_LABEL, scaffoldChain3V2SystemPrompt } from './promptEval/baselines/scaffoldChain3V2';
 import { scoreTiDraft } from './promptEval/scaffoldTiChecklist';
+import { applyScaffoldChain3V33, SCAFFOLD_CHAIN3_V33_LABEL } from './promptEval/candidates/scaffoldChain3V33';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
@@ -118,6 +128,11 @@ function genericMetrics(text: string, evidenceCards: any[]) {
     tokensOf(card.sourceText).forEach((token) => allTokens.add(token));
   }
   const draftTokens = tokensOf(text);
+  const sentenceList = text.split(/(?<=[.다])\s+/).filter((sentence) => sentence.trim());
+  // "~은 기록되어 있지 않다", "확인되지 않았다" 처럼 없는 내용을 본문에 쓴 문장 (규칙상 openIssues 로 가야 한다)
+  const absence = sentenceList.filter((sentence) =>
+    /(기록|기재|명시|확인)(되어|되지|돼)\s*(있지\s*)?않|기록에\s*(나타나지|없)|확인되지\s*않/.test(sentence)
+  );
   const kept = [...tiTokens].filter((token) => draftTokens.has(token));
   const notInEvidence = [...draftTokens].filter((token) => !allTokens.has(token));
   return {
@@ -126,14 +141,36 @@ function genericMetrics(text: string, evidenceCards: any[]) {
     detailTokensKept: kept.length,
     detailRetention: tiTokens.size ? Math.round((kept.length / tiTokens.size) * 100) : null,
     draftTokensNotInEvidence: notInEvidence,
+    absenceSentences: absence.length,
     chars: text.length,
     sentences: text.split(/(?<=[.다])\s+/).filter((sentence) => sentence.trim()).length
   };
 }
 
-async function generate(variant: Exclude<Variant, 'frozen'>, inputs: Inputs, includeVisitDates: boolean) {
-  const chain3 = buildChain3Inputs(inputs.evidenceCards, inputs.sectionStates, { includeVisitDates });
-  const system = variant === 'current' ? currentScaffoldChain3 : scaffoldChain3V2SystemPrompt;
+type Scope = { sections?: ScaffoldChain3Section[]; evidence: 'section' | 'all'; candidate?: 'v33' };
+
+function scopeTag(scope: Scope): string {
+  const cand = scope.candidate ? `+${scope.candidate}` : '';
+  if (!scope.sections) return cand;
+  return `${cand}+sec(${scope.sections.map((id) => id.slice(0, 4)).join(',')}${scope.evidence === 'all' ? ',allEv' : ''})`;
+}
+
+async function generate(variant: Exclude<Variant, 'frozen'>, inputs: Inputs, includeVisitDates: boolean, scope: Scope) {
+  const chain3 = buildChain3Inputs(inputs.evidenceCards, inputs.sectionStates, {
+    includeVisitDates,
+    sectionIds: scope.sections,
+    // all: 7개 섹션 근거 전체를 보여 준다(섹션 지정이 없을 때와 같은 근거 목록)
+    evidenceSectionIds: scope.sections && scope.evidence === 'all' ? SCAFFOLD_CHAIN3_SECTIONS : scope.sections
+  });
+  if (scope.sections && variant !== 'current') throw new Error('--sections 는 current 에서만 쓴다');
+  const base =
+    variant === 'current'
+      ? scope.sections
+        ? buildScaffoldChain3SystemPrompt(scope.sections)
+        : currentScaffoldChain3
+      : scaffoldChain3V2SystemPrompt;
+  if (scope.candidate && variant !== 'current') throw new Error('--candidate 는 current 에서만 쓴다');
+  const system = scope.candidate === 'v33' ? applyScaffoldChain3V33(base) : base;
   let usage: any = null;
   const startedAt = Date.now();
   const output = await callLLMWithSchema(
@@ -142,7 +179,7 @@ async function generate(variant: Exclude<Variant, 'frozen'>, inputs: Inputs, inc
     buildChain3UserPrompt(chain3.evidenceText, chain3.statusSummary, chain3.rubricSummary),
     {
       model: getModelForChain('chain3'),
-      label: `CHAIN3 draft [scaffold-eval:${variant}${includeVisitDates ? '+dates' : ''}]`,
+      label: `CHAIN3 draft [scaffold-eval:${variant}${includeVisitDates ? '+dates' : ''}${scopeTag(scope)}]`,
       onUsage: (value) => {
         usage = value;
       }
@@ -161,16 +198,28 @@ async function main() {
   if (variant === 'frozen' && source !== 'fixed') throw new Error('frozen 은 --source fixed 에서만 쓴다');
   const includeVisitDates = process.argv.includes('--dates');
   const runs = Math.max(1, Number(arg('--runs') || 1));
+  const sectionsArg = arg('--sections');
+  const scope: Scope = {
+    sections: sectionsArg ? (sectionsArg.split(',').map((id) => id.trim()) as ScaffoldChain3Section[]) : undefined,
+    evidence: arg('--evidence') === 'all' ? 'all' : 'section',
+    candidate: arg('--candidate') === 'v33' ? 'v33' : undefined
+  };
   const inputs = await loadInputs(source);
   const promptLabel =
-    variant === 'frozen' ? 'CHAIN3:v1 (c18c6e5, 고정)' : variant === 'v2' ? SCAFFOLD_CHAIN3_V2_LABEL : promptVersionLabel('SCAFFOLD_CHAIN3');
+    variant === 'frozen'
+      ? 'CHAIN3:v1 (c18c6e5, 고정)'
+      : variant === 'v2'
+        ? SCAFFOLD_CHAIN3_V2_LABEL
+        : scope.candidate === 'v33'
+          ? SCAFFOLD_CHAIN3_V33_LABEL
+          : promptVersionLabel('SCAFFOLD_CHAIN3');
 
   const results: any[] = [];
   for (let run = 1; run <= (variant === 'frozen' ? 1 : runs); run += 1) {
     const { drafts, usage, elapsedMs } =
       variant === 'frozen'
         ? { drafts: (FIXED_STUDY_CASE_PROCESSED as any).fields.sectionDrafts, usage: null, elapsedMs: 0 }
-        : await runWithUsageContext({ caseId: 'eval:scaffold-chain3' }, () => generate(variant, inputs, includeVisitDates));
+        : await runWithUsageContext({ caseId: 'eval:scaffold-chain3' }, () => generate(variant, inputs, includeVisitDates, scope));
     const ti = (drafts || []).find((draft: any) => draft.sectionId === 'THERAPEUTIC_INTERVENTIONS');
     const text = String(ti?.draftText || '');
     const generic = genericMetrics(text, inputs.evidenceCards);
@@ -191,7 +240,7 @@ async function main() {
       ? ` | 정리표 ${fixedScore.coverage.all.hit}/${fixedScore.coverage.all.total} 오류 ${fixedScore.errors.length}`
       : '';
     console.log(
-      `[${source} ${variant}${includeVisitDates ? '+dates' : ''} run ${run}] ${promptLabel}${fixedPart} | 세부 보존 ${generic.detailTokensKept}/${generic.detailTokensInEvidence} (${generic.detailRetention}%) | 근거에 없는 수치 ${generic.draftTokensNotInEvidence.length} ${JSON.stringify(generic.draftTokensNotInEvidence)} | ${generic.chars}자 ${generic.sentences}문장` +
+      `[${source} ${variant}${includeVisitDates ? '+dates' : ''}${scopeTag(scope)} run ${run}] ${promptLabel}${fixedPart} | 세부 보존 ${generic.detailTokensKept}/${generic.detailTokensInEvidence} (${generic.detailRetention}%) | 근거에 없는 수치 ${generic.draftTokensNotInEvidence.length} ${JSON.stringify(generic.draftTokensNotInEvidence)} | 없는 내용 서술 ${generic.absenceSentences}문장 | ${generic.chars}자 ${generic.sentences}문장` +
         (usage ? ` | 토큰 in ${usage.promptTokens} out ${usage.completionTokens}` : '')
     );
   }
@@ -199,8 +248,15 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeSource = source.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const outFile = path.join(OUT_DIR, `${stamp}_${safeSource}_${variant}${includeVisitDates ? '_dates' : ''}.json`);
-  fs.writeFileSync(outFile, JSON.stringify({ variant, source, sourceLabel: inputs.label, includeVisitDates, promptLabel, results }, null, 2), 'utf8');
+  const scopeFile =
+    (scope.candidate ? `_${scope.candidate}` : '') +
+    (scope.sections ? `_sec-${scope.sections.join('-')}${scope.evidence === 'all' ? '-allEv' : ''}` : '');
+  const outFile = path.join(OUT_DIR, `${stamp}_${safeSource}_${variant}${includeVisitDates ? '_dates' : ''}${scopeFile}.json`);
+  fs.writeFileSync(
+    outFile,
+    JSON.stringify({ variant, source, sourceLabel: inputs.label, includeVisitDates, scope, promptLabel, results }, null, 2),
+    'utf8'
+  );
   console.log(`saved ${outFile}`);
 }
 

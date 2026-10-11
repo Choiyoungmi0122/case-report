@@ -9,7 +9,19 @@
  */
 import { MANUSCRIPT_STYLE, RUBRIC_HANDLING, sharedPrinciples } from './common';
 
-export const chain3SystemPrompt = `
+/** Scaffold CHAIN3 가 쓸 수 있는 섹션 (CHAIN3 의 7개 핵심 섹션, 이 순서) */
+export const SCAFFOLD_CHAIN3_SECTIONS = [
+  'PATIENT_INFORMATION',
+  'CLINICAL_FINDINGS',
+  'TIMELINE',
+  'DIAGNOSTIC_ASSESSMENT',
+  'THERAPEUTIC_INTERVENTIONS',
+  'FOLLOW_UP_OUTCOMES',
+  'PATIENT_PERSPECTIVE'
+] as const;
+export type ScaffoldChain3Section = (typeof SCAFFOLD_CHAIN3_SECTIONS)[number];
+
+const HEAD = `
 역할:
 당신은 EMR에서 추출한 근거 카드만으로 CARE 증례보고의 섹션별 초안을 한국어로 작성합니다. 이 초안은 학습자가 자기 초안과 비교하고, 문장마다 기록과 대조해 검토하는 자료로 쓰입니다.
 
@@ -20,10 +32,9 @@ ${RUBRIC_HANDLING}
 
 ${MANUSCRIPT_STYLE}
 
-작업 규칙:
-1. 작성 범위: 아래 7개 섹션 각각에 대해 sectionDrafts 항목을 정확히 1개씩, 이 순서로 반환합니다.
-   PATIENT_INFORMATION, CLINICAL_FINDINGS, TIMELINE, DIAGNOSTIC_ASSESSMENT, THERAPEUTIC_INTERVENTIONS, FOLLOW_UP_OUTCOMES, PATIENT_PERSPECTIVE
-2. 섹션 아래에 근거 카드가 1개 이상 있으면 섹션 상태 표시와 관계없이 초안을 씁니다. 근거 카드가 없으면 draftText를 빈 문자열로 둡니다.
+`;
+
+const RULES_AFTER_SCOPE = `2. 섹션 아래에 근거 카드가 1개 이상 있으면 섹션 상태 표시와 관계없이 초안을 씁니다. 근거 카드가 없으면 draftText를 빈 문자열로 둡니다.
 3. 각 섹션은 그 섹션의 CARE 목적에 맞는 내용만 담습니다.
 4. 시점 구분: 근거 줄마다 방문 번호(날짜가 있으면 날짜)가 붙어 있습니다. 나중 방문의 내용은 경과로 다루고, 초진 시점의 환자 정보나 임상 소견으로 쓰지 않습니다.
 5. 검증 가능한 문장: 한 문장에는 같은 근거 카드들로 확인할 수 있는 사실만 담습니다. 서로 다른 방문이나 서로 다른 치료의 사실을 한 문장에 뭉쳐 쓰지 않습니다.
@@ -34,26 +45,34 @@ ${MANUSCRIPT_STYLE}
 10. 본문에는 환자와 치료에 대한 사실만 씁니다. "기록", "기재", "근거" 같은 자료에 대한 설명을 넣지 않습니다.
 11. evidenceCardIdsUsed에는 그 섹션 초안에 실제로 사용한 근거 카드의 id를 넣습니다.
 
-섹션별 지침:
-- PATIENT_INFORMATION: 인구학적 정보, 주호소, 발병 배경, 과거력·가족력·사회력을 근거가 있는 범위에서 씁니다. 심리사회적 배경은 기록된 경우에만 씁니다.
-- CLINICAL_FINDINGS: 증상, 관찰 소견, 척도, 검사 결과를 정리합니다. 가능하면 환자가 호소한 증상과 관찰된 소견을 구분합니다.
-- TIMELINE: 발병, 주요 방문, 치료 시점, 의미 있는 변화를 시간 순서의 서술로 연결합니다. 방문 간격은 방문마다 기록된 대로 쓰고, 서로 다른 간격을 하나의 일정한 간격으로 뭉뚱그리지 않습니다.
-- DIAGNOSTIC_ASSESSMENT: 진단 또는 의심 진단이 어떤 증상, 척도, 검사, 판단에 근거했는지 씁니다. 기록되지 않은 감별·배제 과정을 만들지 않습니다.
-- THERAPEUTIC_INTERVENTIONS: 다른 사람이 같은 치료를 따라 할 수 있을 만큼 구체적으로 씁니다.
+`;
+
+const SECTION_GUIDES: Record<ScaffoldChain3Section, string> = {
+  PATIENT_INFORMATION: `- PATIENT_INFORMATION: 인구학적 정보, 주호소, 발병 배경, 과거력·가족력·사회력을 근거가 있는 범위에서 씁니다. 심리사회적 배경은 기록된 경우에만 씁니다.
+`,
+  CLINICAL_FINDINGS: `- CLINICAL_FINDINGS: 증상, 관찰 소견, 척도, 검사 결과를 정리합니다. 가능하면 환자가 호소한 증상과 관찰된 소견을 구분합니다.
+`,
+  TIMELINE: `- TIMELINE: 발병, 주요 방문, 치료 시점, 의미 있는 변화를 시간 순서의 서술로 연결합니다. 방문 간격은 방문마다 기록된 대로 쓰고, 서로 다른 간격을 하나의 일정한 간격으로 뭉뚱그리지 않습니다.
+`,
+  DIAGNOSTIC_ASSESSMENT: `- DIAGNOSTIC_ASSESSMENT: 진단 또는 의심 진단이 어떤 증상, 척도, 검사, 판단에 근거했는지 씁니다. 기록되지 않은 감별·배제 과정을 만들지 않습니다.
+`,
+  THERAPEUTIC_INTERVENTIONS: `- THERAPEUTIC_INTERVENTIONS: 다른 사람이 같은 치료를 따라 할 수 있을 만큼 구체적으로 씁니다.
   a. 이 기관에서 시행한 치료와 다른 의료기관에서 받은 치료(복용 중인 약 등)를 구분해 씁니다. 다른 기관의 약은 약 이름·용량·용법이 기록되어 있으면 가장 구체적으로 기록된 내용을 씁니다.
   b. 치료법별로 기록된 세부를 생략하지 않습니다. 침, 약침, 한약, 그 밖의 요법은 서로 다른 처치이므로 한 처치의 부위·용량을 다른 처치에 붙이지 않습니다. 한약은 처방명·제형·1회 용량과 1일 횟수·복용 시점·기간·처방 날짜, 침은 혈위 전체·침의 규격·유침 시간, 약침은 약제명·총량·부위별 용량, 그 밖의 요법은 부위·시간·횟수, 교육·상담은 내용·시간을 씁니다. 분량을 줄이려고 세부를 빼지 않습니다.
   c. 같은 처치가 여러 방문에 반복되면 한 번만 쓰고, 시행한 방문(또는 날짜) 범위를 밝힙니다.
   d. 치료를 바꾼 경우(추가, 중단, 부위·용량·시간 변경) 변경마다 무엇을, 언제, 기록된 이유가 있으면 그 이유와 함께 씁니다.
   e. 이상반응과 치료 후 경과는 FOLLOW_UP_OUTCOMES에 쓰고 이 섹션에는 쓰지 않습니다.
-- FOLLOW_UP_OUTCOMES: 치료 이후 증상, 기능, 수면, 정서, 척도의 변화를 씁니다. 호전, 지속, 변동, 무반응을 구분하고, 타임라인 전체를 반복하지 않습니다. 기록된 이상반응은 여기에 씁니다.
-- PATIENT_PERSPECTIVE: 환자가 직접 표현했거나 그렇게 기록된 내용만 씁니다. 없으면 빈 문자열로 둡니다.
+`,
+  FOLLOW_UP_OUTCOMES: `- FOLLOW_UP_OUTCOMES: 치료 이후 증상, 기능, 수면, 정서, 척도의 변화를 씁니다. 호전, 지속, 변동, 무반응을 구분하고, 타임라인 전체를 반복하지 않습니다. 기록된 이상반응은 여기에 씁니다.
+`,
+  PATIENT_PERSPECTIVE: `- PATIENT_PERSPECTIVE: 환자가 직접 표현했거나 그렇게 기록된 내용만 씁니다. 없으면 빈 문자열로 둡니다.
+`
+};
 
-출력 형식:
-아래 항목 하나는 형태를 보여주기 위한 것입니다. 실제로는 7개 섹션을 모두 반환합니다.
-{
+const OUTPUT_EXAMPLE_TAIL = (sectionId: string) => `{
   "sectionDrafts": [
     {
-      "sectionId": "PATIENT_INFORMATION",
+      "sectionId": "${sectionId}",
       "evidenceCardIdsUsed": ["<근거 카드 id>", "<근거 카드 id>"],
       "draftText": "<학술 증례보고 문체의 한국어 초안>",
       "openIssues": ["<근거가 없어 쓰지 못한 필수 항목>"]
@@ -61,6 +80,36 @@ ${MANUSCRIPT_STYLE}
   ]
 }
 `;
+
+/**
+ * Scaffold CHAIN3 시스템 프롬프트. sectionIds 를 주면 그 섹션만 쓰게 한다(섹션별 생성, 2026-10-12 평가용 추가).
+ * 기본값(7개 전체)은 SCAFFOLD-CHAIN3:v3 본문과 글자까지 같다(tests/llm/promptSets.test.ts 의 공개 단계 해시로 확인).
+ */
+export function buildScaffoldChain3SystemPrompt(sectionIds: readonly ScaffoldChain3Section[] = SCAFFOLD_CHAIN3_SECTIONS): string {
+  const selected = SCAFFOLD_CHAIN3_SECTIONS.filter((id) => sectionIds.includes(id));
+  if (selected.length === 0) throw new Error('buildScaffoldChain3SystemPrompt: no known section');
+  const all = selected.length === SCAFFOLD_CHAIN3_SECTIONS.length;
+  const scopeRule = all
+    ? `1. 작성 범위: 아래 7개 섹션 각각에 대해 sectionDrafts 항목을 정확히 1개씩, 이 순서로 반환합니다.\n   ${SCAFFOLD_CHAIN3_SECTIONS.join(', ')}\n`
+    : `1. 작성 범위: 아래 섹션에 대해서만 sectionDrafts 항목을 정확히 1개씩, 이 순서로 반환합니다. 다른 섹션은 반환하지 않습니다.\n   ${selected.join(', ')}\n`;
+  const outputNote = all
+    ? '아래 항목 하나는 형태를 보여주기 위한 것입니다. 실제로는 7개 섹션을 모두 반환합니다.\n'
+    : '아래 항목은 형태를 보여주기 위한 것입니다. 실제로는 작성 범위의 섹션만 반환합니다.\n';
+  return (
+    HEAD +
+    '작업 규칙:\n' +
+    scopeRule +
+    RULES_AFTER_SCOPE +
+    '섹션별 지침:\n' +
+    selected.map((id) => SECTION_GUIDES[id]).join('') +
+    '\n' +
+    '출력 형식:\n' +
+    outputNote +
+    OUTPUT_EXAMPLE_TAIL(all ? 'PATIENT_INFORMATION' : selected[0])
+  );
+}
+
+export const chain3SystemPrompt = buildScaffoldChain3SystemPrompt();
 
 export const buildChain3UserPrompt = (
   evidenceText: string,

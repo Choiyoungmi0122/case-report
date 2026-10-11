@@ -870,9 +870,10 @@ function findBestClauseMatch(cardText: string, visit: PreparedVisit | undefined)
 
 function buildTaggedEvidenceSummary(
   evidenceCards: EvidenceCard[],
-  options: { includeVisitDates?: boolean } = {}
+  options: { includeVisitDates?: boolean; sectionIds?: readonly string[] } = {}
 ): string {
-  return CORE_AI_SECTIONS.map((sectionId) => {
+  const sections = options.sectionIds ? CORE_AI_SECTIONS.filter((id) => options.sectionIds!.includes(id)) : CORE_AI_SECTIONS;
+  return sections.map((sectionId) => {
     const relevant = evidenceCards.filter((card) => {
       const hints = uniqueSections([...(card.tags || []), ...(card.sectionHints || [])]);
       return hints.includes(sectionId);
@@ -1618,18 +1619,25 @@ export async function runSectionAssessment(
 /**
  * CHAIN3 사용자 프롬프트의 세 입력. 프롬프트 평가 스크립트(scripts/evalScaffoldPrompt.ts)도 같은 입력을 쓰도록 내보낸다.
  * includeVisitDates: 근거 줄에 방문 날짜를 붙인다(기본 false = 지금까지와 같은 입력).
+ * sectionIds: 섹션별 생성. 섹션 상태·루브릭을 이 섹션으로 줄인다(기본: 7개 전체).
+ * evidenceSectionIds: 근거 목록에 넣을 섹션(기본: sectionIds, 없으면 7개 전체). 다른 섹션 근거까지 보여 주려면 전체를 준다.
  */
 export function buildChain3Inputs(
   evidenceCards: EvidenceCard[],
   sectionAssessments: SectionAssessment[],
-  options: { includeVisitDates?: boolean } = {}
+  options: { includeVisitDates?: boolean; sectionIds?: readonly string[]; evidenceSectionIds?: readonly string[] } = {}
 ) {
+  const sections = options.sectionIds ? CORE_AI_SECTIONS.filter((id) => options.sectionIds!.includes(id)) : CORE_AI_SECTIONS;
   return {
-    evidenceText: buildTaggedEvidenceSummary(evidenceCards, options),
+    evidenceText: buildTaggedEvidenceSummary(evidenceCards, {
+      includeVisitDates: options.includeVisitDates,
+      sectionIds: options.evidenceSectionIds || options.sectionIds
+    }),
     statusSummary: (sectionAssessments || [])
+      .filter((item) => !options.sectionIds || options.sectionIds.includes(item.sectionId))
       .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
       .join('\n\n'),
-    rubricSummary: buildCompactRubricSummary(CORE_AI_SECTIONS)
+    rubricSummary: buildCompactRubricSummary(sections)
   };
 }
 

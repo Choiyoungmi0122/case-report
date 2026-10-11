@@ -13,7 +13,12 @@ import {
   promptVersionLabel
 } from '../../src/llm/promptRegistry';
 import { buildChainCacheEntry, buildPerformanceLog, hasChainCacheHit } from '../../src/optimization/chainRuntime';
-import { chain3SystemPrompt as scaffoldChain3 } from '../../src/llm/prompts/scaffold/chain3_draft';
+import {
+  buildScaffoldChain3SystemPrompt,
+  chain3SystemPrompt as scaffoldChain3,
+  SCAFFOLD_CHAIN3_SECTIONS
+} from '../../src/llm/prompts/scaffold/chain3_draft';
+import { buildChain3Inputs } from '../../src/llm/chains';
 import { createHash } from 'node:crypto';
 
 async function run() {
@@ -50,6 +55,36 @@ async function run() {
   // 이력: v2 f59a93a0…(분리 시점, a53e34c) → v3 00406d6d…(2026-10-12 Scaffold CHAIN3 개선 적용)
   assert.equal(promptVersionLabel('CHAIN3_STUDY_REVEAL'), 'CHAIN3_STUDY_REVEAL:v3');
   assert.equal(promptTemplateHash('CHAIN3_STUDY_REVEAL'), '00406d6d2475b489a2d1c073bfc8c578a068efcf7be85ee8c777e6964f629d3e');
+
+  // ---------------------------------------------------------------- 섹션별 생성 프롬프트 (2026-10-12 평가용)
+  // 기본값은 서비스 본문과 같다 (위 공개 단계 해시가 이것을 고정한다)
+  assert.equal(buildScaffoldChain3SystemPrompt(), scaffoldChain3);
+  assert.equal(buildScaffoldChain3SystemPrompt([...SCAFFOLD_CHAIN3_SECTIONS]), scaffoldChain3);
+  const tiOnly = buildScaffoldChain3SystemPrompt(['THERAPEUTIC_INTERVENTIONS']);
+  assert.match(tiOnly, /아래 섹션에 대해서만[^\n]*\n\s+THERAPEUTIC_INTERVENTIONS\n/);
+  assert.match(tiOnly, /- THERAPEUTIC_INTERVENTIONS: /);
+  assert.ok(!/- FOLLOW_UP_OUTCOMES: /.test(tiOnly), '다른 섹션 지침은 빠진다');
+  assert.match(tiOnly, /"sectionId": "THERAPEUTIC_INTERVENTIONS"/);
+  assert.throws(() => buildScaffoldChain3SystemPrompt([]));
+  // 입력도 섹션 범위를 따른다 (기본은 7개 전체)
+  const cardsForInputs: any[] = [
+    { id: 'a', visitIndex: 1, visitDateTime: '2026-01-01', sourceText: '침 치료', normalizedText: '침 치료', tags: ['THERAPEUTIC_INTERVENTIONS'], sectionHints: [] },
+    { id: 'b', visitIndex: 1, visitDateTime: '2026-01-01', sourceText: '두통', normalizedText: '두통', tags: ['CLINICAL_FINDINGS'], sectionHints: [] }
+  ];
+  const statesForInputs: any[] = [
+    { sectionId: 'THERAPEUTIC_INTERVENTIONS', status: 'READY', rationaleText: '' },
+    { sectionId: 'CLINICAL_FINDINGS', status: 'READY', rationaleText: '' }
+  ];
+  const fullInputs = buildChain3Inputs(cardsForInputs, statesForInputs);
+  assert.match(fullInputs.evidenceText, /\[CLINICAL_FINDINGS\]/);
+  const tiInputs = buildChain3Inputs(cardsForInputs, statesForInputs, { sectionIds: ['THERAPEUTIC_INTERVENTIONS'] });
+  assert.ok(!/CLINICAL_FINDINGS/.test(tiInputs.evidenceText) && !/CLINICAL_FINDINGS/.test(tiInputs.statusSummary));
+  const tiAllEvidence = buildChain3Inputs(cardsForInputs, statesForInputs, {
+    sectionIds: ['THERAPEUTIC_INTERVENTIONS'],
+    evidenceSectionIds: [...SCAFFOLD_CHAIN3_SECTIONS]
+  });
+  assert.match(tiAllEvidence.evidenceText, /\[CLINICAL_FINDINGS\]/);
+  assert.ok(!/CLINICAL_FINDINGS/.test(tiAllEvidence.statusSummary));
 
   // ---------------------------------------------------------------- 캐시 지문과 로그
   const scaffoldEntry = buildChainCacheEntry('h', { a: 1 }, 'CHAIN1', 'scaffold');
