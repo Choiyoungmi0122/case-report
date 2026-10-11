@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
     "study:snapshot": "tsx --env-file=.env scripts/buildStudyCaseSnapshot.ts",
+    "usage:summary": "tsx scripts/summarizeLlmUsage.ts",
     "study:freeze": "tsx scripts/freezeStudyCase.ts",
     "test:rag": "tsx tests/rag/termNormalizer.test.ts",
     "test:rag-loader": "tsx tests/rag/terminologyLoader.test.ts",
