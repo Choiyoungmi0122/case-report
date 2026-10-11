@@ -6,6 +6,7 @@ import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldProgressHeader from '../components/scaffold/ScaffoldProgressHeader';
 import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyStage } from '../components/scaffold/ReadOnlyStageNavigator';
+import { EmrSearchBox, HighlightedText, revealInContainer, useEmrSearch } from '../components/scaffold/emrSearch';
 import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import ScaffoldSelfSummary, { type SelfSummaryGroup } from '../components/scaffold/ScaffoldSelfSummary';
 import {
@@ -27,7 +28,7 @@ import {
   CARE_SECTION_ITEM_META,
   CARE_WRITING_EXAMPLES
 } from '../utils/scaffoldUi';
-import { getStudySectionIds } from '../utils/scaffoldVersion';
+import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import './ScaffoldSectionPage.css';
 
 // ===== Types =====
@@ -883,6 +884,23 @@ export default function ScaffoldSectionPage() {
   const sectionTitle = sectionId || '섹션';
   const visits = useMemo(() => detail?.caseSummary?.visits || [], [detail]);
 
+  // Scaffold V2(v3.0): 왼쪽 원기록 패널에서 검색·강조·결과 이동 (V2-06). 검색어는 저장하지 않는다.
+  const isV2 = isScaffoldV2Data(scaffoldData);
+  const visitTexts = useMemo(() => visits.map((visit: any) => String(visit?.soapText || '')), [visits]);
+  const emrSearch = useEmrSearch(visitTexts);
+  const sourcePaneBodyRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const active = emrSearch.active;
+    if (!active) return;
+    // 접힌 방문이면 먼저 펼친다. 펼친 뒤 다음 렌더에서 해당 위치로 스크롤한다.
+    setExpandedVisits((prev) => (prev.has(active.visitIndex) ? prev : new Set(prev).add(active.visitIndex)));
+    const timer = window.setTimeout(() => {
+      const mark = sourcePaneBodyRef.current?.querySelector<HTMLElement>(`[data-match-id="${active.id}"]`);
+      if (mark) revealInContainer(sourcePaneBodyRef.current, mark);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [emrSearch.active]);
+
   // Step completion conditions
   const step1Complete =
     authoringNotes.trim().length > 0 ||
@@ -988,20 +1006,23 @@ export default function ScaffoldSectionPage() {
   // 보여주기만 하며, 공개 전 스냅샷이나 저장되는 값에는 들어가지 않는다.
   // 방문 회차별로 묶는다. 회차는 AI 메모 추천에서 가져온 메모의 id(…-v3-1-…)에만
   // 남아 있으므로, 직접 쓴 메모는 '직접 쓴 메모'로 따로 묶는다.
+  // V2 메모는 visitIndex 필드를 먼저 보고, 없으면(V1 메모) id 접두어로만 복원한다. 추정은 하지 않는다.
   const caseMemoBuckets = new Map<number, string[]>();
   for (const note of scaffoldData?.scaffoldState.caseMap?.caseNotes || []) {
     const text = String(note?.text || '').trim();
     if (!text) continue;
     const visitMatch = String(note.id || '').match(/^case-note-ai-(?:[a-z]+-)?v(\d+)-/);
-    const visitNo = visitMatch ? Number(visitMatch[1]) : 0;
-    const line = `${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}: ${text}`;
+    const visitNo =
+      typeof note.visitIndex === 'number' && note.visitIndex > 0 ? note.visitIndex : visitMatch ? Number(visitMatch[1]) : 0;
+    const careTag = Array.isArray(note.careItems) && note.careItems.length > 0 ? ` [${note.careItems.join(', ')}]` : '';
+    const line = `${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}${careTag}: ${text}`;
     caseMemoBuckets.set(visitNo, [...(caseMemoBuckets.get(visitNo) || []), line]);
   }
   const caseMemoGroups: SelfSummaryGroup[] = Array.from(caseMemoBuckets.entries())
     .sort(([a], [b]) => (a === 0 ? 1 : b === 0 ? -1 : a - b))
     .map(([visitNo, items]) => ({
       key: `case-memos-${visitNo}`,
-      label: visitNo > 0 ? `읽으며 남긴 메모 · ${visitNo}회차` : '읽으며 남긴 메모 · 직접 쓴 메모',
+      label: visitNo > 0 ? `읽으며 남긴 메모 · ${visitNo}회차` : isV2 ? '읽으며 남긴 메모 · 회차 미지정' : '읽으며 남긴 메모 · 직접 쓴 메모',
       items
     }));
   const summaryGroups: SelfSummaryGroup[] =
@@ -1596,9 +1617,26 @@ export default function ScaffoldSectionPage() {
               ? '진료 방문 기록 (AI 초안과 대조)'
               : '진료 방문 기록 (정보 선택)'}
           </p>
+          {isV2 ? (
+            <div style={{ marginTop: 8 }}>
+              <EmrSearchBox
+                query={emrSearch.query}
+                onQueryChange={emrSearch.setQuery}
+                matchCount={emrSearch.matches.length}
+                activeIndex={emrSearch.activeIndex}
+                onPrev={emrSearch.prev}
+                onNext={emrSearch.next}
+                compact
+              />
+            </div>
+          ) : null}
         </div>
 
-        <div className="scaffold-pane__body" style={{ display: 'grid', gap: 8, alignContent: 'start', gridAutoRows: 'max-content' }}>
+        <div
+          className="scaffold-pane__body"
+          ref={sourcePaneBodyRef}
+          style={{ display: 'grid', gap: 8, alignContent: 'start', gridAutoRows: 'max-content' }}
+        >
           {visits.map((visit: any, index: number) => {
             const isExpanded = expandedVisits.has(index);
             const visitDate = visit.date
@@ -1647,6 +1685,11 @@ export default function ScaffoldSectionPage() {
                       }}
                     >
                       {visit.type} #{index + 1}
+                      {isV2 && emrSearch.matches.some((item) => item.visitIndex === index) ? (
+                        <span className="scaffold-emr-hit-count">
+                          {emrSearch.matches.filter((item) => item.visitIndex === index).length}
+                        </span>
+                      ) : null}
                     </div>
                     <div style={{ color: '#333333', fontSize: 15 }}>{visitDate}</div>
                   </div>
@@ -1671,7 +1714,15 @@ export default function ScaffoldSectionPage() {
                       fontFamily: 'system-ui, -apple-system, sans-serif'
                     }}
                   >
-                    {visit.soapText || '기록 없음'}
+                    {isV2 ? (
+                      <HighlightedText
+                        text={visit.soapText || '기록 없음'}
+                        matches={emrSearch.matches.filter((item) => item.visitIndex === index)}
+                        activeMatchId={emrSearch.active?.id ?? null}
+                      />
+                    ) : (
+                      visit.soapText || '기록 없음'
+                    )}
                   </div>
                 )}
 

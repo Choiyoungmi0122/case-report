@@ -18,6 +18,10 @@ import {
   sanitizeSectionStatesForScaffold
 } from '../../src/routes/scaffold';
 import { sanitizeSectionResponse } from '../../src/routes/sections';
+import {
+  DEFAULT_STUDY_MEMO_SUGGESTIONS_V2,
+  findMemoSuggestionAnchorErrors
+} from '../../src/study/cases/defaultStudyCaseMemoSuggestionsV2';
 
 async function run() {
   assert.deepEqual(
@@ -770,6 +774,19 @@ async function run() {
     ),
     /snapshot must be saved/i
   );
+
+  // Scaffold V2 메모 추천: 치료 개입(9a/9b/9c)만, 회차당 3~4개, 가리키는 구절은 원기록에 그대로 있어야 한다.
+  assert.deepEqual(findMemoSuggestionAnchorErrors(), []);
+  assert.ok(DEFAULT_STUDY_MEMO_SUGGESTIONS_V2.length >= 18 && DEFAULT_STUDY_MEMO_SUGGESTIONS_V2.length <= 24);
+  for (const item of DEFAULT_STUDY_MEMO_SUGGESTIONS_V2) {
+    assert.ok(['9a', '9b', '9c'].includes(item.careItem), `${item.id} careItem ${item.careItem}`);
+    assert.deepEqual(item.targetSectionIds, [CareSection.THERAPEUTIC_INTERVENTIONS]);
+    assert.ok(item.text.trim().length > 0 && item.careItemLabel.length > 0);
+  }
+  for (let visit = 1; visit <= 6; visit += 1) {
+    const count = DEFAULT_STUDY_MEMO_SUGGESTIONS_V2.filter((item) => item.visitIndex === visit).length;
+    assert.ok(count >= 3 && count <= 4, `visit ${visit} has ${count} suggestions`);
+  }
 
   console.log('study mode tests passed');
 }

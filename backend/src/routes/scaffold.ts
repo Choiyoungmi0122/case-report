@@ -5,6 +5,7 @@ import {
   DEFAULT_STUDY_CARE_ELEMENT_MAP,
   isFixedStudyCaseText
 } from '../study/cases/defaultStudyCase';
+import { DEFAULT_STUDY_MEMO_SUGGESTIONS_V2 } from '../study/cases/defaultStudyCaseMemoSuggestionsV2';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
@@ -793,12 +794,28 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
     recordPointers: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
       ? DEFAULT_STUDY_RECORD_POINTERS
       : {},
-    memoSuggestions: (isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
-      ? DEFAULT_STUDY_MEMO_SUGGESTIONS
-      : isDemoCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
-        ? DEMO_CASE_MEMO_SUGGESTIONS
-        : []
-    ).map(({ id, visitIndex, type, text }) => ({ id, visitIndex, type, text })),
+    // Scaffold V2(v3.0)는 치료 개입 중심 추천 세트를 쓰고, 카드에 보여줄 CARE 항목·원문 구절도 함께 내려준다.
+    // V1 케이스는 기존 12개를 기존 모양({id, visitIndex, type, text})으로 내려준다.
+    memoSuggestions: isStudyScaffoldV2Case(caseData) &&
+      isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+      ? DEFAULT_STUDY_MEMO_SUGGESTIONS_V2.map(
+          ({ id, visitIndex, type, text, careItem, careItemLabel, recordAnchor, targetSectionIds }) => ({
+            id,
+            visitIndex,
+            type,
+            text,
+            careItem,
+            careItemLabel,
+            recordAnchor,
+            targetSectionIds
+          })
+        )
+      : (isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+          ? DEFAULT_STUDY_MEMO_SUGGESTIONS
+          : isDemoCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
+            ? DEMO_CASE_MEMO_SUGGESTIONS
+            : []
+        ).map(({ id, visitIndex, type, text }) => ({ id, visitIndex, type, text })),
     // CARE 세부 항목별로 기록에 있는 정보와 찾기 어려운 정보. 화면에서는 AI 초안 공개 뒤에만 보여준다.
     careElementMap: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
       ? DEFAULT_STUDY_CARE_ELEMENT_MAP

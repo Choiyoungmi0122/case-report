@@ -967,3 +967,87 @@
   width: 34%;
   background: #fbf7f0;
 }
+
+/* Scaffold V2 (v3.0): 원기록 패널 검색·강조 */
+.scaffold-emr-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scaffold-emr-search input[type='search'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid #c8d2dd;
+  border-radius: 6px;
+  background: #fff;
+  color: #17324d;
+  font: inherit;
+  font-size: 14px;
+}
+
+.scaffold-emr-search__count {
+  flex: 0 0 auto;
+  min-width: 40px;
+  color: #5a6c81;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.scaffold-emr-search button {
+  flex: 0 0 auto;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 7px;
+  border: 1px solid #c8d2dd;
+  border-radius: 6px;
+  background: #fff;
+  color: #17324d;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scaffold-emr-search button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.scaffold-emr-search button.scaffold-emr-search__clear {
+  font-weight: 500;
+  color: #5a6c81;
+}
+
+.scaffold-emr-mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: #fff3a8;
+  color: inherit;
+}
+
+.scaffold-emr-mark.is-active {
+  background: #ffb547;
+  box-shadow: 0 0 0 2px #ffb547;
+}
+
+.scaffold-emr-anchor {
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: #d9f0ff;
+  box-shadow: inset 0 -2px 0 #3b6fd4;
+  color: inherit;
+}
+
+.scaffold-emr-hit-count {
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #fff3a8;
+  color: #6b4e00;
+  font-size: 12px;
+  font-weight: 800;
+}

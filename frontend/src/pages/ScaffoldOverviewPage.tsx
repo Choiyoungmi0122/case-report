@@ -3,9 +3,18 @@ import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyOverviewPhase } from '../components/scaffold/ReadOnlyStageNavigator';
+import CaseNotesV2, { EMPTY_CASE_NOTE_DRAFT, type CaseNoteDraft } from '../components/scaffold/CaseNotesV2';
+import {
+  EmrSearchBox,
+  HighlightedText,
+  revealInContainer,
+  useEmrSearch,
+  type EmrAnchor
+} from '../components/scaffold/emrSearch';
 import { getReadOnlyViewCaseId } from '../utils/readOnlyView';
 import {
   caseApi,
+  type ScaffoldMemoSuggestion,
   type ScaffoldStateResponse,
   type ScaffoldV2CaseNote,
   type ScaffoldV2CaseNoteType,
@@ -158,6 +167,13 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   const [noteFeedbackRevealedAt, setNoteFeedbackRevealedAt] = useState<string | undefined>();
   const [newCaseNoteType, setNewCaseNoteType] = useState<ScaffoldV2CaseNoteType>('observation');
   const [newCaseNoteText, setNewCaseNoteText] = useState('');
+  // Scaffold V2(v3.0) 1단계: 회차·CARE 항목을 붙이는 메모 작성란, 원문 강조 위치, 메모 수정 자동 저장 타이머
+  const isV2 = isScaffoldV2Data(data);
+  const [noteDraft, setNoteDraft] = useState<CaseNoteDraft>(EMPTY_CASE_NOTE_DRAFT);
+  const [sourceAnchor, setSourceAnchor] = useState<EmrAnchor | null>(null);
+  const noteSaveTimerRef = useRef<number | null>(null);
+  const visitTexts = useMemo(() => (data?.visits || []).map((visit) => visit.soapText || ''), [data?.visits]);
+  const emrSearch = useEmrSearch(visitTexts);
   const [problemRepresentation, setProblemRepresentation] = useState('');
   const [reportabilityRationale, setReportabilityRationale] = useState('');
   const [teachingPointsDraft, setTeachingPointsDraft] = useState('');
@@ -378,22 +394,31 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   };
 
   const addCaseNote = () => {
-    const text = newCaseNoteText.trim();
+    const text = (isV2 ? noteDraft.text : newCaseNoteText).trim();
     if (!text) {
       setError('메모 내용을 입력해주세요.');
       return;
     }
     const nextNote: ScaffoldV2CaseNote = {
       id: `case-note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: newCaseNoteType,
+      type: isV2 ? noteDraft.type : newCaseNoteType,
       text,
       sourceEvidenceIds: [],
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      // V2: 출처·회차·항목을 함께 저장한다. 회차는 사용자가 고른 값만 쓰고, 안 골랐으면 비워 둔다.
+      ...(isV2
+        ? {
+            origin: 'own' as const,
+            ...(noteDraft.visitIndex ? { visitIndex: noteDraft.visitIndex } : {}),
+            ...(noteDraft.careItems.length > 0 ? { careItems: noteDraft.careItems } : {})
+          }
+        : {})
     };
     const nextNotes = [...caseNotes, nextNote];
     setCaseNotes(nextNotes);
     syncEvidenceIdsFromNotes(nextNotes);
-    setNewCaseNoteText('');
+    if (isV2) setNoteDraft({ ...EMPTY_CASE_NOTE_DRAFT, type: noteDraft.type });
+    else setNewCaseNoteText('');
     setNoteFeedbackRevealedAt(undefined);
     setError(null);
     // 추가하는 즉시 저장한다. 새로고침하거나 창을 닫아도 메모가 남는다.
@@ -406,16 +431,25 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   const isSuggestionAdded = (suggestionId: string) =>
     caseNotes.some((note) => note.id.startsWith(`${AI_NOTE_PREFIX}${suggestionId}-`));
 
-  const addSuggestedNote = (suggestion: { id: string; type: ScaffoldV2CaseNote['type']; text: string }) => {
+  const addSuggestedNote = (suggestion: ScaffoldMemoSuggestion) => {
     if (isSuggestionAdded(suggestion.id)) return;
-    const nextNotes = [
+    const nextNotes: ScaffoldV2CaseNote[] = [
       ...caseNotes,
       {
         id: `${AI_NOTE_PREFIX}${suggestion.id}-${Date.now()}`,
         type: suggestion.type,
         text: suggestion.text,
         sourceEvidenceIds: [],
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        // V2: 추천에 붙어 있는 회차·CARE 항목을 메모에 그대로 기록한다 (추정이 아니라 추천 데이터 값).
+        ...(isV2
+          ? {
+              origin: 'ai_suggestion' as const,
+              suggestionId: suggestion.id,
+              visitIndex: suggestion.visitIndex,
+              ...(suggestion.careItem ? { careItems: [suggestion.careItem] } : {})
+            }
+          : {})
       }
     ];
     setCaseNotes(nextNotes);
@@ -427,23 +461,62 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   };
 
   const visitListRef = useRef<HTMLDivElement | null>(null);
-  const jumpToVisit = (index: number) => {
+  const jumpToVisit = (index: number, source: 'jump_bar' | 'memo' | 'suggestion' = 'jump_bar') => {
     const container = visitListRef.current;
     const target = container?.querySelector<HTMLDetailsElement>(`[data-visit-index="${index}"]`);
     if (!container || !target) return;
-    void logEvent('ui_action', { kind: 'visit_jump', visit: index + 1 });
+    void logEvent('ui_action', { kind: 'visit_jump', visit: index + 1, ...(source !== 'jump_bar' ? { source } : {}) });
     target.open = true;
     // 목록 안에서의 실제 위치 차이만큼 옮긴다. 부드러운 스크롤은 창이 가려져 있으면 멈추므로 쓰지 않는다.
     container.scrollTop += target.getBoundingClientRect().top - container.getBoundingClientRect().top;
   };
 
-  const updateCaseNote = (noteId: string, updates: Partial<ScaffoldV2CaseNote>) => {
+  // V2: 메모·AI 추천이 가리키는 원문으로 이동한다. 구절(anchor)이 있으면 그 자리를 강조하고 거기까지 옮긴다.
+  const showSource = (visitIndex: number, anchorQuote?: string | null, source: 'memo' | 'suggestion' = 'memo') => {
+    setSourceAnchor(anchorQuote ? { visitIndex, quote: anchorQuote } : null);
+    jumpToVisit(visitIndex, source);
+  };
+
+  useEffect(() => {
+    if (!sourceAnchor) return;
+    const container = visitListRef.current;
+    const timer = window.setTimeout(() => {
+      const visit = container?.querySelector<HTMLElement>(`[data-visit-index="${sourceAnchor.visitIndex}"]`);
+      const mark = visit?.querySelector<HTMLElement>('[data-anchor="1"]');
+      if (mark) revealInContainer(container, mark);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [sourceAnchor]);
+
+  // V2: 검색 결과를 옮겨 다닐 때 현재 일치 위치로 스크롤한다.
+  useEffect(() => {
+    if (!emrSearch.active) return;
+    const container = visitListRef.current;
+    const timer = window.setTimeout(() => {
+      const mark = container?.querySelector<HTMLElement>(`[data-match-id="${emrSearch.active?.id}"]`);
+      if (mark) revealInContainer(container, mark);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [emrSearch.active]);
+
+  const updateCaseNote = (noteId: string, updates: Partial<ScaffoldV2CaseNote>, saveNow = false) => {
     const nextNotes = caseNotes.map((note) =>
       note.id === noteId ? { ...note, ...updates } : note
     );
     setCaseNotes(nextNotes);
     syncEvidenceIdsFromNotes(nextNotes);
     setNoteFeedbackRevealedAt(undefined);
+    if (!isV2) return;
+    // V2: 회차·항목 변경은 바로 저장하고, 글 수정은 잠시 멈추면 저장한다. 새로고침해도 수정이 남는다.
+    if (noteSaveTimerRef.current) window.clearTimeout(noteSaveTimerRef.current);
+    if (saveNow) {
+      void persistCaseMap(currentPhase, '메모를 저장했습니다.', nextNotes);
+      return;
+    }
+    noteSaveTimerRef.current = window.setTimeout(() => {
+      noteSaveTimerRef.current = null;
+      void persistCaseMap(currentPhase, '메모를 저장했습니다.', nextNotes);
+    }, 1500);
   };
 
   const removeCaseNote = (noteId: string) => {
@@ -695,29 +768,59 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               </strong>
             </div>
 
-            <div className="scaffold-v2__memo-workspace">
+            <div className={`scaffold-v2__memo-workspace${isV2 ? ' is-v2' : ''}`}>
               <section className="scaffold-v2__record-column" aria-labelledby="record-column-title">
                 <div className="scaffold-v2__column-heading">
                   <h3 id="record-column-title">방문 기록</h3>
                   <span>{visits.length}회</span>
                 </div>
+                {isV2 ? (
+                  <EmrSearchBox
+                    query={emrSearch.query}
+                    onQueryChange={emrSearch.setQuery}
+                    matchCount={emrSearch.matches.length}
+                    activeIndex={emrSearch.activeIndex}
+                    onPrev={emrSearch.prev}
+                    onNext={emrSearch.next}
+                  />
+                ) : null}
                 <div className="scaffold-v2__visit-jump" role="group" aria-label="방문 회차로 이동">
-                  {visits.map((visit, index) => (
-                    <button key={`${visit.date}-jump-${index}`} type="button" onClick={() => jumpToVisit(index)}>
-                      {index + 1}회차
-                    </button>
-                  ))}
+                  {visits.map((visit, index) => {
+                    const hitCount = isV2 ? emrSearch.matches.filter((item) => item.visitIndex === index).length : 0;
+                    return (
+                      <button key={`${visit.date}-jump-${index}`} type="button" onClick={() => jumpToVisit(index)}>
+                        {index + 1}회차{hitCount > 0 ? <small> {hitCount}</small> : null}
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="scaffold-v2__visit-list" ref={visitListRef}>
                   {visits.map((visit, index) => {
                     const suggestions = (data.memoSuggestions || []).filter(
                       (item) => item.visitIndex === index + 1
                     );
+                    const visitMatches = isV2 ? emrSearch.matches.filter((item) => item.visitIndex === index) : [];
                     return (
                       <details key={`${visit.date}-${index}`} data-visit-index={index} open>
                         <summary>
                           <span>{index + 1}회차 · {visit.type}</span>
-                          <time>{visit.date || '날짜 미상'}</time>
+                          <span className="scaffold-v2__visit-summary-side">
+                            <time>{visit.date || '날짜 미상'}</time>
+                            {isV2 && !readOnlyView ? (
+                              <button
+                                type="button"
+                                className="scaffold-v2__visit-memo-button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  setNoteDraft((previous) => ({ ...previous, visitIndex: index + 1 }));
+                                  document.getElementById('case-note-title')?.scrollIntoView({ block: 'start' });
+                                }}
+                                title="이 회차를 메모의 출처로 지정하고 메모 작성란으로 이동"
+                              >
+                                이 회차에 메모
+                              </button>
+                            ) : null}
+                          </span>
                         </summary>
                         {suggestions.length > 0 ? (
                           <details
@@ -735,12 +838,27 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                               {suggestions.map((suggestion) => {
                                 const added = isSuggestionAdded(suggestion.id);
                                 return (
-                                  <li key={suggestion.id}>
+                                  <li key={suggestion.id} className={isV2 ? 'is-v2' : undefined}>
                                     <span>
                                       <em>{suggestion.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}</em>
+                                      {isV2 && suggestion.careItem ? (
+                                        <em className="is-care" title={suggestion.careItemLabel || ''}>
+                                          CARE {suggestion.careItem}
+                                          {suggestion.careItemLabel ? ` ${suggestion.careItemLabel}` : ''}
+                                        </em>
+                                      ) : null}
                                       {suggestion.text}
+                                      {isV2 && suggestion.recordAnchor ? (
+                                        <button
+                                          type="button"
+                                          className="scaffold-v2__link-button is-inline"
+                                          onClick={() => showSource(index, suggestion.recordAnchor, 'suggestion')}
+                                        >
+                                          원문에서 보기
+                                        </button>
+                                      ) : null}
                                     </span>
-                                    <button type="button" onClick={() => addSuggestedNote(suggestion)} disabled={added || saving}>
+                                    <button type="button" onClick={() => addSuggestedNote(suggestion)} disabled={added || saving || readOnlyView}>
                                       {added ? '추가됨' : '내 메모에 추가'}
                                     </button>
                                   </li>
@@ -749,7 +867,18 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                             </ul>
                           </details>
                         ) : null}
-                        <pre>{visit.soapText || '기록 내용이 없습니다.'}</pre>
+                        <pre>
+                          {isV2 ? (
+                            <HighlightedText
+                              text={visit.soapText || '기록 내용이 없습니다.'}
+                              matches={visitMatches}
+                              activeMatchId={emrSearch.active?.id ?? null}
+                              anchorQuote={sourceAnchor && sourceAnchor.visitIndex === index ? sourceAnchor.quote : null}
+                            />
+                          ) : (
+                            visit.soapText || '기록 내용이 없습니다.'
+                          )}
+                        </pre>
                       </details>
                     );
                   })}
@@ -760,11 +889,30 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 <div className="scaffold-v2__column-heading">
                   <div>
                     <h3 id="case-note-title">내 증례 메모</h3>
-                    <p>기록을 읽으며 떠오른 생각을 짧게 적으세요. 원문 근거 연결은 이후 단계에서 합니다.</p>
+                    <p>
+                      {isV2
+                        ? '기록을 읽으며 떠오른 생각을 짧게 적으세요. 어느 회차 기록인지, 치료의 어떤 면(종류·용량·변경)인지 붙여 두면 초안을 쓸 때 다시 찾기 쉽습니다.'
+                        : '기록을 읽으며 떠오른 생각을 짧게 적으세요. 원문 근거 연결은 이후 단계에서 합니다.'}
+                    </p>
                   </div>
                   <span>{caseNotes.length}개</span>
                 </div>
-                <form className="scaffold-v2__memo-composer" onSubmit={(event) => { event.preventDefault(); addCaseNote(); }}>
+                {isV2 ? (
+                  <CaseNotesV2
+                    notes={caseNotes}
+                    visits={visits}
+                    suggestions={data.memoSuggestions || []}
+                    draft={noteDraft}
+                    onDraftChange={setNoteDraft}
+                    onAdd={addCaseNote}
+                    onUpdate={updateCaseNote}
+                    onRemove={removeCaseNote}
+                    onShowSource={(visitIndex, anchorQuote) => showSource(visitIndex, anchorQuote, 'memo')}
+                    saving={saving}
+                    readOnly={readOnlyView}
+                  />
+                ) : null}
+                <form className="scaffold-v2__memo-composer" style={isV2 ? { display: 'none' } : undefined} onSubmit={(event) => { event.preventDefault(); addCaseNote(); }}>
                   <div className="scaffold-v2__memo-types" role="group" aria-label="메모 종류">
                     <button type="button" className={newCaseNoteType === 'observation' ? 'is-active' : ''} onClick={() => setNewCaseNoteType('observation')}>눈에 띈 점</button>
                     <button type="button" className={newCaseNoteType === 'question' ? 'is-active' : ''} onClick={() => setNewCaseNoteType('question')}>더 확인할 점</button>
@@ -783,7 +931,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                   </button>
                 </form>
 
-                <div className="scaffold-v2__memo-list">
+                <div className="scaffold-v2__memo-list" style={isV2 ? { display: 'none' } : undefined}>
                   {caseNotes.map((note, index) => (
                       <article key={note.id} className="scaffold-v2__memo-item">
                         <div>

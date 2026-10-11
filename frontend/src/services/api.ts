@@ -940,6 +940,11 @@ export interface ScaffoldMemoSuggestion {
   visitIndex: number;
   type: ScaffoldV2CaseNoteType;
   text: string;
+  /** Scaffold V2(v3.0) 케이스에만 내려온다. CARE 세부 항목 코드(9a/9b/9c)와 라벨, 가리키는 원문 구절. */
+  careItem?: string;
+  careItemLabel?: string;
+  recordAnchor?: string;
+  targetSectionIds?: string[];
 }
 
 export interface ScaffoldRecordPointer {
