@@ -40,6 +40,9 @@ function run() {
     '부항은 유관법으로 시행하였으며, 반복적으로 병행되었다.'
   );
   assert.equal(isAbsenceSentence('치료 기간 중 약침 부위 통증, 발적 등 국소 반응은 관찰되지 않았다.'), false);
+  // 기록된 소견을 전하는 문장은 남긴다 (2026-10-12 오탐)
+  assert.equal(isAbsenceSentence('맥의 리듬은 완전히 규칙적이지는 않았다고 기록되었다.'), false);
+  assert.equal(isAbsenceSentence('설태는 옅어지지 않은 것으로 기록하였다.'), false);
   console.log('absenceFilter tests passed');
 }
 

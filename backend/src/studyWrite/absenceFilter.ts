@@ -12,7 +12,8 @@
 
 const ABSENCE_SUBJECT = /(기록|언급|정보|내용|자료)/;
 const ABSENCE_PREDICATE = /(없(?:다|었다|으며|고|는|음|으나)|않(?:다|는다|았다|으며|고|음|으나|아)|나타나지\s*않|남아\s*있지\s*않|확인할\s*수\s*없)/;
-const KEEP = /(\[확인 필요|이상반응|부작용|라고|다고\s*(?:하였|했|진술|말|답|호소)|진술하였|호소하였|답하였)/;
+// "~지 않았다고 기록되었다"처럼 기록된 소견을 전하는 문장은 부재 문장이 아니다
+const KEEP = /(\[확인 필요|이상반응|부작용|라고|다고\s*(?:하였|했|진술|말|답|호소|기록|관찰)|진술하였|호소하였|답하였|기록되었다|기록하였다|기록됐다)/;
 
 export function isAbsenceSentence(sentence: string): boolean {
   const s = sentence.replace(/첫\s*기록일/g, '').trim();
