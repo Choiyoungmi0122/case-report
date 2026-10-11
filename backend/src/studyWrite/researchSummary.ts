@@ -84,6 +84,8 @@ export function buildStudyWriteSummary(state: StudyWriteState | null | undefined
 
   return {
     inputSource: state.inputSource || null,
+    /** 참여자가 넣은 첫 기록일 (보여 주기·Word 에만 쓰임, 저장된 초안은 상대 날짜 그대로) */
+    dateAnchor: state.dateAnchor || null,
     questionBudget: state.questionBudget,
     timing: {
       caseCreatedAt: caseCreatedAt || null,

@@ -1,0 +1,66 @@
+.sw-date-anchor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid #c9d8ec;
+  border-radius: 10px;
+  background: #f2f7fd;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #2b4766;
+}
+
+.sw-date-anchor.is-set {
+  border-color: #bfdcc5;
+  background: #eef8f0;
+  color: #1f4d2c;
+}
+
+.sw-date-anchor > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sw-date-anchor input[type='date'],
+.sw-date-anchor select {
+  padding: 6px 8px;
+  border: 1px solid #c8d2dd;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  background: #fff;
+}
+
+.sw-date-anchor button {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #2f6ea5;
+  background: #2f6ea5;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-date-anchor button.is-secondary {
+  background: #fff;
+  color: #2f6ea5;
+}
+
+.sw-date-anchor button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sw-date-anchor__error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12.5px;
+  color: #a93b24;
+}

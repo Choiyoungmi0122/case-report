@@ -919,6 +919,10 @@ export interface StudyWriteDraftsResponse {
   interview: StudyWriteState;
   answersLockedAt: string | null;
   submittedAt: string | null;
+  /** 첫 기록일. 넣었으면 화면·Word 에서 "첫 기록일 +N일"을 실제 날짜로 보여 준다 */
+  dateAnchor?: { date: string; format: 'iso' | 'ko'; setAt?: string } | null;
+  /** 날짜가 첫 기록일 기준 일수뿐인 기록에서 만든 사례 */
+  relativeDates?: boolean;
   sections: StudyWriteSection[];
 }
 
@@ -1663,6 +1667,12 @@ export const caseApi = {
 
   deleteStudyWriteAttachment: async (caseId: string, attachmentId: string) => {
     const response = await api.delete<{ success: boolean }>(`/study-write/cases/${caseId}/attachments/${attachmentId}`);
+    return response.data;
+  },
+
+  /** 첫 기록일을 넣거나(YYYY-MM-DD) 지운다(null) */
+  setStudyWriteDateAnchor: async (caseId: string, date: string | null, format: 'iso' | 'ko' = 'iso') => {
+    const response = await api.put<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/date-anchor`, { date, format });
     return response.data;
   },
 

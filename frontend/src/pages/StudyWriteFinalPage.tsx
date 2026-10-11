@@ -4,6 +4,8 @@ import { caseApi, StudyWriteDraftsResponse, StudyWriteSection } from '../service
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import { careCompliance, complianceLevel } from '../utils/studyWriteCare';
+import { convertRelativeDates } from '../utils/relativeDates';
+import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import './StudyWriteFinalPage.css';
 
 /**
@@ -76,6 +78,38 @@ export default function StudyWriteFinalPage() {
 
   const hasPlaceholders = data?.sections.some((section) => /\[[A-Z][A-Z_]*_\d+\]/.test(texts[section.sectionId] ?? ''));
 
+  // 첫 기록일을 넣었으면 미리보기와 Word 에 실제 날짜로 나온다. 편집 칸은 원래 표기
+  const anchor = data?.dateAnchor || null;
+  const dated = (text: string) => (anchor ? convertRelativeDates(text, anchor).text : text);
+
+  /** 편집 칸의 본문 자체를 날짜 표기로 바꿔 저장한다 */
+  const applyDatesToText = async () => {
+    if (!caseId || !data || !anchor || submitted) return;
+    const changed = data.sections
+      .map((section) => ({ section, next: convertRelativeDates(texts[section.sectionId] ?? '', anchor).text }))
+      .filter(({ section, next }) => next !== (texts[section.sectionId] ?? ''));
+    if (changed.length === 0) {
+      window.alert('바꿀 "첫 기록일 +N일" 표기가 없습니다.');
+      return;
+    }
+    if (!window.confirm(`${changed.length}개 섹션의 "첫 기록일 +N일" 표기를 날짜로 바꿔 저장합니다. 계속할까요?`)) return;
+    setError(null);
+    try {
+      let latest = data;
+      for (const { section, next } of changed) {
+        setSavingId(section.sectionId);
+        latest = await caseApi.saveStudyWriteSectionDraft(caseId, section.sectionId, next);
+      }
+      setData(latest);
+      setTexts(Object.fromEntries(latest.sections.map((section) => [section.sectionId, section.draftText])));
+      setSavedAt(new Date().toLocaleTimeString());
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="sw-final">
       <header className="sw-final__header">
@@ -110,6 +144,9 @@ export default function StudyWriteFinalPage() {
       </header>
 
       {error ? <div className="sw-final__error">{error}</div> : null}
+      {data && caseId ? (
+        <DateAnchorBar caseId={caseId} data={data} onChange={setData} onApplyToText={submitted ? undefined : () => void applyDatesToText()} />
+      ) : null}
       {hasPlaceholders && !submitted ? (
         <div className="sw-final__notice">
           본문에 비식별 표기([PATIENT_NAME_1] 등)가 남아 있습니다. Word 에서는 "환자", "타 의료기관"처럼 바뀌어 나갑니다. 다른 말로 바꾸고 싶으면 여기서 고치면 됩니다.
@@ -136,9 +173,9 @@ export default function StudyWriteFinalPage() {
             </div>
             {submitted ? (
               section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
-                <TimelineTable text={section.draftText} />
+                <TimelineTable text={dated(section.draftText)} />
               ) : (
-                <div className="sw-final__text">{renderClinicalAnonymizedText(section.draftText) || '(내용 없음)'}</div>
+                <div className="sw-final__text">{renderClinicalAnonymizedText(dated(section.draftText)) || '(내용 없음)'}</div>
               )
             ) : (
               <>
@@ -152,7 +189,7 @@ export default function StudyWriteFinalPage() {
                 {section.sectionId === 'TIMELINE' && parseTimelineRows(texts[section.sectionId] ?? '') ? (
                   <div className="sw-final__timeline-preview">
                     <p>표 미리보기 (한 줄에 한 행, 칸은 "|"로 나눔. Word 에서도 이 표로 나갑니다)</p>
-                    <TimelineTable text={texts[section.sectionId] ?? ''} />
+                    <TimelineTable text={dated(texts[section.sectionId] ?? '')} />
                   </div>
                 ) : null}
               </>

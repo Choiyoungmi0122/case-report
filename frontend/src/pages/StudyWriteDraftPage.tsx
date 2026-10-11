@@ -13,6 +13,8 @@ import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import { ANSWER_CHOICES, answerStatusLabel, choiceToBody, AnswerChoiceValue } from '../utils/studyWriteAnswers';
 import { careCompliance, complianceLevel, overallCareCompliance } from '../utils/studyWriteCare';
+import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
+import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import './StudyWriteDraftPage.css';
 
 /**
@@ -175,6 +177,21 @@ export default function StudyWriteDraftPage() {
   };
   const mainTextRef = useRef<HTMLDivElement | null>(null);
 
+  // 첫 기록일을 넣었으면 "첫 기록일 +N일"을 실제 날짜로 보여 준다 (저장된 초안은 그대로)
+  const anchor = data?.dateAnchor || null;
+  const dated = (text: string) => (anchor ? convertRelativeDates(text, anchor).text : text);
+
+  /** 화면에서 드래그한 글이 원문(상대 날짜)의 어디인지. 날짜로 바꿔 보여 준 경우도 되돌려 찾는다 */
+  const rawRangeOfSelection = (raw: string, selected: string): [number, number] | null => {
+    if (anchor) {
+      const conversion = convertRelativeDates(raw, anchor);
+      const at = conversion.text.indexOf(selected);
+      if (at >= 0) return [toRawOffset(conversion, at, 'start'), toRawOffset(conversion, at + selected.length, 'end')];
+    }
+    const direct = raw.indexOf(selected);
+    return direct >= 0 ? [direct, direct + selected.length] : null;
+  };
+
   const captureSelection = () => {
     if (locked || !section?.draftText) return;
     const sel = window.getSelection();
@@ -204,7 +221,10 @@ export default function StudyWriteDraftPage() {
     setSelBusy(true);
     setError(null);
     try {
-      setData(await caseApi.reviseStudyWriteSection(caseId, section.sectionId, selInstruction.trim(), selection.text));
+      // 날짜로 바꿔 보여 준 부분이면 원문 표기로 되돌려 보낸다 (모델은 상대 날짜 원문을 본다)
+      const range = rawRangeOfSelection(section.draftText, selection.text);
+      const selectedRaw = range ? section.draftText.slice(range[0], range[1]) : selection.text;
+      setData(await caseApi.reviseStudyWriteSection(caseId, section.sectionId, selInstruction.trim(), selectedRaw));
       closeSelection();
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '고치지 못했습니다.');
@@ -217,15 +237,15 @@ export default function StudyWriteDraftPage() {
   const saveSelectionEdit = async () => {
     if (!caseId || !section || !selection) return;
     const raw = section.draftText;
-    const at = raw.indexOf(selection.text);
-    if (at < 0) {
+    const range = rawRangeOfSelection(raw, selection.text);
+    if (!range) {
       setFullEditText(raw);
       setFullEditOpen(true);
       closeSelection();
       setError('선택한 부분을 원문에서 그대로 찾지 못해 전체 편집으로 열었습니다.');
       return;
     }
-    const nextText = raw.slice(0, at) + selEditText + raw.slice(at + selection.text.length);
+    const nextText = raw.slice(0, range[0]) + selEditText + raw.slice(range[1]);
     setSelBusy(true);
     setError(null);
     try {
@@ -387,6 +407,7 @@ export default function StudyWriteDraftPage() {
       </header>
 
       {error ? <div className="sw-draft__error">{error}</div> : null}
+      {data && caseId ? <DateAnchorBar caseId={caseId} data={data} onChange={setData} /> : null}
       {dirtySectionIds.length > 0 ? (
         <div className="sw-draft__notice">
           답을 고쳤습니다. 관련 섹션({dirtySectionIds.length}개)을 다시 쓸까요?
@@ -494,11 +515,11 @@ export default function StudyWriteDraftPage() {
               ) : section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
                 // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입)
                 <div ref={mainTextRef} onMouseUp={captureSelection}>
-                  <TimelineTable text={section.draftText} />
+                  <TimelineTable text={dated(section.draftText)} />
                 </div>
               ) : section.draftText ? (
                 <div className="sw-draft__text" ref={mainTextRef} onMouseUp={captureSelection}>
-                  {renderClinicalAnonymizedText(section.draftText)}
+                  {renderClinicalAnonymizedText(dated(section.draftText))}
                 </div>
               ) : (
                 <p className="sw-draft__empty">{running ? '이 섹션은 아직 쓰는 중입니다.' : '이 섹션의 초안이 없습니다.'}</p>
@@ -588,7 +609,7 @@ export default function StudyWriteDraftPage() {
                     {entry.role === 'user' || entry.role === 'assistant' ? (
                       <span className="sw-chat__role">{entry.role === 'user' ? '나' : 'AI'}</span>
                     ) : null}
-                    {entry.role === 'assistant' ? renderClinicalAnonymizedText(entry.text) : entry.text}
+                    {entry.role === 'assistant' ? renderClinicalAnonymizedText(dated(entry.text)) : entry.text}
                     {entry.resultVersion ? <small>초안 버전 {entry.resultVersion}</small> : null}
                   </div>
                 ))}
@@ -655,7 +676,7 @@ export default function StudyWriteDraftPage() {
                           <strong>{item.label}</strong>
                         </div>
                         <p className="sw-care-item__note">{STATUS_META[item.status].note}</p>
-                        {item.hint ? <p className="sw-care-item__hint">{renderClinicalAnonymizedText(item.hint)}</p> : null}
+                        {item.hint ? <p className="sw-care-item__hint">{renderClinicalAnonymizedText(dated(item.hint))}</p> : null}
                         {item.status === 'in_record_not_in_draft' && !locked ? (
                           <button
                             type="button"

@@ -159,5 +159,10 @@ export interface StudyWriteState {
   answersLockedAt?: string;
   /** 최종 제출 시각 */
   submittedAt?: string;
+  /**
+   * 첫 기록일. 넣으면 화면과 Word 에서 "첫 기록일 +N일"을 실제 날짜로 보여 준다(저장된 초안은 그대로).
+   * studyWrite/relativeDates.ts 참고
+   */
+  dateAnchor?: { date: string; format: 'iso' | 'ko'; setAt?: string } | null;
   updatedAt: string;
 }

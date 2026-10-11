@@ -26,6 +26,7 @@ import {
 } from '../studyWrite/attachments';
 import { randomUUID } from 'crypto';
 import { buildStudyWriteManuscriptDocx } from '../studyWrite/manuscriptDocx';
+import { parseAnchorDate } from '../studyWrite/relativeDates';
 import { getStudyWritePreset, listStudyWritePresets } from '../studyWrite/presets';
 import { buildContentDispositionHeader } from '../utils/unicode';
 
@@ -240,6 +241,9 @@ function buildDraftsResponse(caseData: any, state: StudyWriteState, attachments:
     interview: toParticipantView(state),
     answersLockedAt: state.answersLockedAt || null,
     submittedAt: state.submittedAt || null,
+    /** 첫 기록일 (넣었으면). 화면이 상대 날짜를 실제 날짜로 바꿔 보여 준다 */
+    dateAnchor: state.dateAnchor || null,
+    relativeDates: Boolean(state.inputSource?.relativeDates),
     sections
   };
 }
@@ -605,6 +609,36 @@ router.post('/cases/:caseId/sections/:sectionId/care-info', async (req: Request,
       const next = addCareInfoAnswer(state, { sectionId, code, label: def.label, required: def.required, answer });
       await saveState(caseData.id, next);
       return buildDraftsResponse(caseData, next, await listAttachments(caseData.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '저장하지 못했습니다.' });
+  }
+});
+
+/**
+ * 첫 기록일을 넣거나(date: 'YYYY-MM-DD') 지운다(date: null). 보여 주는 방식만 바꾸므로 제출 뒤에도 된다.
+ */
+router.put('/cases/:caseId/date-anchor', async (req: Request, res: Response) => {
+  try {
+    const rawDate = req.body?.date;
+    const format = req.body?.format === 'ko' ? 'ko' : 'iso';
+    if (rawDate !== null && parseAnchorDate(String(rawDate || '')) === null) {
+      return res.status(400).json({ error: '날짜를 YYYY-MM-DD 형식으로 넣어 주세요.' });
+    }
+    const result = await serialize(req.params.caseId, async () => {
+      const latest = await loadCase(req.params.caseId);
+      if (!latest) return null;
+      const state = normalizeStudyWriteState(latest.studyWrite);
+      const now = new Date().toISOString();
+      const next: StudyWriteState = {
+        ...state,
+        dateAnchor: rawDate === null ? null : { date: String(rawDate), format, setAt: now },
+        updatedAt: now
+      };
+      await saveState(latest.id, next);
+      return buildDraftsResponse(latest, next, await listAttachments(latest.id));
     });
     if (!result) return res.status(404).json({ error: 'Case not found' });
     return res.json(result);

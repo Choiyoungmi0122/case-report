@@ -15,6 +15,7 @@ import { renderClinicalAnonymizedText } from '../deid/publicationRenderer';
 import { StudyWriteState } from '../types/studyWrite';
 import { AttachmentSummary, getAttachmentFile } from './attachments';
 import { CARE_SECTION_NAMES, CARE_SECTION_ORDER } from './careItems';
+import { convertRelativeDates } from './relativeDates';
 
 /**
  * 실험용 Write ⑧ Word 내보내기. 섹션 순서대로 본문을 쓰고, 섹션 본문 아래에 그 섹션의
@@ -116,11 +117,13 @@ export async function buildStudyWriteManuscriptDocx(params: {
   attachments: AttachmentSummary[];
 }): Promise<Buffer> {
   const { caseId, state, attachments } = params;
+  // 첫 기록일을 넣었으면 "첫 기록일 +N일"을 실제 날짜로 내보낸다
+  const dated = (text: string) => convertRelativeDates(text, state.dateAnchor).text;
   const children: Array<Paragraph | Table> = [];
   let tableNo = 0;
   let figureNo = 0;
 
-  const titleSection = state.sections?.TITLE?.draftText || '';
+  const titleSection = dated(state.sections?.TITLE?.draftText || '');
   const titleLine = renderClinicalAnonymizedText(titleSection).split('\n').map((line) => line.trim()).find(Boolean) || '증례보고 초안';
   children.push(
     new Paragraph({
@@ -148,7 +151,7 @@ export async function buildStudyWriteManuscriptDocx(params: {
       })
     );
     // 제목 섹션은 위에 썼으므로 남은 줄(핵심 단어 등)만
-    const text = sectionId === 'TITLE' ? titleSection.split('\n').slice(1).join('\n') : section.draftText;
+    const text = sectionId === 'TITLE' ? titleSection.split('\n').slice(1).join('\n') : dated(section.draftText);
     const timeline = sectionId === 'TIMELINE' ? timelineRows(text) : null;
     if (timeline) {
       children.push(tableBlock(timeline));
