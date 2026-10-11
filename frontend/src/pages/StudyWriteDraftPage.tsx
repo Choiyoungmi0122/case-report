@@ -10,6 +10,7 @@ import {
   StudyWriteSection
 } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
+import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import './StudyWriteDraftPage.css';
 
 /**
@@ -262,7 +263,10 @@ export default function StudyWriteDraftPage() {
                 <h2>{section.name}</h2>
                 <span>버전 {section.version}</span>
               </div>
-              {section.draftText ? (
+              {section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
+                // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입)
+                <TimelineTable text={section.draftText} />
+              ) : section.draftText ? (
                 <div className="sw-draft__text">{renderClinicalAnonymizedText(section.draftText)}</div>
               ) : (
                 <p className="sw-draft__empty">{running ? '이 섹션은 아직 쓰는 중입니다.' : '이 섹션의 초안이 없습니다.'}</p>

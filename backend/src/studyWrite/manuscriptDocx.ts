@@ -48,7 +48,22 @@ export function timelineRows(text: string): string[][] | null {
     .map((line) => line.split('|').map((cell) => cell.trim()))
     .filter((cells) => cells.length >= 2 && cells.some(Boolean));
   if (rows.length < 2) return null;
-  return [['날짜', '사건'], ...rows.map((cells) => [cells[0], cells.slice(1).join(' | ')])];
+  // CARE 타임라인 표: 날짜 | 경과 요약 | 진단 검사 | 치료 개입. 옛 초안(날짜 | 사건)도 받는다.
+  const columnCount = Math.max(...rows.map((cells) => cells.length));
+  const headers =
+    columnCount >= 4
+      ? ['날짜', '경과 요약', '진단 검사', '치료 개입']
+      : columnCount === 3
+        ? ['날짜', '경과 요약', '치료 개입']
+        : ['날짜', '사건'];
+  return [
+    headers,
+    ...rows.map((cells) =>
+      headers.map((_, index) =>
+        index < headers.length - 1 ? cells[index] || '' : cells.slice(index).join(' | ')
+      )
+    )
+  ];
 }
 
 function tableBlock(rows: string[][]): Table {

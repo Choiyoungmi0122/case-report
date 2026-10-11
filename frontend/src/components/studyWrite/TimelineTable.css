@@ -1,0 +1,41 @@
+.sw-timeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 4px 0 12px;
+  background: #fff;
+}
+
+.sw-timeline-table th,
+.sw-timeline-table td {
+  border: 1px solid #d5dce6;
+  padding: 7px 9px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.sw-timeline-table th {
+  background: #eef3fa;
+  color: #1f2a3d;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sw-timeline-table td:first-child {
+  white-space: nowrap;
+  color: #1d4f91;
+  font-weight: 600;
+  width: 1%;
+}
+
+.sw-timeline-table tbody tr:nth-child(even) {
+  background: #fafbfd;
+}
+
+@media (max-width: 900px) {
+  .sw-timeline-table {
+    display: block;
+    overflow-x: auto;
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { caseApi, StudyWriteDraftsResponse, StudyWriteSection } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
+import TimelineTable, { parseTimelineRows } from '../components/studyWrite/TimelineTable';
 import './StudyWriteFinalPage.css';
 
 /**
@@ -125,15 +126,27 @@ export default function StudyWriteFinalPage() {
               </span>
             </div>
             {submitted ? (
-              <div className="sw-final__text">{renderClinicalAnonymizedText(section.draftText) || '(내용 없음)'}</div>
+              section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
+                <TimelineTable text={section.draftText} />
+              ) : (
+                <div className="sw-final__text">{renderClinicalAnonymizedText(section.draftText) || '(내용 없음)'}</div>
+              )
             ) : (
-              <textarea
-                value={texts[section.sectionId] ?? ''}
-                onChange={(event) => setTexts((prev) => ({ ...prev, [section.sectionId]: event.target.value }))}
-                onBlur={() => void save(section)}
-                rows={Math.max(4, Math.min(18, Math.ceil((texts[section.sectionId] ?? '').length / 70) + 2))}
-                spellCheck={false}
-              />
+              <>
+                <textarea
+                  value={texts[section.sectionId] ?? ''}
+                  onChange={(event) => setTexts((prev) => ({ ...prev, [section.sectionId]: event.target.value }))}
+                  onBlur={() => void save(section)}
+                  rows={Math.max(4, Math.min(18, Math.ceil((texts[section.sectionId] ?? '').length / 70) + 2))}
+                  spellCheck={false}
+                />
+                {section.sectionId === 'TIMELINE' && parseTimelineRows(texts[section.sectionId] ?? '') ? (
+                  <div className="sw-final__timeline-preview">
+                    <p>표 미리보기 (한 줄에 한 행, 칸은 "|"로 나눔. Word 에서도 이 표로 나갑니다)</p>
+                    <TimelineTable text={texts[section.sectionId] ?? ''} />
+                  </div>
+                ) : null}
+              </>
             )}
             {section.attachments.length > 0 ? (
               <ul className="sw-final__attachments">
