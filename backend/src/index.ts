@@ -12,6 +12,7 @@ import researchRouter from './routes/research';
 import scaffoldRouter from './routes/scaffold';
 import sectionsRouter from './routes/sections';
 import studyWriteRouter from './routes/studyWrite';
+import { usageContextMiddleware } from './llm/usageContext';
 
 const app = express();
 const HOST = process.env.HOST || '0.0.0.0';
@@ -55,6 +56,9 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
+
+// LLM 사용량 기록에 사례 id 를 남긴다 (세션별 비용 집계용, llm/usageContext.ts)
+app.use('/api', usageContextMiddleware);
 
 app.use('/api/cases', casesRouter);
 app.use('/api/cases', sectionsRouter);

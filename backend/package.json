@@ -28,6 +28,7 @@
     "test:study": "tsx tests/study/studyMode.test.ts",
     "test:prompt-registry": "tsx tests/llm/promptRegistry.test.ts",
     "test:prompt-sets": "tsx tests/llm/promptSets.test.ts",
+    "test:usage-context": "tsx tests/llm/usageContext.test.ts",
     "test:llm-client": "tsx tests/llm/llmClient.test.ts",
     "test:chain-hygiene": "tsx tests/llm/chainHygiene.test.ts",
     "test:chain-state-integration": "tsx tests/optimization/chainState.integration.test.ts",

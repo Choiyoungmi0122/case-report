@@ -2,6 +2,10 @@
  * LLM 사용량·비용 집계 (읽기 전용). 사용: npm run usage:summary [-- --file <경로>] [--json]
  *
  * 입력: backend/data/llm_usage.jsonl (호출 1건 = 1줄). 파일은 읽기만 하고 바꾸지 않는다.
+ * 사용: npm run usage:summary [-- --db] [--since 2026-10-12] [--json]
+ *
+ * 사례별 집계: 2026-10-12부터 기록에 caseId(원고 검토는 manuscriptReviewId)가 남는다(llm/usageContext.ts).
+ * 그 전 기록은 "(사례 id 없음)"으로 묶인다. --db 를 주면 MongoDB 에서 사례의 실험 번호·모드를 읽어 붙인다(읽기 전용).
  *
  * 테스트 기록 제외 기준 (docs/prompt_sets_scaffold_write_v1.md §4):
  *  - chat: elapsedMs < 50. 실제 API 호출은 가장 빠른 것도 300ms 이상이고, 50~300ms 구간에는 기록이 없다.
@@ -32,7 +36,17 @@ type Row = {
   totalTokens?: number;
   cachedTokens?: number;
   inputs?: number;
+  caseId?: string;
+  manuscriptReviewId?: string;
 };
+
+export const NO_CASE_KEY = '(사례 id 없음)';
+
+export function caseKey(row: Row): string {
+  if (row.caseId) return row.caseId;
+  if (row.manuscriptReviewId) return `원고 검토 ${row.manuscriptReviewId}`;
+  return NO_CASE_KEY;
+}
 
 type Totals = { calls: number; input: number; cached: number; output: number; usd: number; usdCached: number };
 
@@ -98,6 +112,8 @@ export function summarize(rows: Row[]) {
   const byChain = new Map<string, Totals>();
   const byMode = new Map<string, Totals>();
   const byDay = new Map<string, Totals>();
+  const byCase = new Map<string, Totals>();
+  const caseFirstTs = new Map<string, string>();
   const unknownModels = new Set<string>();
   const bump = (map: Map<string, Totals>, key: string, row: Row) => {
     if (!map.has(key)) map.set(key, emptyTotals());
@@ -110,6 +126,9 @@ export function summarize(rows: Row[]) {
     bump(byChain, chainGroup(row.label), row);
     bump(byMode, row.kind === 'embedding' ? '공통 처리 (모드 구분 불가)' : modeGroup(row.label), row);
     bump(byDay, kstDate(row.ts), row);
+    const key = caseKey(row);
+    bump(byCase, key, row);
+    if (!caseFirstTs.has(key)) caseFirstTs.set(key, row.ts);
   }
   const sorted = (map: Map<string, Totals>) => [...map.entries()].sort((a, b) => b[1].usd - a[1].usd);
   return {
@@ -124,6 +143,8 @@ export function summarize(rows: Row[]) {
     byChain: sorted(byChain),
     byMode: sorted(byMode),
     byDay: [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+    byCase: sorted(byCase),
+    caseFirstTs: Object.fromEntries(caseFirstTs),
     unknownModels: [...unknownModels]
   };
 }
@@ -145,16 +166,61 @@ function table(title: string, entries: Array<[string, Totals]>): string {
   return lines.join('\n');
 }
 
-function main() {
+/** --db: 사례의 실험 번호·모드를 읽는다(읽기 전용, 문서를 바꾸지 않는다). 사례 제목은 싣지 않는다. */
+async function lookupCases(caseIds: string[]): Promise<Map<string, string>> {
+  const labels = new Map<string, string>();
+  if (caseIds.length === 0) return labels;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+  const mongoose = (await import('mongoose')).default;
+  const { CaseModel, initDatabase } = await import('../src/db/schema');
+  await initDatabase();
+  try {
+    const docs: any[] = await CaseModel.aggregate([
+      { $match: { id: { $in: caseIds } } },
+      {
+        $project: {
+          id: 1,
+          experiment_code: 1,
+          mode: 1,
+          studyMode: '$studyConfig.studyMode',
+          scaffoldVersion: '$versionMetadata.scaffoldVersion',
+          hasStudyWrite: { $eq: [{ $type: '$studyWrite' }, 'object'] }
+        }
+      }
+    ]).exec();
+    for (const doc of docs) {
+      const kind = doc.hasStudyWrite
+        ? '실험용 Write'
+        : doc.mode === 'scaffold'
+          ? doc.studyMode
+            ? `실험용 Scaffold ${doc.scaffoldVersion || ''}`.trim()
+            : '일반 Scaffold'
+          : '일반 Write';
+      labels.set(doc.id, `${doc.experiment_code || '-'} · ${kind}`);
+    }
+  } finally {
+    await mongoose.disconnect();
+  }
+  return labels;
+}
+
+async function main() {
   const args = process.argv.slice(2);
   const fileArg = args.indexOf('--file');
   const file = fileArg >= 0 ? args[fileArg + 1] : path.resolve(__dirname, '../data/llm_usage.jsonl');
+  const sinceArg = args.indexOf('--since');
+  const since = sinceArg >= 0 ? args[sinceArg + 1] : '';
   const rows: Row[] = fs
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter((line) => line.trim())
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line))
+    .filter((row: Row) => !since || row.ts >= since);
   const s = summarize(rows);
+  const caseLabels = args.includes('--db')
+    ? await lookupCases(s.byCase.map(([key]) => key).filter((key) => key !== NO_CASE_KEY && !key.startsWith('원고 검토')))
+    : new Map<string, string>();
   if (args.includes('--json')) {
     console.log(JSON.stringify(s, null, 2));
     return;
@@ -173,11 +239,24 @@ function main() {
       '',
       table('모드별', s.byMode),
       '',
-      table('날짜별 (KST)', s.byDay)
+      table('날짜별 (KST)', s.byDay),
+      '',
+      table(
+        '사례별 (비용 큰 순)',
+        s.byCase.map(([key, totals]) => [
+          caseLabels.has(key) ? `${key} (${caseLabels.get(key)})` : key,
+          totals
+        ])
+      )
     ]
       .filter((line) => line !== undefined)
       .join('\n')
   );
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

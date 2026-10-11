@@ -8,6 +8,7 @@
 ## 연구 자료 보호
 - 학생 V1(S1~S10, S3-1) 기록은 수정·삭제하지 않는다. 고정 연구 사례를 다시 얼리지 않는다(`npm run study:freeze`는 `ALLOW_STUDY_REFREEZE=1` 없이는 막혀 있다). 출처: `docs/study_ai_draft_prompt_provenance_v1.md`.
 - `backend/data/llm_usage.jsonl`은 비용 산정 자료다. 테스트는 가짜 클라이언트(`__setOpenAIClientForTests`) 또는 `LLM_USAGE_LOG_DISABLED=1`로 기록을 끈다.
+- 사용량 기록의 사례 id는 요청 경로(`/api/cases/:id`, `/api/study-write/cases/:caseId`)에서 자동으로 붙는다. 경로에 사례 id가 없는 곳에서 LLM 을 부르는 새 경로를 만들면 `setUsageCaseId(caseId)`를 호출한다(`backend/src/llm/usageContext.ts`). 집계: `npm run usage:summary -- --db`.
 
 ## 공유 작업 트리
 - 여러 세션이 같은 작업 트리를 쓴다. 자기 파일만 `git add -- <경로>`로 커밋하고, `git stash`·`git add -A`를 쓰지 않는다.

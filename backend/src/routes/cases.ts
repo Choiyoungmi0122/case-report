@@ -39,6 +39,7 @@ import { buildContentDispositionHeader } from '../utils/unicode';
 import { normalizeQuestionComparisonKey, normalizeQuestionText } from '../questions/questionTemplates';
 import { getTerminologyRuntime as getTerminologyRuntimeForSet, getWriteTerminologyRuntime } from '../rag/runtime';
 import { chainPrompts, PromptSet, promptSetForCase } from '../llm/promptSets';
+import { setUsageCaseId } from '../llm/usageContext';
 import {
   preprocessVisitsForChain1,
   runEvidenceSplit,
@@ -1133,6 +1134,8 @@ export async function reprocessCaseFromStoredTerms(params: {
     updateCase?: (caseId: string, updates: any) => Promise<void>;
   };
 }) {
+  // 사용량 기록에 사례 id 를 남긴다(경로로 알 수 없는 호출 경로 대비)
+  setUsageCaseId(params.caseId);
   // Scaffold 사례는 Scaffold 프롬프트 세트로 돈다 (llm/promptSets.ts)
   const promptSet = promptSetForCase(params.caseData);
   const measureStage = createStageTimer(params.onStageTiming);
@@ -1857,6 +1860,7 @@ async function runFinalComposeJob(params: {
   inputHash: string;
 }) {
   const { caseId, contributionAnswers, inputHash } = params;
+  setUsageCaseId(caseId);
 
   if (runningFinalComposeJobs.has(caseId)) {
     return runningFinalComposeJobs.get(caseId)!;
