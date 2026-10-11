@@ -39,7 +39,12 @@ export default function StudyWriteDraftPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>('TITLE');
   const [tab, setTab] = useState<'chat' | 'care' | 'answers'>('chat');
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [instruction, setInstruction] = useState('');
+  // 보낸 뒤 입력 칸 높이를 원래대로
+  useEffect(() => {
+    if (!instruction && composerRef.current) composerRef.current.style.height = 'auto';
+  }, [instruction]);
   const [revising, setRevising] = useState(false);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -353,6 +358,9 @@ export default function StudyWriteDraftPage() {
                 </div>
                 {section.chat.map((entry) => (
                   <div key={entry.id} className={`sw-chat sw-chat--${entry.role}`}>
+                    {entry.role === 'user' || entry.role === 'assistant' ? (
+                      <span className="sw-chat__role">{entry.role === 'user' ? '나' : 'AI'}</span>
+                    ) : null}
                     {entry.role === 'assistant' ? renderClinicalAnonymizedText(entry.text) : entry.text}
                     {entry.resultVersion ? <small>초안 버전 {entry.resultVersion}</small> : null}
                   </div>
@@ -361,19 +369,38 @@ export default function StudyWriteDraftPage() {
               </div>
               {!locked ? (
                 <div className="sw-draft__chat-composer">
-                  <textarea
-                    value={instruction}
-                    onChange={(event) => setInstruction(event.target.value)}
-                    rows={3}
-                    placeholder="이 섹션에 대한 수정 요청"
-                    disabled={revising || !section.draftText}
-                    onKeyDown={(event) => {
-                      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void sendInstruction();
-                    }}
-                  />
-                  <button type="button" disabled={revising || !instruction.trim() || !section.draftText} onClick={() => void sendInstruction()}>
-                    보내기
-                  </button>
+                  <div className="sw-draft__chat-box">
+                    <textarea
+                      ref={composerRef}
+                      value={instruction}
+                      onChange={(event) => {
+                        setInstruction(event.target.value);
+                        // 입력 길이에 맞춰 늘어난다 (최대 높이는 CSS)
+                        event.target.style.height = 'auto';
+                        event.target.style.height = `${event.target.scrollHeight}px`;
+                      }}
+                      rows={1}
+                      placeholder="이 섹션을 어떻게 고칠까요?"
+                      disabled={revising || !section.draftText}
+                      onKeyDown={(event) => {
+                        // Enter 보내기, Shift+Enter 줄바꿈 (일반 채팅과 같게)
+                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                          event.preventDefault();
+                          void sendInstruction();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="보내기"
+                      title="보내기 (Enter)"
+                      disabled={revising || !instruction.trim() || !section.draftText}
+                      onClick={() => void sendInstruction()}
+                    >
+                      ↑
+                    </button>
+                  </div>
+                  <p className="sw-draft__chat-hint">Enter 보내기 · Shift+Enter 줄바꿈</p>
                 </div>
               ) : null}
             </div>

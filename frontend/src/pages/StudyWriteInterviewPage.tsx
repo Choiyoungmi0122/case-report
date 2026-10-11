@@ -47,6 +47,11 @@ export default function StudyWriteInterviewPage() {
   const [, setTick] = useState(0);
   const processingKicked = useRef(false);
   const logRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
+  // 보낸 뒤 입력 칸 높이를 원래대로
+  useEffect(() => {
+    if (!draft && draftRef.current) draftRef.current.style.height = 'auto';
+  }, [draft]);
 
   const interview = data?.interview;
   const questions = useMemo(() => interview?.rounds.flatMap((round) => round.questions) || [], [interview]);
@@ -267,6 +272,7 @@ export default function StudyWriteInterviewPage() {
                 </div>
               ) : (
                 <>
+                  <span className="sw-bubble__label sw-bubble__label--me">나</span>
                   {question.status === 'skipped' ? <em>모름 / 기록에 없음</em> : question.answer}
                   {!locked ? (
                     <button
@@ -314,23 +320,35 @@ export default function StudyWriteInterviewPage() {
       <div className="sw-interview__composer">
         {pendingQuestion && !locked ? (
           <>
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="한두 문장으로 답해 주세요"
-              rows={3}
-              disabled={sending}
-              onKeyDown={(event) => {
-                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') void submitAnswer(false);
-              }}
-            />
-            <div className="sw-interview__actions">
+            <div className="sw-interview__box">
+              <textarea
+                ref={draftRef}
+                value={draft}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  event.target.style.height = 'auto';
+                  event.target.style.height = `${event.target.scrollHeight}px`;
+                }}
+                placeholder="답을 적어 주세요"
+                rows={1}
+                disabled={sending}
+                onKeyDown={(event) => {
+                  // Enter 보내기, Shift+Enter 줄바꿈
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    if (draft.trim()) void submitAnswer(false);
+                  }
+                }}
+              />
+              <button type="button" aria-label="답변 보내기" title="보내기 (Enter)" disabled={sending || !draft.trim()} onClick={() => void submitAnswer(false)}>
+                ↑
+              </button>
+            </div>
+            <div className="sw-interview__composer-row">
               <button type="button" className="is-secondary" disabled={sending} onClick={() => void submitAnswer(true)}>
                 모름 / 기록에 없음
               </button>
-              <button type="button" disabled={sending || !draft.trim()} onClick={() => void submitAnswer(false)}>
-                답변 보내기
-              </button>
+              <p>Enter 보내기 · Shift+Enter 줄바꿈</p>
             </div>
           </>
         ) : finished ? (
