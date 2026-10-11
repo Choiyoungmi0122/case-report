@@ -1659,6 +1659,14 @@ export const caseApi = {
     return response.data;
   },
 
+  /** 제목 섹션의 제목 또는 핵심 단어만 AI 가 다시 만든다 (다른 줄은 그대로) */
+  regenerateStudyWriteTitlePart: async (caseId: string, part: 'title' | 'keywords') => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/TITLE/revise`, {
+      regeneratePart: part
+    });
+    return response.data;
+  },
+
   saveStudyWriteSectionDraft: async (caseId: string, sectionId: string, draftText: string, options: { recheckCare?: boolean } = {}) => {
     const response = await api.put<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/draft`, {
       draftText,

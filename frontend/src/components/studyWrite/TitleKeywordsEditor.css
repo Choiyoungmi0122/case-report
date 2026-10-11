@@ -1,0 +1,132 @@
+/* 제목 섹션: 제목·핵심 단어를 따로 보여 주고 ↻·✎ 를 단다 */
+.sw-title-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sw-title-editor__row {
+  border: 1px solid #e3e8ee;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+}
+
+.sw-title-editor__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sw-title-editor__head > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #5a6c81;
+}
+
+.sw-title-editor__tools {
+  display: flex;
+  gap: 4px;
+}
+
+.sw-title-editor__icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid #d6dde6;
+  background: #f7f9fb;
+  color: #3d4b5c;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sw-title-editor__icon:hover:not(:disabled) {
+  background: #eef3f8;
+  border-color: #b8c6d6;
+}
+
+.sw-title-editor__icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.sw-title-editor__icon .is-spinning {
+  display: inline-block;
+  animation: sw-title-spin 0.9s linear infinite;
+}
+
+@keyframes sw-title-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sw-title-editor__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #1f2a37;
+}
+
+.sw-title-editor__title.is-busy,
+.sw-title-editor__title.is-empty {
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7a8c;
+}
+
+.sw-title-editor__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sw-title-editor__chips li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef3f8;
+  color: #2c3e50;
+  font-size: 13px;
+}
+
+.sw-title-editor textarea,
+.sw-title-editor input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #b8c6d6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 15px;
+}
+
+.sw-title-editor textarea {
+  resize: vertical;
+  font-weight: 600;
+}
+
+.sw-title-editor__hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7a8c;
+}
+
+.sw-title-editor__hint b {
+  color: #a93b24;
+  font-weight: 600;
+}
+
+.sw-title-editor__edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}

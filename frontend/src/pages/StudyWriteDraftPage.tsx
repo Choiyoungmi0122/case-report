@@ -26,6 +26,8 @@ import {
 } from '../utils/studyWriteCare';
 import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
+import TitleKeywordsEditor from '../components/studyWrite/TitleKeywordsEditor';
+import { parseTitleDraft } from '../utils/titleKeywords';
 import './StudyWriteDraftPage.css';
 
 /**
@@ -561,7 +563,11 @@ export default function StudyWriteDraftPage() {
                 </span>
               </div>
               {section.draftText && !locked && !fullEditOpen ? (
-                <p className="sw-draft__drag-hint">문장을 드래그하면 그 부분만 AI에게 고치게 하거나 직접 고칠 수 있습니다.</p>
+                <p className="sw-draft__drag-hint">
+                  {section.sectionId === 'TITLE'
+                    ? '↻ 를 누르면 AI가 그 줄만 다시 만들고, ✎ 를 누르면 직접 고칠 수 있습니다. 이전 판은 버전 기록에 남습니다.'
+                    : '문장을 드래그하면 그 부분만 AI에게 고치게 하거나 직접 고칠 수 있습니다.'}
+                </p>
               ) : null}
               {needsReview[section.sectionId] && !locked && !fullEditOpen ? (
                 <div className="sw-draft__review-banner">
@@ -599,6 +605,32 @@ export default function StudyWriteDraftPage() {
                     </button>
                   </div>
                 </div>
+              ) : section.draftText && section.sectionId === 'TITLE' && parseTitleDraft(section.draftText).titleIndex >= 0 ? (
+                // 제목·핵심 단어는 따로: ↻ 다시 만들기, ✎ 직접 고치기
+                <TitleKeywordsEditor
+                  text={section.draftText}
+                  readOnly={locked}
+                  disabled={revising || reviewing || running}
+                  onRegenerate={async (part) => {
+                    if (!caseId) return;
+                    setError(null);
+                    try {
+                      setData(await caseApi.regenerateStudyWriteTitlePart(caseId, part));
+                    } catch (nextError: any) {
+                      setError(nextError?.response?.data?.error || nextError?.message || '다시 만들지 못했습니다.');
+                    }
+                  }}
+                  onSave={async (nextText) => {
+                    if (!caseId) return;
+                    setError(null);
+                    try {
+                      setData(await caseApi.saveStudyWriteSectionDraft(caseId, 'TITLE', nextText, { recheckCare: true }));
+                    } catch (nextError: any) {
+                      setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+                      throw nextError;
+                    }
+                  }}
+                />
               ) : section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
                 // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입)
                 <div ref={mainTextRef} onMouseUp={captureSelection}>

@@ -6,6 +6,8 @@ import TimelineTable, { parseTimelineRows } from '../components/studyWrite/Timel
 import { careCompliance, complianceLevel, uncheckedSuffix } from '../utils/studyWriteCare';
 import { convertRelativeDates } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
+import TitleKeywordsEditor from '../components/studyWrite/TitleKeywordsEditor';
+import { parseTitleDraft } from '../utils/titleKeywords';
 import './StudyWriteFinalPage.css';
 
 /**
@@ -171,7 +173,42 @@ export default function StudyWriteFinalPage() {
                 {savingId === section.sectionId ? ' · 저장 중…' : ''}
               </span>
             </div>
-            {submitted ? (
+            {section.sectionId === 'TITLE' && parseTitleDraft(texts.TITLE ?? section.draftText).titleIndex >= 0 ? (
+              // 제목·핵심 단어는 따로: ↻ 다시 만들기, ✎ 직접 고치기 (제출 뒤에는 보기만)
+              <TitleKeywordsEditor
+                text={texts.TITLE ?? section.draftText}
+                readOnly={submitted}
+                disabled={submitting || savingId !== null}
+                onRegenerate={async (part) => {
+                  if (!caseId) return;
+                  setError(null);
+                  try {
+                    const next = await caseApi.regenerateStudyWriteTitlePart(caseId, part);
+                    setData(next);
+                    const title = next.sections.find((item) => item.sectionId === 'TITLE');
+                    if (title) setTexts((prev) => ({ ...prev, TITLE: title.draftText }));
+                  } catch (nextError: any) {
+                    setError(nextError?.response?.data?.error || nextError?.message || '다시 만들지 못했습니다.');
+                  }
+                }}
+                onSave={async (nextText) => {
+                  if (!caseId) return;
+                  setError(null);
+                  setSavingId('TITLE');
+                  try {
+                    const next = await caseApi.saveStudyWriteSectionDraft(caseId, 'TITLE', nextText, { recheckCare: true });
+                    setData(next);
+                    setTexts((prev) => ({ ...prev, TITLE: nextText }));
+                    setSavedAt(new Date().toLocaleTimeString());
+                  } catch (nextError: any) {
+                    setError(nextError?.response?.data?.error || nextError?.message || '저장하지 못했습니다.');
+                    throw nextError;
+                  } finally {
+                    setSavingId(null);
+                  }
+                }}
+              />
+            ) : submitted ? (
               section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
                 <TimelineTable text={dated(section.draftText)} />
               ) : (

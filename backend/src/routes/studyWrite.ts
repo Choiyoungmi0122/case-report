@@ -18,6 +18,7 @@ import {
 import { StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
 import { findSubElement } from '../studyWrite/careSubElements';
+import { mergeRegeneratedPart, parseTitleDraft, TitlePart } from '../studyWrite/titleKeywords';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
 import {
@@ -373,12 +374,18 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
   try {
     // 직접 수정 뒤 "전체가 괜찮은지" 점검: 고친 내용은 지키고 나머지와 어긋나는 곳만 다듬는다
     const reviewAfterEdit = Boolean(req.body?.reviewAfterEdit);
+    // 제목 섹션의 제목 또는 핵심 단어만 다시 만들기 (↻). 지시는 서버가 정하고, 다른 줄은 원래 글자 그대로 둔다
+    const regeneratePart: TitlePart | null =
+      req.body?.regeneratePart === 'title' || req.body?.regeneratePart === 'keywords' ? req.body.regeneratePart : null;
+    if (regeneratePart && req.params.sectionId !== 'TITLE') return res.status(400).json({ error: '제목 섹션에서만 쓸 수 있습니다.' });
     const instruction = reviewAfterEdit
       ? '임상의가 이 섹션을 직접 고쳤다. [직접 수정 전 초안]과 [현재 초안]을 비교해 임상의가 바꾼 곳(추가·삭제·수정)을 찾는다. 임상의가 바꾼 내용은 임상의가 넣은 사실로 보고 그대로 둔다. 기록에 없는 내용이어도 지우거나 되돌리지 않는다(기록에 없는 새 사실이면 그 문장 끝에 "[기록 외 내용: 직접 수정]"만 붙인다). 그 변경 때문에 나머지 문장과 어긋나게 된 곳(같은 내용의 중복, 앞뒤 모순, 용어·시제·표기 불일치, 끊긴 흐름)만 최소한으로 다듬는다. 새 사실을 더하지 않는다. 어긋나는 곳이 없으면 초안을 한 글자도 바꾸지 않고 changeSummary 에 "직접 고친 내용과 나머지가 어긋나는 곳이 없어 그대로 두었다"고 쓴다. 바꿨으면 무엇을 바꿨는지 구체적으로 쓴다.'
-      : String(req.body?.instruction || '').trim();
-    if (!instruction) return res.status(400).json({ error: '지시를 적어 주세요.' });
+      : regeneratePart
+        ? '' // 아래에서 현재 초안을 보고 정한다
+        : String(req.body?.instruction || '').trim();
+    if (!instruction && !regeneratePart) return res.status(400).json({ error: '지시를 적어 주세요.' });
     // 초안에서 드래그한 부분 (선택). 너무 길면 자른다
-    const selectedText = reviewAfterEdit ? undefined : String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
+    let selectedText = reviewAfterEdit || regeneratePart ? undefined : String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
     const { caseId, sectionId } = req.params;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
 
@@ -388,12 +395,27 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     if (state.submittedAt) return res.status(400).json({ error: '이미 제출한 사례입니다.' });
     const section = state.sections?.[sectionId];
     if (!section || !section.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
+    let effectiveInstruction = instruction;
+    if (regeneratePart) {
+      const parsed = parseTitleDraft(section.draftText);
+      // 같은 것이 다시 나오지 않게 지금까지 나온 제목·핵심 단어를 함께 준다
+      const earlier = [...new Set(section.history.map((item) => parseTitleDraft(item.text)).map((item) => (regeneratePart === 'title' ? item.title : item.keywords.join(', '))).filter(Boolean))].slice(-6);
+      if (regeneratePart === 'title') {
+        selectedText = parsed.titleIndex >= 0 ? parsed.lines[parsed.titleIndex] : undefined;
+        effectiveInstruction = `제목만 새로 쓴다. 쓰기 규칙(국내 한의 증례보고 제목 형식, 진단 또는 주소·주된 치료·대상, 인과를 단정하지 않음)을 지키고, 지금까지 나온 제목과 다른 표현으로 쓴다. 핵심 단어 줄은 그대로 둔다. 지금까지 나온 제목: ${earlier.map((item) => `"${item}"`).join(', ') || '(없음)'}`;
+      } else {
+        selectedText = parsed.keywordsIndex >= 0 ? parsed.lines[parsed.keywordsIndex] : undefined;
+        effectiveInstruction = `핵심 단어만 새로 고른다. "핵심 단어: …" 한 줄로, 3~5개를 쉼표로 나누고 그중 하나는 "증례보고"로 한다. 기록과 초안에 나온 진단·변증·처방·증상에서 고른다. 지금까지와 다른 조합으로 고른다. 제목 줄은 그대로 둔다. 지금까지 나온 핵심 단어: ${earlier.map((item) => `"${item}"`).join(' / ') || '(없음)'}`;
+      }
+    }
 
     // 전체 점검에는 마지막 AI 판(직접 수정 전)을 함께 준다. 직접 고친 곳을 모델이 알아보게
     const previousDraft = reviewAfterEdit
       ? [...section.history].reverse().find((item) => item.source !== 'manual' && item.text !== section.draftText)?.text
       : undefined;
-    const revised = await runRevise({ caseData, state, section, instruction, selectedText, previousDraft });
+    const revised = await runRevise({ caseData, state, section, instruction: effectiveInstruction, selectedText, previousDraft });
+    // 제목·핵심 단어 다시 만들기: 바꾸려던 줄만 가져오고 나머지는 원래 초안 그대로
+    if (regeneratePart) revised.draftText = mergeRegeneratedPart(section.draftText, revised.draftText, regeneratePart);
     const changed = revised.draftText.trim() !== section.draftText.trim();
     const careCheck = changed ? await runCareCheck({ caseData, state, sectionId, draftText: revised.draftText }) : section.careCheck;
 
@@ -419,7 +441,7 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
                 promptVersion: STUDY_WRITE_REVISE_PROMPT_VERSION,
                 // 라벨만으로는 문구가 바뀐 것을 알 수 없어 템플릿 해시를 함께 남긴다 (참가자별 프롬프트 복원용)
                 promptTemplateHash: promptMeta('SW_R').promptTemplateHash,
-                instruction,
+                instruction: effectiveInstruction,
                 changeSummary: revised.changeSummary,
                 outOfRecordClaims: revised.outOfRecordClaims
               }
@@ -433,7 +455,11 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
             // 드래그로 고른 부분이 있으면 채팅에 함께 남긴다. 전체 점검은 짧은 표시로
             text: reviewAfterEdit
               ? '[직접 수정 후 전체 점검] 고친 내용은 지키고, 나머지와 어긋나는 곳만 다듬어 줘.'
-              : selectedText
+              : regeneratePart
+                ? regeneratePart === 'title'
+                  ? '[제목 다시 만들기]'
+                  : '[핵심 단어 다시 고르기]'
+                : selectedText
                 ? `「${selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}」 ${instruction}`
                 : instruction,
             at: now
