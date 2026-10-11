@@ -153,6 +153,11 @@
 - 자세한 내용: `docs/prompt_chain_review_v1.md` §5-3.
 - 같은 날 3순위 정비(§5-4)는 V2 화면·자료에 영향이 없다. 실험용 Scaffold 공개 경로(`routes/scaffold.ts`)는 바꾸지 않았고, 고정 사례는 CHAIN1을 돌리지 않으며, 섹션 조회는 F단계 수정대로 저장된 검토만 돌려준다. 한국어로 바꾼 안내문은 일반 Write 섹션 화면(`SectionDetailPage`)의 것이다.
 
+## 2026-10-12 — Scaffold / Write 프롬프트 분리
+
+- Scaffold 모드는 이제 전용 프롬프트(`backend/src/llm/prompts/scaffold/`, 레지스트리 `SCAFFOLD_*`)를 쓴다. Write 쪽 프롬프트 수정이 Scaffold V2에 영향을 주지 않는다. 규칙: `docs/prompt_sets_scaffold_write_v1.md`.
+- 분리 시점 본문은 같다. V2 참가자 자료(고정 AI 초안 등)와 공개 단계 해시는 그대로다.
+
 ## V1 자료와 함께 분석할 때 주의
 - V1: `scaffoldVersion 'v2.0'`, 섹션 2개(추적 관찰은 연구자가 생략), 게이트 꺼짐, 메모에 회차·출처 필드 없음, 충분성 판단 이유 없음.
 - V2: `scaffoldVersion 'v3.0'`, 섹션 1개, 게이트 켬(own_draft 인정), 메모 회차·분류·출처 있음(없으면 미지정), 판단 이유 선택 입력.

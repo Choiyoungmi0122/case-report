@@ -11,7 +11,8 @@ import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
 import { CareSection, ResearchEventType, ResearchState } from '../types';
 import { getModelForChain, runInitialSectionDrafts } from '../llm/chains';
-import { chain3SystemPrompt } from '../llm/prompts/chain3_draft';
+// 공개 단계는 Scaffold 세트의 CHAIN3 프롬프트를 쓴다 (2026-10-12 분리, 본문·해시는 분리 전과 같다)
+import { chain3SystemPrompt } from '../llm/prompts/scaffold/chain3_draft';
 import { DEMO_CASE_MEMO_SUGGESTIONS, isDemoCaseText } from '../study/cases/demoCase';
 import { getFrozenStudyCaseResult } from '../study/cases/studyCaseFrozen';
 import {
@@ -922,6 +923,7 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
     evidenceForGeneration,
     [sectionState],
     {
+      promptSet: 'scaffold',
       onUsage: (usage) => {
         tokenUsage = usage;
       }

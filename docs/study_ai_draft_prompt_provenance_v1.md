@@ -30,6 +30,7 @@ git show c18c6e5:backend/src/llm/prompts/chain3_draft.ts
 - 2026-10-11: CHAIN6 충돌 정책 통일(v3), 실험용 Write 프롬프트 공통 원칙 통일(SW-Q2 v3, SW-D v3, SW-R v3, SW-C v2).
 - 2026-10-12: 프롬프트 본문 변경 없음(버전 그대로). 모델 출력 **검증**을 관대하게 바꾸고(섹션 id 변형 정규화, 배열 상한 잘라내기), 형식 오류 시 같은 프롬프트 재시도 대신 수정 호출 1회, 체인별 시간·토큰 상한, 근거 범위 `tags ∪ sectionHints` 통일(`docs/prompt_chain_review_v1.md` §5-3). 실시간 체인(일반 Write, 실험용 Write)에만 해당한다.
 - 2026-10-12 (3순위): 용어 판정기 프롬프트 한국어화(`TERM:v2`), CHAIN1 카드 본문 비치환, CHAIN7 저자 원문 보존 등(`docs/prompt_chain_review_v1.md` §5-4). 고정 사례는 저장된 CHAIN1 스냅샷을 쓰므로 영향이 없다.
+- 2026-10-12: Scaffold / Write 프롬프트 분리. Scaffold 모드는 `backend/src/llm/prompts/scaffold/`를 쓴다(`docs/prompt_sets_scaffold_write_v1.md`). 공개 단계 `CHAIN3_STUDY_REVEAL`은 Scaffold 사본을 가리키지만 본문이 같아 템플릿 해시가 `f59a93a0…` 그대로다. 앞으로 Scaffold 쪽 프롬프트의 이력은 `SCAFFOLD_*` 버전으로 따로 남는다.
 - 고정 결과는 EMR 본문 해시로만 선택되므로 위 변경과 무관하게 그대로 쓰인다. 고정 파일의 `unsupportedClaims.reason` 문구도 저장된 그대로다.
 
 ## 4. 지켜야 할 것

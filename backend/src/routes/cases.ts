@@ -37,7 +37,8 @@ import { buildEvidenceCardsFromTimelineEvents, integrateImportedTimelineIntoDraf
 import { summarizeError } from '../utils/errorSummary';
 import { buildContentDispositionHeader } from '../utils/unicode';
 import { normalizeQuestionComparisonKey, normalizeQuestionText } from '../questions/questionTemplates';
-import { getWriteTerminologyRuntime } from '../rag/runtime';
+import { getTerminologyRuntime as getTerminologyRuntimeForSet, getWriteTerminologyRuntime } from '../rag/runtime';
+import { chainPrompts, PromptSet, promptSetForCase } from '../llm/promptSets';
 import {
   preprocessVisitsForChain1,
   runEvidenceSplit,
@@ -47,7 +48,6 @@ import {
   runFinalManuscriptCompose,
   getModelForChain
 } from '../llm/chains';
-import { chain3SystemPrompt, buildChain3UserPrompt } from '../llm/prompts/chain3_draft';
 import { chain7SystemPrompt } from '../llm/prompts/chain7_final';
 import {
   buildGenerationMetadata,
@@ -57,7 +57,7 @@ import {
   STUDENT_V1_CODE_PATTERN,
   STUDY_SCAFFOLD_V2_VERSION
 } from '../config/researchMetadata';
-import { promptMeta } from '../llm/promptRegistry';
+import { promptKeyFor, promptMeta } from '../llm/promptRegistry';
 import { getRelevantEvidence } from '../llm/evidenceScope';
 import {
   buildQuestionStateCacheEntries,
@@ -995,13 +995,14 @@ export function buildProcessSectionsOverview(
   });
 }
 
-function buildChain3PromptHash(evidenceCards: any[], sectionStates: any[]) {
+function buildChain3PromptHash(evidenceCards: any[], sectionStates: any[], promptSet: PromptSet = 'write') {
   const statusSummary = (sectionStates || [])
     .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
     .join('\n\n');
+  const chain3 = chainPrompts(promptSet).chain3;
   return hashPromptParts([
-    chain3SystemPrompt,
-    buildChain3UserPrompt(
+    chain3.system,
+    chain3.user(
       'EVIDENCE_SUMMARY_OMITTED_FROM_EXPORT',
       statusSummary,
       'CARE_RUBRIC_SUMMARY_OMITTED_FROM_EXPORT'
@@ -1019,7 +1020,9 @@ function attachDraftGenerationMetadata(params: {
   startedAt: string;
   cacheHit: boolean;
   tokenUsage?: any;
+  promptSet?: PromptSet;
 }) {
+  const chain3Meta = promptMeta(promptKeyFor('CHAIN3', params.promptSet || 'write'));
   return (params.sectionDrafts || []).map((draft) => ({
     ...draft,
     generationMetadata: draft.generationMetadata || buildGenerationMetadata({
@@ -1030,8 +1033,8 @@ function attachDraftGenerationMetadata(params: {
       inputHash: params.inputHash,
       promptHash: params.promptHash,
       // 프롬프트 레지스트리의 현재 버전·템플릿 해시를 기록한다 (프롬프트를 고치면 레지스트리 버전을 올린다).
-      promptTemplateHash: promptMeta('CHAIN3').promptTemplateHash,
-      promptVersion: promptMeta('CHAIN3').promptVersion,
+      promptTemplateHash: chain3Meta.promptTemplateHash,
+      promptVersion: chain3Meta.promptVersion,
       temperature: 0,
       generatedAt: params.startedAt,
       cacheHit: params.cacheHit,
@@ -1130,6 +1133,8 @@ export async function reprocessCaseFromStoredTerms(params: {
     updateCase?: (caseId: string, updates: any) => Promise<void>;
   };
 }) {
+  // Scaffold 사례는 Scaffold 프롬프트 세트로 돈다 (llm/promptSets.ts)
+  const promptSet = promptSetForCase(params.caseData);
   const measureStage = createStageTimer(params.onStageTiming);
   const totalStartedAt = performance.now();
   const preprocessVisitsForChain1Impl =
@@ -1225,6 +1230,7 @@ export async function reprocessCaseFromStoredTerms(params: {
         nextPerformanceLogs,
         buildPerformanceLog({
           chainName: 'CHAIN1',
+          promptSet,
           startedAt: new Date().toISOString(),
           inputHash: chain1InputHash,
           cacheHit: false,
@@ -1269,6 +1275,7 @@ export async function reprocessCaseFromStoredTerms(params: {
       : reuseChain1
       ? params.caseData.evidenceCards || []
       : runEvidenceSplitImpl(preprocessedChain1.preparedVisits, {
+          promptSet,
           onUsage: (usage) => {
             chain1Usage = usage;
           }
@@ -1283,12 +1290,13 @@ export async function reprocessCaseFromStoredTerms(params: {
   const evidenceCards = mergeEvidenceCards(chain1EvidenceCards, importedTimelineEvidenceCards);
   nextChainCache = {
     ...nextChainCache,
-    CHAIN1: buildChainCacheEntry(chain1InputHash, evidenceCards, 'CHAIN1')
+    CHAIN1: buildChainCacheEntry(chain1InputHash, evidenceCards, 'CHAIN1', promptSet)
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
     buildPerformanceLog({
       chainName: 'CHAIN1',
+      promptSet,
       startedAt: chain1StartedAt,
       inputHash: chain1InputHash,
       cacheHit: reuseChain1,
@@ -1316,6 +1324,7 @@ export async function reprocessCaseFromStoredTerms(params: {
       ? ensureAllSectionStates(cloneJson(params.caseData.sectionStates || []))
       : ensureAllSectionStates(
           await runSectionAssessmentImpl(evidenceCards, {
+          promptSet,
             onUsage: (usage) => {
               chain2Usage = usage;
             }
@@ -1328,12 +1337,13 @@ export async function reprocessCaseFromStoredTerms(params: {
       sectionId: state.sectionId,
       status: state.status,
       rationaleText: state.rationaleText
-    })), 'CHAIN2')
+    })), 'CHAIN2', promptSet)
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
     buildPerformanceLog({
       chainName: 'CHAIN2',
+      promptSet,
       startedAt: chain2StartedAt,
       inputHash: chain2InputHash,
       cacheHit: reuseChain2,
@@ -1407,7 +1417,7 @@ export async function reprocessCaseFromStoredTerms(params: {
   } as any);
 
   const chain3InputHash = buildChain3InputHash(evidenceCards, sectionStates);
-  const chain3PromptHash = buildChain3PromptHash(evidenceCards, sectionStates);
+  const chain3PromptHash = buildChain3PromptHash(evidenceCards, sectionStates, promptSet);
   const chain3StartedAt = new Date().toISOString();
   let chain3Usage: any = null;
   const reuseChain3 =
@@ -1419,6 +1429,7 @@ export async function reprocessCaseFromStoredTerms(params: {
       ? ensureAllSectionDrafts(cloneJson(params.caseData.sectionDrafts || []))
       : ensureAllSectionDrafts(
           await runInitialSectionDraftsImpl(evidenceCards, sectionStates, {
+            promptSet,
             onUsage: (usage) => {
               chain3Usage = usage;
             }
@@ -1426,6 +1437,7 @@ export async function reprocessCaseFromStoredTerms(params: {
         )
   );
   sectionDrafts = attachDraftGenerationMetadata({
+    promptSet,
     sectionDrafts,
     chainName: 'CHAIN3',
     inputHash: chain3InputHash,
@@ -1443,12 +1455,13 @@ export async function reprocessCaseFromStoredTerms(params: {
         sectionId: draft.sectionId,
         draftText: draft.draftText || ''
       }))
-    , 'CHAIN3')
+    , 'CHAIN3', promptSet)
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
     buildPerformanceLog({
       chainName: 'CHAIN3',
+      promptSet,
       startedAt: chain3StartedAt,
       inputHash: chain3InputHash,
       cacheHit: reuseChain3,
@@ -1509,19 +1522,20 @@ export async function reprocessCaseFromStoredTerms(params: {
         sectionId: state.sectionId,
         missingInfoBullets: state.missingInfoBullets || []
       }))
-    }, 'CHAIN4'),
+    }, 'CHAIN4', promptSet),
     CHAIN5: buildChainCacheEntry(nextState.cacheMeta.chain5InputHash, {
       commonQuestionSets: nextState.commonQuestionSets,
       sectionQuestionsBySection: nextState.sectionStates.map((state) => ({
         sectionId: state.sectionId,
         recommendedQuestions: state.recommendedQuestions || []
       }))
-    }, 'CHAIN5')
+    }, 'CHAIN5', promptSet)
   };
   nextPerformanceLogs = appendPerformanceLog(
     nextPerformanceLogs,
     buildPerformanceLog({
       chainName: 'CHAIN4',
+      promptSet,
       startedAt: chain45StartedAt,
       inputHash: nextState.cacheMeta.chain4InputHash,
       cacheHit: nextState.cacheMeta.chain4CacheHit,
@@ -1533,6 +1547,7 @@ export async function reprocessCaseFromStoredTerms(params: {
     nextPerformanceLogs,
     buildPerformanceLog({
       chainName: 'CHAIN5',
+      promptSet,
       startedAt: chain45StartedAt,
       inputHash: nextState.cacheMeta.chain5InputHash,
       cacheHit: nextState.cacheMeta.chain5CacheHit,
@@ -1693,12 +1708,12 @@ export async function mutatePendingTermDecision(params: {
   customReplacement?: string;
 }, deps?: {
   caseModel?: Pick<CaseModel, 'getCase' | 'updateCase'>;
-  getTerminologyRuntime?: typeof getWriteTerminologyRuntime;
+  getTerminologyRuntime?: (set?: PromptSet) => ReturnType<typeof getWriteTerminologyRuntime>;
   scheduleReprocess?: typeof schedulePendingTermReprocess;
 }) {
   const model = deps?.caseModel || caseModel;
   const scheduleReprocess = deps?.scheduleReprocess || schedulePendingTermReprocess;
-  const getTerminologyRuntime = deps?.getTerminologyRuntime || getWriteTerminologyRuntime;
+  const getTerminologyRuntime = deps?.getTerminologyRuntime || getTerminologyRuntimeForSet;
   const measureStage = createStageTimer();
 
   const case_ = await model.getCase(params.caseId);
@@ -1779,7 +1794,7 @@ export async function mutatePendingTermDecision(params: {
     };
   }
 
-  const terminologyRuntime = getTerminologyRuntime();
+  const terminologyRuntime = getTerminologyRuntime(promptSetForCase(anyCase));
   const scheduleResult = await scheduleReprocess({
     caseId: params.caseId,
     semanticMatcher: terminologyRuntime.semanticMatcher,
@@ -2634,7 +2649,8 @@ router.post('/:id/process', async (req: Request, res: Response) => {
       });
     }
 
-    const terminologyRuntime = getWriteTerminologyRuntime();
+    // 용어 판정기 프롬프트도 사례 mode 에 따라 Scaffold/Write 세트를 쓴다
+    const terminologyRuntime = getTerminologyRuntimeForSet(promptSetForCase(anyCase));
     const result = await reprocessCaseFromStoredTerms({
       caseId: id,
       caseData: anyCase,

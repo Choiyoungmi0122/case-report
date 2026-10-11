@@ -14,17 +14,9 @@ import {
   SectionAdequacyReviewOutputSchema
 } from './schemas/section_adequacy_review';
 import { buildCareRubricSummary, careSectionRubricMap, SupportedCareSectionId } from '../config/careSectionRubric';
-import { chain1SystemPrompt, buildChain1UserPrompt } from './prompts/chain1_splitTag';
-import { chain2SystemPrompt, buildChain2UserPrompt } from './prompts/chain2_assess';
-import { chain3SystemPrompt, buildChain3UserPrompt } from './prompts/chain3_draft';
-import { chain4MissingSystemPrompt, buildChain4MissingUserPrompt } from './prompts/chain4_missing';
-import { chain5QuestionSystemPrompt, buildChain5QuestionUserPrompt } from './prompts/chain5_questions';
 import { chain6UpdateSystemPrompt, buildChain6UpdateUserPrompt } from './prompts/chain6_update';
 import { chain7SystemPrompt, buildChain7UserPrompt } from './prompts/chain7_final';
-import {
-  buildSectionAdequacyReviewUserPrompt,
-  sectionAdequacyReviewSystemPrompt
-} from './prompts/section_adequacy_review';
+import { chainLabel, chainPrompts, PromptSet } from './promptSets';
 import {
   buildSectionHintsFromTerms,
   normalizeLookupKey,
@@ -110,6 +102,8 @@ type NormalizerLlmResolver = RetrievedTermResolver;
 
 type ChainRuntimeMeta = {
   onUsage?: (usage: LLMUsageMetrics | null) => void;
+  /** 프롬프트 세트. 사례 mode 가 scaffold 이면 'scaffold' (llm/promptSets.ts). 없으면 write. */
+  promptSet?: PromptSet;
 };
 
 function normalizeForGrounding(text: string): string {
@@ -1485,6 +1479,7 @@ export async function runEvidenceSplit(
     CHAIN1_VISIT_CONCURRENCY,
     (visit) =>
       runEvidenceSplitForVisits([visit], {
+        promptSet: runtimeMeta?.promptSet,
         onUsage: (usage) => {
           usages.push(usage);
         }
@@ -1517,13 +1512,14 @@ async function runEvidenceSplitForVisits(
   }));
   const structuredVisitsText = buildNarrativeVisitPromptText(preparedVisits);
 
+  const prompts = chainPrompts(runtimeMeta?.promptSet).chain1;
   const result = await callLLMWithSchema(
     Chain1OutputSchema,
-    chain1SystemPrompt,
-    buildChain1UserPrompt(structuredVisitsText),
+    prompts.system,
+    prompts.user(structuredVisitsText),
     {
       model: getModelForChain('chain1'),
-      label: 'CHAIN1 extraction',
+      label: chainLabel('CHAIN1 extraction', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );
@@ -1596,16 +1592,17 @@ export async function runSectionAssessment(
     return heuristicAssessments;
   }
 
+  const chain2Prompts = chainPrompts(runtimeMeta?.promptSet).chain2;
   const result = await callLLMWithSchema(
     Chain2OutputSchema,
-    chain2SystemPrompt,
-    buildChain2UserPrompt({
+    chain2Prompts.system,
+    chain2Prompts.user({
       evidenceSummary: buildSectionAssessmentSummary(evidenceCards, llmTargetSectionIds),
       targetSectionIds: llmTargetSectionIds
     }),
     {
       model: getModelForChain('chain2'),
-      label: 'CHAIN2 assessment',
+      label: chainLabel('CHAIN2 assessment', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );
@@ -1624,17 +1621,18 @@ export async function runInitialSectionDrafts(
     .map((item) => `[${item.sectionId}] status=${item.status}\nrationale=${item.rationaleText}`)
     .join('\n\n');
 
+  const chain3Prompts = chainPrompts(runtimeMeta?.promptSet).chain3;
   const result = await callLLMWithSchema(
     Chain3ModelOutputSchema,
-    chain3SystemPrompt,
-    buildChain3UserPrompt(
+    chain3Prompts.system,
+    chain3Prompts.user(
       buildTaggedEvidenceSummary(evidenceCards),
       statusSummary,
       buildCompactRubricSummary(CORE_AI_SECTIONS)
     ),
     {
       model: getModelForChain('chain3'),
-      label: 'CHAIN3 draft',
+      label: chainLabel('CHAIN3 draft', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );
@@ -1648,10 +1646,11 @@ export async function runSectionMissingDetection(params: {
   caseTitle?: string;
 },
 runtimeMeta?: ChainRuntimeMeta): Promise<{ sectionMissing: SectionMissing[]; commonMissing: CommonMissingItem[] }> {
+  const chain4Prompts = chainPrompts(runtimeMeta?.promptSet).chain4;
   const result = await callLLMWithSchema(
     Chain4MissingOutputSchema,
-    chain4MissingSystemPrompt,
-    buildChain4MissingUserPrompt({
+    chain4Prompts.system,
+    chain4Prompts.user({
       caseTitle: params.caseTitle,
       draftSummary: buildDraftSummary(params.sectionDrafts),
       evidenceSummary: buildTaggedEvidenceSummary(params.evidenceCards),
@@ -1659,7 +1658,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<{ sectionMissing: SectionMissing[]; com
     }),
     {
       model: getModelForChain('chain4'),
-      label: 'CHAIN4 missing',
+      label: chainLabel('CHAIN4 missing', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );
@@ -1677,10 +1676,11 @@ export async function runQuestionGeneration(params: {
   caseTitle?: string;
 },
 runtimeMeta?: ChainRuntimeMeta): Promise<{ commonQuestions: CommonQuestionSet[]; sectionQuestions: SectionQuestionSet[] }> {
+  const chain5Prompts = chainPrompts(runtimeMeta?.promptSet).chain5;
   const result = await callLLMWithSchema(
     Chain5QuestionOutputSchema,
-    chain5QuestionSystemPrompt,
-    buildChain5QuestionUserPrompt({
+    chain5Prompts.system,
+    chain5Prompts.user({
       caseTitle: params.caseTitle,
       draftSummary: buildDraftSummary(params.sectionDrafts),
       sectionMissingSummary: buildSectionMissingSummary(params.sectionMissing),
@@ -1689,7 +1689,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<{ commonQuestions: CommonQuestionSet[];
     }),
     {
       model: getModelForChain('chain5'),
-      label: 'CHAIN5 questions',
+      label: chainLabel('CHAIN5 questions', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );
@@ -1789,10 +1789,11 @@ runtimeMeta?: ChainRuntimeMeta): Promise<SectionAdequacyReviewOutput> {
       ? params.qnaHistory.map((item) => `- Q: ${item.question}\n  A: ${item.answer}`).join('\n')
       : '(none)';
 
+  const reviewPrompts = chainPrompts(runtimeMeta?.promptSet).review;
   return callLLMWithSchema<SectionAdequacyReviewOutput>(
     SectionAdequacyReviewOutputSchema as any,
-    sectionAdequacyReviewSystemPrompt,
-    buildSectionAdequacyReviewUserPrompt({
+    reviewPrompts.system,
+    reviewPrompts.user({
       sectionId: params.sectionId,
       currentDraft: params.currentDraft,
       evidenceSummary,
@@ -1801,7 +1802,7 @@ runtimeMeta?: ChainRuntimeMeta): Promise<SectionAdequacyReviewOutput> {
     }),
     {
       model: getModelForChain('review'),
-      label: 'SECTION review',
+      label: chainLabel('SECTION review', runtimeMeta?.promptSet),
       onUsage: runtimeMeta?.onUsage
     }
   );

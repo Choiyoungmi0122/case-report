@@ -7,7 +7,17 @@ import path from 'path';
  */
 const LOG_PATH = path.resolve(__dirname, '../../data/llm_usage.jsonl');
 
+/**
+ * 테스트(가짜 클라이언트)는 기록하지 않는다. 2026-10-12 이전에는 테스트 호출이 이 파일에 섞였다
+ * (소요 시간 50ms 미만, 토큰 1~15개짜리 기록).
+ */
+let disabledForTests = false;
+export function setUsageLogDisabledForTests(disabled: boolean): void {
+  disabledForTests = disabled;
+}
+
 export function appendUsageLog(entry: Record<string, unknown>): void {
+  if (disabledForTests || process.env.LLM_USAGE_LOG_DISABLED === '1') return;
   try {
     fs.mkdirSync(path.dirname(LOG_PATH), { recursive: true });
     fs.appendFileSync(LOG_PATH, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`, 'utf8');

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 
+// OpenAI 모듈을 가짜로 바꾸므로 비용 기록 파일(backend/data/llm_usage.jsonl)에 쓰지 않는다
+process.env.LLM_USAGE_LOG_DISABLED = '1';
+
 /**
  * HIGH-risk gate test.
  *

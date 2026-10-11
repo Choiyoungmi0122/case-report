@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { z, ZodError } from 'zod';
 import { assertOutboundTextIsSafe } from '../deid/outbound';
 import { shouldRetryLLMError, summarizeError } from '../utils/errorSummary';
-import { appendUsageLog } from './usageLog';
+import { appendUsageLog, setUsageLogDisabledForTests } from './usageLog';
 
 /**
  * LLM 호출의 단일 진입점.
@@ -107,6 +107,8 @@ export function getOpenAIClient(): OpenAI {
 /** 테스트에서 가짜 클라이언트를 끼운다. null 이면 실제 클라이언트로 되돌린다. */
 export function __setOpenAIClientForTests(client: unknown): void {
   openaiClient = (client as OpenAI) || null;
+  // 가짜 클라이언트가 끼워진 동안은 비용 기록 파일에 쓰지 않는다
+  setUsageLogDisabledForTests(Boolean(client));
 }
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };

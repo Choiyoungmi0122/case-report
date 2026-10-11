@@ -29,6 +29,13 @@ import {
 } from './prompts/studyWrite_draft';
 import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPrompt } from './prompts/studyWrite_questions';
 import { getModelForChain } from './models';
+import { PromptSet, SharedChainKey, SHARED_CHAIN_KEYS } from './promptSets';
+import { chain1SystemPrompt as scaffoldChain1SystemPrompt } from './prompts/scaffold/chain1_splitTag';
+import { chain2SystemPrompt as scaffoldChain2SystemPrompt } from './prompts/scaffold/chain2_assess';
+import { chain3SystemPrompt as scaffoldChain3SystemPrompt } from './prompts/scaffold/chain3_draft';
+import { chain4MissingSystemPrompt as scaffoldChain4SystemPrompt } from './prompts/scaffold/chain4_missing';
+import { chain5QuestionSystemPrompt as scaffoldChain5SystemPrompt } from './prompts/scaffold/chain5_questions';
+import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from './prompts/scaffold/section_adequacy_review';
 
 /**
  * 버전 이력 (문구가 바뀐 커밋 기준).
@@ -37,6 +44,9 @@ import { getModelForChain } from './models';
  *  - CHAIN1~7, REVIEW v2: 2026-10-11 `0a56cfa` "프롬프트 정비" (공통 원칙 P1~P7 도입, 4부 구조). 그때 버전을 올리지 않아 여기서 소급해 v2 로 둔다.
  *  - CHAIN6 v3: 2026-10-11 답변-기록 충돌 정책을 "기록 우선, 차이는 표시"로 통일.
  *  - SW-Q2 v3 / SW-D v3 / SW-R v3 / SW-C v2: 2026-10-11 공통 원칙을 common.ts 에서 가져오도록 통일(문구 동일화).
+ *  - SCAFFOLD-CHAIN1~5, SCAFFOLD-REVIEW v2: 2026-10-12 Scaffold 전용 사본으로 분리(`prompts/scaffold/`). 본문은 분리 시점의
+ *    Write v2 와 같고, 라벨이 달라 템플릿 해시는 다르다. 이후 각자 따로 버전을 올린다.
+ *  - CHAIN3_STUDY_REVEAL: 2026-10-12부터 Scaffold 사본의 CHAIN3 를 가리킨다. 분리 시점 본문이 같아 해시도 그대로다.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',
@@ -47,8 +57,14 @@ export const PROMPT_VERSIONS = {
   CHAIN6: 'v3',
   CHAIN7: 'v2',
   REVIEW: 'v2',
-  /** 공개 단계는 chain3 프롬프트를 그대로 쓴다. */
+  /** 공개 단계는 Scaffold 세트의 chain3 프롬프트를 쓴다. */
   CHAIN3_STUDY_REVEAL: 'v2',
+  SCAFFOLD_CHAIN1: 'v2',
+  SCAFFOLD_CHAIN2: 'v2',
+  SCAFFOLD_CHAIN3: 'v2',
+  SCAFFOLD_CHAIN4: 'v2',
+  SCAFFOLD_CHAIN5: 'v2',
+  SCAFFOLD_REVIEW: 'v2',
   SW_Q2: STUDY_WRITE_QUESTIONS_PROMPT_VERSION.split(':')[1],
   SW_D: STUDY_WRITE_DRAFT_PROMPT_VERSION.split(':')[1],
   SW_R: STUDY_WRITE_REVISE_PROMPT_VERSION.split(':')[1],
@@ -66,7 +82,13 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   CHAIN6: chain6UpdateSystemPrompt,
   CHAIN7: chain7SystemPrompt,
   REVIEW: sectionAdequacyReviewSystemPrompt,
-  CHAIN3_STUDY_REVEAL: chain3SystemPrompt,
+  CHAIN3_STUDY_REVEAL: scaffoldChain3SystemPrompt,
+  SCAFFOLD_CHAIN1: scaffoldChain1SystemPrompt,
+  SCAFFOLD_CHAIN2: scaffoldChain2SystemPrompt,
+  SCAFFOLD_CHAIN3: scaffoldChain3SystemPrompt,
+  SCAFFOLD_CHAIN4: scaffoldChain4SystemPrompt,
+  SCAFFOLD_CHAIN5: scaffoldChain5SystemPrompt,
+  SCAFFOLD_REVIEW: scaffoldReviewSystemPrompt,
   SW_Q2: studyWriteGapQuestionsSystemPrompt,
   SW_D: studyWriteDraftSystemPrompt,
   SW_R: studyWriteReviseSystemPrompt,
@@ -84,6 +106,12 @@ const MODEL_KEYS: Record<PromptKey, string> = {
   CHAIN7: 'chain7',
   REVIEW: 'review',
   CHAIN3_STUDY_REVEAL: 'chain3',
+  SCAFFOLD_CHAIN1: 'chain1',
+  SCAFFOLD_CHAIN2: 'chain2',
+  SCAFFOLD_CHAIN3: 'chain3',
+  SCAFFOLD_CHAIN4: 'chain4',
+  SCAFFOLD_CHAIN5: 'chain5',
+  SCAFFOLD_REVIEW: 'review',
   SW_Q2: 'chain5',
   SW_D: 'chain6',
   SW_R: 'chain6',
@@ -97,10 +125,19 @@ export function promptTemplateHash(key: PromptKey): string {
     .digest('hex');
 }
 
-/** 예: "CHAIN3:v2", "SW-D:v3" */
+/** 예: "CHAIN3:v2", "SW-D:v3", "SCAFFOLD-CHAIN3:v2" */
 export function promptVersionLabel(key: PromptKey): string {
-  const name = key.startsWith('SW_') ? key.replace('SW_', 'SW-') : key;
+  const name = key.startsWith('SW_')
+    ? key.replace('SW_', 'SW-')
+    : key.startsWith('SCAFFOLD_')
+      ? key.replace('SCAFFOLD_', 'SCAFFOLD-')
+      : key;
   return `${name}:${PROMPT_VERSIONS[key]}`;
+}
+
+/** 세트에 맞는 키. scaffold 세트의 CHAIN1~5·REVIEW 는 SCAFFOLD_* 키, 나머지는 그대로. */
+export function promptKeyFor(key: SharedChainKey, set: PromptSet = 'write'): PromptKey {
+  return set === 'scaffold' ? (`SCAFFOLD_${key}` as PromptKey) : key;
 }
 
 export function promptModel(key: PromptKey): string {
@@ -116,18 +153,18 @@ export function promptFingerprint(key: PromptKey): string {
  * chainCache / chainPerformanceLogs 의 chainName 에서 프롬프트 키를 찾는다.
  * 예: "CHAIN1", "REVIEW:THERAPEUTIC_INTERVENTIONS", "CHAIN3_STUDY_REVEAL:THERAPEUTIC_INTERVENTIONS".
  */
-export function promptKeyForChainName(chainName: string): PromptKey | undefined {
+export function promptKeyForChainName(chainName: string, set: PromptSet = 'write'): PromptKey | undefined {
   const head = String(chainName || '').split(':')[0].toUpperCase();
   if (head === 'CHAIN3_STUDY_REVEAL') return 'CHAIN3_STUDY_REVEAL';
-  if (head === 'REVIEW') return 'REVIEW';
+  if ((SHARED_CHAIN_KEYS as string[]).includes(head)) return promptKeyFor(head as SharedChainKey, set);
   if (head in PROMPT_VERSIONS) return head as PromptKey;
   return undefined;
 }
 
-export function promptMetaForChainName(chainName: string):
+export function promptMetaForChainName(chainName: string, set: PromptSet = 'write'):
   | { promptVersion: string; promptTemplateHash: string; model: string; promptFingerprint: string }
   | undefined {
-  const key = promptKeyForChainName(chainName);
+  const key = promptKeyForChainName(chainName, set);
   if (!key) return undefined;
   return {
     promptVersion: promptVersionLabel(key),

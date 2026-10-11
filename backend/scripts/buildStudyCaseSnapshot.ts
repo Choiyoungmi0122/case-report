@@ -6,7 +6,7 @@ import {
   runEvidenceSplit,
   runSectionAssessment
 } from '../src/llm/chains';
-import { getWriteTerminologyRuntime } from '../src/rag/runtime';
+import { getScaffoldTerminologyRuntime } from '../src/rag/runtime';
 import { DEFAULT_STUDY_CASE } from '../src/study/cases/defaultStudyCase';
 import { buildStudySnapshotKey } from '../src/study/cases/studyCaseSnapshot';
 
@@ -23,7 +23,8 @@ async function main() {
     text: visit.soapText ?? visit.sanitizedText ?? ''
   }));
 
-  const runtime = getWriteTerminologyRuntime();
+  // 고정 연구 사례는 Scaffold 실험용이므로 Scaffold 프롬프트 세트를 쓴다 (2026-10-12 분리)
+  const runtime = getScaffoldTerminologyRuntime();
   const startedAt = Date.now();
   const preprocessed = await preprocessVisitsForChain1(visits, {
     semanticMatcher: runtime.semanticMatcher,

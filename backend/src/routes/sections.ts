@@ -22,6 +22,7 @@ import { normalizeQuestionComparisonKey, normalizeQuestionText } from '../questi
 import { runSectionAdequacyReview, runSectionDraftUpdate } from '../llm/chains';
 import { getRelevantEvidence } from '../llm/evidenceScope';
 import { buildQuestionStateCacheEntries, refreshQuestionState } from '../questions/questionState';
+import { promptSetForCase } from '../llm/promptSets';
 
 const router = express.Router();
 const caseModel = new CaseModel();
@@ -257,12 +258,14 @@ async function ensureAdequacyReview(params: {
   const inputHash = buildReviewInputHash(params);
   const existing = !params.forceRefresh ? getStoredAdequacyReview(params.caseData, params.sectionId) : null;
   const chainKey = `REVIEW:${params.sectionId}`;
+  const promptSet = promptSetForCase(params.caseData);
   if (existing && existing.reviewInputHash === inputHash && hasChainCacheHit(params.caseData, chainKey, inputHash)) {
     await caseModel.recordChainRun(params.caseId, {
-      cacheEntries: { [chainKey]: buildChainCacheEntry(inputHash, existing, chainKey) },
+      cacheEntries: { [chainKey]: buildChainCacheEntry(inputHash, existing, chainKey, promptSet) },
       performanceLogs: [
         buildPerformanceLog({
           chainName: chainKey,
+          promptSet,
           startedAt: new Date().toISOString(),
           inputHash,
           cacheHit: true,
@@ -287,6 +290,7 @@ async function ensureAdequacyReview(params: {
 
 async function runAdequacyReviewAndStore(params: Parameters<typeof ensureAdequacyReview>[0], inputHash: string) {
   const chainKey = `REVIEW:${params.sectionId}`;
+  const promptSet = promptSetForCase(params.caseData);
   const startedAt = new Date().toISOString();
   let reviewUsage: any = null;
   await caseModel.updateCase(params.caseId, {
@@ -301,6 +305,7 @@ async function runAdequacyReviewAndStore(params: Parameters<typeof ensureAdequac
     evidenceCards: params.evidenceCards,
     qnaHistory: await deidentifyQnaForOutbound(params.qnaHistory, reviewOutboundContext)
   }, {
+    promptSet,
     onUsage: (usage) => {
       reviewUsage = usage;
     }
@@ -312,13 +317,14 @@ async function runAdequacyReviewAndStore(params: Parameters<typeof ensureAdequac
     reviewInputHash: inputHash
   };
 
-  const cacheEntry = buildChainCacheEntry(inputHash, snapshot, chainKey);
+  const cacheEntry = buildChainCacheEntry(inputHash, snapshot, chainKey, promptSet);
   await caseModel.recordChainRun(params.caseId, {
     sectionAdequacyReviews: { [params.sectionId]: snapshot },
     cacheEntries: { [chainKey]: cacheEntry },
     performanceLogs: [
       buildPerformanceLog({
         chainName: chainKey,
+        promptSet,
         startedAt,
         inputHash,
         cacheHit: false,

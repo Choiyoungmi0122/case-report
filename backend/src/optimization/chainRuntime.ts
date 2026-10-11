@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { ChainCacheEntry, ChainPerformanceLog, ChainProgressState } from '../types';
 import { promptMetaForChainName } from '../llm/promptRegistry';
+import { PromptSet, promptSetForCase } from '../llm/promptSets';
 
 function normalizeValue(value: any): any {
   if (Array.isArray(value)) {
@@ -41,8 +42,13 @@ export function hashJoinedParts(parts: Array<string | number | boolean | null | 
  * chainName 을 주면 그 체인의 프롬프트 지문(버전·템플릿 해시·모델)을 함께 남긴다.
  * 지문이 있는 항목은 프롬프트나 모델이 바뀌면 캐시 적중에서 빠진다.
  */
-export function buildChainCacheEntry(inputHash: string, outputValue?: any, chainName?: string): ChainCacheEntry {
-  const meta = chainName ? promptMetaForChainName(chainName) : undefined;
+export function buildChainCacheEntry(
+  inputHash: string,
+  outputValue?: any,
+  chainName?: string,
+  promptSet: PromptSet = 'write'
+): ChainCacheEntry {
+  const meta = chainName ? promptMetaForChainName(chainName, promptSet) : undefined;
   return {
     inputHash,
     outputHash: outputValue === undefined ? undefined : hashValue(outputValue),
@@ -59,7 +65,8 @@ export function hasChainCacheHit(caseData: any, chainName: string, inputHash: st
   const entry = caseData?.chainCache?.[chainName];
   if (!entry || entry.inputHash !== inputHash) return false;
   if (!entry.promptFingerprint) return true;
-  const meta = promptMetaForChainName(chainName);
+  // 사례의 mode 로 프롬프트 세트를 정한다(Scaffold 사례는 Scaffold 프롬프트의 지문과 비교).
+  const meta = promptMetaForChainName(chainName, promptSetForCase(caseData));
   return !meta || entry.promptFingerprint === meta.promptFingerprint;
 }
 
@@ -91,10 +98,11 @@ export function buildPerformanceLog(params: {
   llmCallCount: number;
   error?: string;
   tokenUsage?: ChainPerformanceLog['tokenUsage'];
+  promptSet?: PromptSet;
 }): ChainPerformanceLog {
   const endedAt = new Date().toISOString();
   // 어떤 프롬프트·모델로 돌았는지 로그마다 남긴다 (연구 재현성).
-  const meta = promptMetaForChainName(params.chainName);
+  const meta = promptMetaForChainName(params.chainName, params.promptSet || 'write');
   return {
     chainName: params.chainName,
     startedAt: params.startedAt,

@@ -85,9 +85,22 @@ export class OpenAITerminologyResolver implements RetrievedTermResolver {
   private disabledUntil = 0;
   private readonly call: (input: ResolveInput) => Promise<TerminologyResolverDecision>;
 
-  constructor(model = DEFAULT_RESOLVER_MODEL, call?: (input: ResolveInput) => Promise<TerminologyResolverDecision>) {
+  private readonly systemPrompt: string;
+  private readonly label: string;
+
+  /**
+   * options.systemPrompt: 프롬프트 세트별 판정기 프롬프트. Scaffold 는 `prompts/scaffold/terminology_resolver.ts` 를 쓴다
+   * (rag/runtime.ts). 없으면 이 파일의 Write 프롬프트.
+   */
+  constructor(
+    model = DEFAULT_RESOLVER_MODEL,
+    call?: (input: ResolveInput) => Promise<TerminologyResolverDecision>,
+    options: { systemPrompt?: string; label?: string } = {}
+  ) {
     this.model = model;
     this.call = call || ((input) => this.callModel(input));
+    this.systemPrompt = options.systemPrompt || resolverSystemPrompt;
+    this.label = options.label || 'TERMINOLOGY resolver';
   }
 
   private memoKey(input: ResolveInput): string {
@@ -137,7 +150,7 @@ export class OpenAITerminologyResolver implements RetrievedTermResolver {
   private callModel(input: ResolveInput): Promise<TerminologyResolverDecision> {
     return callLLMWithSchema(
       ResolverDecisionSchema,
-      resolverSystemPrompt,
+      this.systemPrompt,
       buildResolverUserPrompt({
         original: input.original,
         candidates: input.candidates.map((candidate) => ({
@@ -150,7 +163,7 @@ export class OpenAITerminologyResolver implements RetrievedTermResolver {
       }),
       {
         model: this.model,
-        label: 'TERMINOLOGY resolver'
+        label: this.label
       }
     );
   }

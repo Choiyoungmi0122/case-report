@@ -17,6 +17,7 @@ import { buildChainCacheEntry, hasChainCacheHit, hashJoinedParts } from '../opti
 import { runQuestionGeneration, runSectionMissingDetection } from '../llm/chains';
 import { getEvidenceForSections } from '../llm/evidenceScope';
 import { CommonQuestionCategory } from '../llm/schemas/chain4_missing';
+import { PromptSet, promptSetForCase } from '../llm/promptSets';
 
 export const CORE_AI_SECTIONS: CareSection[] = [
   CareSection.PATIENT_INFORMATION,
@@ -44,6 +45,8 @@ export interface RefreshQuestionStateParams {
   caseData?: any;
   onChain4Usage?: (usage: any) => void;
   onChain5Usage?: (usage: any) => void;
+  /** 없으면 caseData.mode 로 정한다 */
+  promptSet?: PromptSet;
 }
 
 export interface QuestionStateCacheMeta {
@@ -54,6 +57,7 @@ export interface QuestionStateCacheMeta {
   chain4DurationMs: number;
   chain5DurationMs: number;
   startedAt: string;
+  promptSet: PromptSet;
 }
 
 export interface RefreshQuestionStateResult {
@@ -124,7 +128,8 @@ export function buildQuestionStateCacheEntries(result: RefreshQuestionStateResul
           missingInfoBullets: state.missingInfoBullets || []
         }))
       },
-      'CHAIN4'
+      'CHAIN4',
+      result.cacheMeta.promptSet
     ),
     CHAIN5: buildChainCacheEntry(
       result.cacheMeta.chain5InputHash,
@@ -135,7 +140,8 @@ export function buildQuestionStateCacheEntries(result: RefreshQuestionStateResul
           recommendedQuestions: state.recommendedQuestions || []
         }))
       },
-      'CHAIN5'
+      'CHAIN5',
+      result.cacheMeta.promptSet
     )
   };
 }
@@ -174,6 +180,7 @@ export function applyQuestionResultsToStates(params: {
 
 export async function refreshQuestionState(params: RefreshQuestionStateParams): Promise<RefreshQuestionStateResult> {
   const startedAt = new Date().toISOString();
+  const promptSet: PromptSet = params.promptSet || promptSetForCase(params.caseData);
   const inputHash = buildQuestionStateInputHash(params);
   const canReuse =
     params.caseData &&
@@ -210,7 +217,8 @@ export async function refreshQuestionState(params: RefreshQuestionStateParams): 
         chain5CacheHit: true,
         chain4DurationMs: 0,
         chain5DurationMs: 0,
-        startedAt
+        startedAt,
+        promptSet
       }
     };
   }
@@ -230,7 +238,7 @@ export async function refreshQuestionState(params: RefreshQuestionStateParams): 
   const chain4StartedAt = performance.now();
   const missingResult = await runSectionMissingDetection(
     { sectionDrafts: outboundDrafts, evidenceCards: scopedEvidenceCards, caseTitle: outboundTitle },
-    { onUsage: params.onChain4Usage }
+    { onUsage: params.onChain4Usage, promptSet }
   );
   const chain4DurationMs = Math.round((performance.now() - chain4StartedAt) * 100) / 100;
 
@@ -242,7 +250,7 @@ export async function refreshQuestionState(params: RefreshQuestionStateParams): 
       commonMissing: missingResult.commonMissing,
       caseTitle: outboundTitle
     },
-    { onUsage: params.onChain5Usage }
+    { onUsage: params.onChain5Usage, promptSet }
   );
   const chain5DurationMs = Math.round((performance.now() - chain5StartedAt) * 100) / 100;
 
@@ -273,7 +281,8 @@ export async function refreshQuestionState(params: RefreshQuestionStateParams): 
       chain5CacheHit: false,
       chain4DurationMs,
       chain5DurationMs,
-      startedAt
+      startedAt,
+      promptSet
     }
   };
 }
