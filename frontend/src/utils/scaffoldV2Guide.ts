@@ -172,7 +172,8 @@ export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
 /**
  * 첫 화면 "증례보고는 이렇게 구성됩니다 (CARE 지침)" 13개 항목의 예시 (2026-10-12 연구자 요청).
  * 항목마다 "예시 보기"를 눌러야 보인다. 모두 실습 환자와 다른 환자의 한의 증례보고 논문에서 가져와
- * 요점만 다시 쓴 것이다(제목·핵심 단어는 논문 그대로). 치료 개입은 작성 화면에 자세한 예시가 있어 안내만 둔다.
+ * 요점만 다시 쓴 것이다(제목·핵심 단어는 논문 그대로). 치료 개입도 다른 환자 논문 예시 하나를 둔다
+ * (요소별 자세한 예시는 작성 화면 기준 상자에 있다).
  * 출처와 근거 위치: docs/ti_guide_paper_examples_basis_v1.md 의 "첫 화면 CARE 13개 항목 예시".
  */
 export type CareOverviewExample = { text: string; point: string; source: string };
@@ -225,9 +226,10 @@ export const CARE_OVERVIEW_EXAMPLES_V2: Record<string, CareOverviewExample> = {
     source: PAPER.fibromyalgia
   },
   THERAPEUTIC_INTERVENTIONS: {
-    text: '오늘 연습하는 항목입니다. 작성 화면의 "CARE 기준" 상자에 이 환자 예시와 논문 예시가 요소별로 있습니다.',
-    point: '치료의 종류, 시행 방법(용량·기간·빈도), 치료를 바꾼 내용과 이유를 적습니다.',
-    source: '작성 화면 안내'
+    text:
+      '성향정기산을 기본방으로 하고, 인지장애 개선을 위해 원지·석창포를, 무른 변과 빈뇨 개선을 위해 백복령·등심을 더하였다(구성은 표로 제시). 침은 입원 때부터 중풍칠처혈을 바탕으로 백회, 곡지, 족삼리 등에 하루 1회 자침하였고, 입원일부터 2주 동안 격일로 족삼리-하거허 또는 태양-솔곡에 4 Hz 전침을 20분 시행하였다. 입원 전부터 먹던 약은 치료 기간 동안 같게 유지하였다.',
+    point: '한약과 더한 약재의 이유, 침의 혈위·빈도, 전침의 기간·주파수·시간, 그대로 둔 약까지 한 문단에 담았습니다.',
+    source: PAPER.stroke
   },
   FOLLOW_UP_OUTCOMES: {
     text:
