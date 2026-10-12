@@ -59,6 +59,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-Q3 v1: 2026-10-12 CARE 점검의 "없음" 항목 하나를 쓰기 위한 질문 (새 체인).
  *  - SW-C v3: 2026-10-12 하위 요소 판정(subItems) 추가. 환자 정보·진단 평가·치료 개입·추적 관찰만 (docs/care_subelements_v1.md).
  *  - SW-D v5 / SW-R v5: 2026-10-12 섹션별 쓰기 규칙(studyWrite/careItems.ts)을 CARE 설명 문서 원문(Riley 2017)과 대조해 빠진 요소를 더함.
+ *  - SW-D v6 / SW-R v6: 2026-10-12 초록 분량을 국내 관례(6~10문장)에서 CARE 기준(영문 100~250단어 수준, 학술지 규정 우선)으로 바꿈.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',

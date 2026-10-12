@@ -8,8 +8,8 @@
 
 import { sharedPrinciples } from './common';
 
-export const STUDY_WRITE_DRAFT_PROMPT_VERSION = 'SW-D:v5';
-export const STUDY_WRITE_REVISE_PROMPT_VERSION = 'SW-R:v5';
+export const STUDY_WRITE_DRAFT_PROMPT_VERSION = 'SW-D:v6';
+export const STUDY_WRITE_REVISE_PROMPT_VERSION = 'SW-R:v6';
 export const STUDY_WRITE_CARE_CHECK_PROMPT_VERSION = 'SW-C:v3';
 
 // 공통 원칙 P1~P7 은 common.ts 의 문구를 그대로 쓴다(다른 체인과 같은 말). 실험용 Write 에만 있는 규칙은 P8·P9 로 잇는다.
