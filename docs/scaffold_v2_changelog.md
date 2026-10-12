@@ -190,6 +190,14 @@
 - 행동 로그: `ui_action`의 `pane_toggled`. `pane`은 source·summary, `open`은 펼침 여부, `by`는 button 또는 record_quote(원문 보기로 자동 펼침). 연구 기록 화면에는 "원기록·내 정리 열 접음/펼침"으로 보인다.
 - V2(v3.0) 사례에만 적용된다. V1 화면은 그대로다. 파일: `frontend/src/components/scaffold/PaneResizer.tsx`, `frontend/src/pages/ScaffoldSectionPage.tsx`, 같은 이름의 `.css`.
 
+## 2026-10-12 — 치료 개입 기준 상자에 논문 예시 추가
+
+- 요소(9a·9b·9c)마다 "논문에서는 이렇게 씁니다 (다른 환자 N개)"를 접힌 채로 붙였다. 한의 증례보고 논문 5편(`Desktop\2026_dxlab\03.증례보고\2026 care-emr 논문\`)의 치료 서술을 요점만 다시 쓴 예다. 9a 2개, 9b 4개, 9c 3개.
+- 예시마다 "볼 점"(얼마나 자세히 쓰는지)과 출처를 함께 보인다.
+- 이 환자 예시는 그대로 요소마다 한 문장이다. 이 사례의 답과 겹치는 논문 서술(도네페질·쿠에티아핀)은 넣지 않았다. 기준 상자 끝 안내 문구를 이에 맞게 고쳤다.
+- 행동 로그: `ui_action`의 `paper_examples_toggled`(요소 코드, 펼침 여부). 연구 기록 화면에는 "논문 예시 펼침/접음".
+- 근거: `docs/ti_guide_paper_examples_basis_v1.md`.
+
 ## V1 자료와 함께 분석할 때 주의
 - V1: `scaffoldVersion 'v2.0'`, 섹션 2개(추적 관찰은 연구자가 생략), 게이트 꺼짐, 메모에 회차·출처 필드 없음, 충분성 판단 이유 없음.
 - V2: `scaffoldVersion 'v3.0'`, 섹션 1개, 게이트 켬(own_draft 인정), 메모 회차·분류·출처 있음(없으면 미지정), 판단 이유 선택 입력.

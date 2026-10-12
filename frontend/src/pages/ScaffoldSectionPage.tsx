@@ -2109,11 +2109,30 @@ export default function ScaffoldSectionPage() {
                           ) : null}
                           <small>{element.example.note}</small>
                         </div>
+                        {element.paperExamples.length > 0 ? (
+                          <details
+                            className="scaffold-care-guide__papers"
+                            onToggle={(event) =>
+                              logUiAction('paper_examples_toggled', { code: element.code, open: event.currentTarget.open })
+                            }
+                          >
+                            <summary>논문에서는 이렇게 씁니다 (다른 환자 {element.paperExamples.length}개)</summary>
+                            <ul>
+                              {element.paperExamples.map((paper) => (
+                                <li key={paper.sentence}>
+                                  <span className="scaffold-care-guide__paper-sentence">{paper.sentence}</span>
+                                  <span className="scaffold-care-guide__paper-point">볼 점 · {paper.point}</span>
+                                  <span className="scaffold-care-guide__paper-source">출처 · {paper.source}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
                       </section>
                     ))}
                   </div>
                   <p className="scaffold-care-guide__closing">
-                    예시는 요소마다 한 문장씩만 보여 줍니다. 이 사례의 전체 내용은 왼쪽 기록에서 직접 찾아 내 말로 적어 보세요. AI 초안은 내 초안을 저장한 뒤에 볼 수 있습니다.
+                    이 환자 예시는 요소마다 한 문장씩만 보여 줍니다. "논문에서는 이렇게 씁니다"는 다른 환자의 한의 증례보고 논문에서 가져온 예로, 얼마나 자세히 쓰는지 참고하는 용도입니다. 이 사례의 내용은 왼쪽 기록에서 직접 찾아 내 말로 적어 보세요. AI 초안은 내 초안을 저장한 뒤에 볼 수 있습니다.
                   </p>
                 </details>
               ) : sectionGuide ? (

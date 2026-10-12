@@ -7,6 +7,9 @@
  *  - 예시 문장이 어느 원기록에 근거하는지 회차와 구절(원문에 그대로 있는 문자열)로 연결한다.
  *  - 9c(치료 변경과 이유)는 현재 사례 예시를 주지 않고 다른 환자 예시를 유지한다.
  *  - 고정 AI 초안은 기존 공개 게이트 뒤에만 보인다. 이 파일은 초안 문장을 담지 않는다.
+ *  - 논문 예시(paperExamples, 2026-10-12 연구자 요청): 한의 증례보고 논문 5편의 치료 개입 서술을
+ *    요소별로 2~4개 보여 주어 "얼마나 자세히" 쓰는지 참고하게 한다. 모두 다른 환자 이야기이고, 논문 문장을
+ *    그대로 옮기지 않고 요점을 다시 쓴 것이다. 출처와 각 예시의 근거 위치: docs/ti_guide_paper_examples_basis_v1.md
  */
 
 export type TiGuideExample =
@@ -21,6 +24,15 @@ export type TiGuideExample =
     }
   | { kind: 'other_patient'; sentence: string; note: string };
 
+/** 한의 증례보고 논문에서 가져온 다른 환자 예시. 문장은 논문 내용을 다시 쓴 것이다. */
+export type TiPaperExample = {
+  /** 화면에 보이는 짧은 출처 이름 */
+  source: string;
+  sentence: string;
+  /** 이 예시에서 눈여겨볼 점 */
+  point: string;
+};
+
 export type TiGuideElement = {
   code: '9a' | '9b' | '9c';
   label: string;
@@ -28,7 +40,17 @@ export type TiGuideElement = {
   criteria: string;
   howTo: string[];
   example: TiGuideExample;
+  paperExamples: TiPaperExample[];
 };
+
+/** 논문 예시 출처 (화면 표시용 짧은 이름). 전체 제목: docs/ti_guide_paper_examples_basis_v1.md */
+const PAPER = {
+  dementia: '치매 증상 악화 증례 (억간산가미)',
+  fibromyalgia: '섬유근육통 불면 증례 (분심기음)',
+  stroke: '뇌경색 후 지남력장애·현훈 증례 (성향정기산가미방)',
+  bipolar: '양극성 장애 우울 삽화 증례',
+  gbs: '길랑바레증후군 증례 (침·전침)'
+} as const;
 
 export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
   goal: '무엇을 어떻게 시행했는지 다른 사람이 따라 할 수 있을 만큼 적습니다. 기록에 있는 것만 적고, 없는 것은 없다고 적습니다.',
@@ -50,7 +72,21 @@ export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
         quote: '자하거 약침 2cc (대한약침학회 제조, 2cc 앰플)',
         sentence: '2회차(3월 13일)부터 자하거 약침(대한약침학회 제조, 2 cc 앰플)을 시행하였다.',
         note: '치료 한 가지를 적는 방식의 예입니다. 이 사례의 나머지 치료는 기록에서 직접 찾아 같은 방식으로 적어 보세요.'
-      }
+      },
+      paperExamples: [
+        {
+          source: PAPER.fibromyalgia,
+          sentence:
+            '한약(청파전-H, 7일째부터 분심기음), 침(어깨·등 저주파 전기 자극 병행), 약침(신바로 약침), 뜸(온구기, 중완), 추나를 함께 시행하였다.',
+          point: '시행한 치료를 한 가지도 빠뜨리지 않고 종류별로, 기록된 이름 그대로 나열합니다.'
+        },
+        {
+          source: PAPER.gbs,
+          sentence:
+            '침과 전침 치료를 하였고, 재활의학과 협진으로 재활 치료(TENS, 보행 훈련)를 하루 1회 받았다. 입원 중 복용한 약은 표로 정리하였다. 한약은 환자가 원하지 않아 투여하지 않았다.',
+          point: '다른 과에서 받은 치료와 함께 복용한 약도 적습니다. 하지 않은 치료가 있으면 그 이유도 적습니다.'
+        }
+      ]
     },
     {
       code: '9b',
@@ -68,7 +104,33 @@ export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
         quote: '황련해독탕 2주 (한신, 보험한약 가루약 5.61g/3포, 1일 3회 식후 30분 복용)',
         sentence: '황련해독탕(보험 한약 가루약, 1포 5.61 g)을 1일 3회 식후 30분에 2주간 복용하도록 처방하였다.',
         note: '처음 처방 기준의 예입니다. 이후 복용이 끝난 시점과 다시 처방된 시점은 기록에서 찾아 이어 적어 보세요.'
-      }
+      },
+      paperExamples: [
+        {
+          source: PAPER.dementia,
+          sentence:
+            '억간산가진피반하를 11월 3일부터 14일까지 하루 2첩을 3회로 나누어 매 식후 1시간에 1회 100 cc씩 복용하게 하였다. 구성 약재와 용량은 표로 제시하였다.',
+          point: '한약은 처방 이름, 시작일과 종료일, 1회 용량, 하루 횟수, 복용 시점을 모두 적고 약재 구성은 표로 붙입니다.'
+        },
+        {
+          source: PAPER.fibromyalgia,
+          sentence:
+            '입원 27일 동안 하루 2회, 지름 0.25 mm·길이 30 mm 일회용 호침으로 풍지(GB20), 곡지(LI11), 견정(GB21) 등 압통점 주위 혈위에 직자하고 10~15분 유침하였다. 어깨와 등에는 저주파 자극기(16 Hz)로 전기 자극을 함께 주었다.',
+          point: '침은 기간과 빈도, 침의 규격, 혈위, 자침 방법, 유침 시간을 한 문단에 모읍니다.'
+        },
+        {
+          source: PAPER.stroke,
+          sentence:
+            '입원일부터 2주 동안 격일로 족삼리-하거허 또는 태양-솔곡에 전극을 연결해 4 Hz로 20분간 전침 치료를 하였다. 자입 깊이는 족삼리·하거허 40 mm, 태양·솔곡 25 mm였다.',
+          point: '이 논문은 침 치료를 STRICTA(침 치료 보고 기준)에 맞춰 적었습니다. 혈위 짝, 주파수, 시간, 깊이까지 적혀 있습니다.'
+        },
+        {
+          source: PAPER.bipolar,
+          sentence:
+            '기상 오전 7시 30분, 취침 오후 10시 30분을 목표로 정하고, 낮잠은 오후 2시 이전에 30분 안으로 자도록 권고하였다. 생활 리듬 점검표는 주 1회 내원 때 환자와 함께 확인하였다.',
+          point: '집에서 하도록 교육한 것은 무엇을, 언제, 얼마나 하도록 했는지와 어떻게 확인했는지를 적습니다.'
+        }
+      ]
     },
     {
       code: '9c',
@@ -84,7 +146,25 @@ export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
         kind: 'other_patient',
         sentence: '2차 방문부터 아침에 뻣뻣함이 남아 있어 온열 치료를 추가하였다.',
         note: '다른 환자(요통) 예시입니다. 이 사례에서 바뀐 치료와 그 이유는 기록에서 직접 찾아 적어 보세요.'
-      }
+      },
+      paperExamples: [
+        {
+          source: PAPER.dementia,
+          sentence:
+            '치료 13일째(11월 15일)에도 식욕부진과 소화불량이 나아지지 않아, 진피·반하를 빼고 산사·신곡·맥아·오미자를 더한 처방으로 바꾸었다. 복용 방법과 용량은 그대로 두었다.',
+          point: '바꾼 날짜, 기록된 이유, 무엇을 빼고 더했는지, 그대로 둔 것까지 함께 적습니다.'
+        },
+        {
+          source: PAPER.fibromyalgia,
+          sentence: '입원 7일째부터 통증보다 불면이 더 큰 문제가 되어, 한약을 청파전-H에서 분심기음으로 바꾸었다.',
+          point: '바꾸기 전과 후의 처방 이름을 둘 다 적습니다.'
+        },
+        {
+          source: PAPER.stroke,
+          sentence: '입원 전부터 먹던 약은 치료 기간 동안 같은 용량으로 유지하였다.',
+          point: '바꾸지 않은 치료도 적어 두면, 읽는 사람이 그 기간에 어떤 치료가 함께 있었는지 알 수 있습니다.'
+        }
+      ]
     }
   ]
 };

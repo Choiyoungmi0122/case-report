@@ -62,6 +62,7 @@ const UI_ACTION_LABELS: Record<string, string> = {
   sentence_flag_cancelled: '표시 해제',
   care_element_map_toggled: 'CARE 세부 항목 표 펼침/접음',
   pane_toggled: '원기록·내 정리 열 접음/펼침',
+  paper_examples_toggled: '논문 예시 펼침/접음',
   pause: '멈춤 (입력 없음)'
 };
 
