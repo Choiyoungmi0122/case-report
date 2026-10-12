@@ -306,6 +306,18 @@ export default function StudyWriteDraftPage() {
     }
   };
   const mainTextRef = useRef<HTMLDivElement | null>(null);
+  // 초안을 고치는 동안 가운데 초안 위에 띄울 문구 (없으면 null)
+  const draftBusy: string | null = revising
+    ? pendingQuestion
+      ? '답을 반영해 초안을 고쳐 쓰는 중…'
+      : '수정 요청대로 초안을 고쳐 쓰는 중…'
+    : reviewing
+      ? '직접 고친 내용과 나머지를 점검하는 중…'
+      : careInfoSaving
+        ? '입력한 정보로 이 섹션을 다시 쓰는 중…'
+        : selBusy
+          ? '고친 내용을 반영하는 중…'
+          : null;
 
   // 첫 기록일을 넣었으면 "첫 기록일 +N일"을 실제 날짜로 보여 준다 (저장된 초안은 그대로)
   const anchor = data?.dateAnchor || null;
@@ -641,6 +653,7 @@ export default function StudyWriteDraftPage() {
                   </div>
                 </div>
               ) : null}
+              <div className={`sw-draft__content${draftBusy ? ' is-busy' : ''}`} aria-busy={Boolean(draftBusy)}>
               {fullEditOpen ? (
                 <div className="sw-draft__full-edit">
                   <textarea
@@ -698,6 +711,15 @@ export default function StudyWriteDraftPage() {
               ) : (
                 <p className="sw-draft__empty">{running ? '이 섹션은 아직 쓰는 중입니다.' : '이 섹션의 초안이 없습니다.'}</p>
               )}
+                {draftBusy ? (
+                  <div className="sw-draft__busy" role="status">
+                    <div className="sw-draft__busy-box">
+                      <span className="sw-draft__spinner" aria-hidden="true" />
+                      <strong>{draftBusy}</strong>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               <section className="sw-draft__attachments">
                 <h3>표와 그림</h3>

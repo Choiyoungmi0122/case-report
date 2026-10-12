@@ -1342,3 +1342,63 @@
 .sw-chat--question.is-answered {
   border-left-color: #b8c2cf;
 }
+
+/* 초안을 고치는 동안: 초안 글 위에 반투명 막, 그 가운데 도는 표시와 문구.
+   (.sw-draft__body 는 페이지 3단 그리드 이름이라 겹치지 않게 .sw-draft__content 를 쓴다) */
+.sw-draft__content {
+  position: relative;
+}
+
+.sw-draft__content.is-busy > :not(.sw-draft__busy) {
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sw-draft__busy {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 160px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 글이 길어도 보이는 화면 가운데쯤에 머문다 */
+.sw-draft__busy-box {
+  position: sticky;
+  top: 38vh;
+  margin-top: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 20px rgba(15, 30, 45, 0.16);
+}
+
+.sw-draft__busy-box strong {
+  color: #17324d;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.sw-draft__spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 4px solid #d6e2ee;
+  border-top-color: #1f5f8b;
+  animation: sw-draft-spin 0.8s linear infinite;
+}
+
+@keyframes sw-draft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
