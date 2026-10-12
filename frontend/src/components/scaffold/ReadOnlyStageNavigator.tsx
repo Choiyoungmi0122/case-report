@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { ScaffoldStateResponse } from '../../services/api';
 import { getReadOnlyViewCaseId } from '../../utils/readOnlyView';
 import { getSectionConfig, getSectionsByGroup } from '../../utils/scaffoldUi';
-import { getStudySectionIds, isScaffoldV2Data } from '../../utils/scaffoldVersion';
+import { getStudySectionIds } from '../../utils/scaffoldVersion';
 
 export type ReadOnlyStage = 'pre' | 'post';
 
@@ -160,11 +160,8 @@ export function ReadOnlyNavigatorBar({
   if (!caseId || !data || getReadOnlyViewCaseId() !== caseId) return null;
 
   const available = (data.sectionStates || []).map((item) => item.sectionId as string);
-  // 실험 모드가 아닌 V2 사례(전체 섹션 시험·시연)는 모든 섹션을 훑어볼 수 있게 한다 (2026-10-12).
-  // 학생 V1 기록은 studyConfig 가 비어 있어도 예전처럼 실험 경로·실험 섹션으로 연다.
-  const fullSectionV2 = isScaffoldV2Data(data) && !data.studyConfig?.studyMode;
-  const studyMode = !fullSectionV2;
-  const studied = studyMode ? getStudySectionIds(data).filter((id) => available.includes(id)) : [];
+  // 실험 모드가 아닌 V2 사례(전체 섹션 시험·시연)는 getStudySectionIds 가 모든 섹션을 돌려준다 (2026-10-12).
+  const studied = getStudySectionIds(data).filter((id: string) => available.includes(id));
   const sectionIds = studied.length > 0 ? studied : available;
   const writeOnlySectionIds = getSectionsByGroup('additional_authoring').map((section) => section.sectionId as string);
   const revealedSectionIds = (data.scaffoldState?.sectionProgress || [])
@@ -178,7 +175,6 @@ export function ReadOnlyNavigatorBar({
         sectionIds,
         revealedSectionIds,
         sectionLabel: (sectionId) => getSectionConfig(sectionId)?.displayName || sectionId,
-        basePath: studyMode ? '/study/scaffold' : '/scaffold',
         writeOnlySectionIds
       })}
       currentKey={currentKey}

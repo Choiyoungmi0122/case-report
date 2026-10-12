@@ -37,8 +37,21 @@ export function getStudySectionIdsForVersion(version?: string | null) {
 }
 
 /** 실험용 경로에서 다룰 CARE 항목. 케이스의 저장 버전에 따라 V1(2개) 또는 V2(치료 개입만)를 돌려준다. */
-export function getStudySectionIds(data: HasVersionMetadata) {
+export function getStudySectionIds(data: HasVersionMetadata): string[] {
+  if (isFullSectionScaffoldV2Data(data)) {
+    return ((data as any)?.sectionStates || []).map((item: any) => String(item.sectionId));
+  }
   return getStudySectionIdsForVersion(data?.versionMetadata?.scaffoldVersion);
+}
+
+/**
+ * 실험 모드가 아닌 V2 사례(전체 섹션 시험·시연: V2-ALL-01, V2-DEMO-01 등)인지 (2026-10-12).
+ * 이런 사례는 실험용 화면(/study/scaffold)으로 열어도 12개 섹션을 모두 다룬다.
+ * 학생 V2 사례는 studyConfig.studyMode 가 true 이고, 학생 V1 기록은 V2 가 아니므로 해당하지 않는다.
+ */
+export function isFullSectionScaffoldV2Data(data: HasVersionMetadata) {
+  const studyConfig = (data as any)?.studyConfig;
+  return isScaffoldV2Data(data) && Boolean(studyConfig) && studyConfig.studyMode === false;
 }
 
 /**
