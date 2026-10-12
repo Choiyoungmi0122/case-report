@@ -169,6 +169,90 @@ export const TI_GUIDE_V2: { goal: string; elements: TiGuideElement[] } = {
   ]
 };
 
+/**
+ * 첫 화면 "증례보고는 이렇게 구성됩니다 (CARE 지침)" 13개 항목의 예시 (2026-10-12 연구자 요청).
+ * 항목마다 "예시 보기"를 눌러야 보인다. 모두 실습 환자와 다른 환자의 한의 증례보고 논문에서 가져와
+ * 요점만 다시 쓴 것이다(제목·핵심 단어는 논문 그대로). 치료 개입은 작성 화면에 자세한 예시가 있어 안내만 둔다.
+ * 출처와 근거 위치: docs/ti_guide_paper_examples_basis_v1.md 의 "첫 화면 CARE 13개 항목 예시".
+ */
+export type CareOverviewExample = { text: string; point: string; source: string };
+
+export const CARE_OVERVIEW_EXAMPLES_V2: Record<string, CareOverviewExample> = {
+  TITLE: {
+    text: '침 치료 및 전침 치료로 호전된 길랑바레증후군 환자의 균형 및 보행 개선: 증례보고',
+    point: '치료(침·전침), 진단(길랑바레증후군), "증례보고"가 제목에 모두 들어 있습니다.',
+    source: PAPER.gbs
+  },
+  KEYWORDS: {
+    text: 'fibromyalgia, insomnia, Bunshimgi-eum, Korean-medicine, case report',
+    point: '진단, 주된 증상, 쓴 처방, 치료 분야, "case report"를 골랐습니다.',
+    source: PAPER.fibromyalgia
+  },
+  ABSTRACT: {
+    text:
+      '섬유근육통으로 불면을 겪는 입원 환자에게 27일 입원 중 21일 동안 분심기음을 포함한 한방 치료를 하였다. 불면은 ISI, 여러 부위의 통증은 NRS, 전반적 건강 상태는 EQ-5D로 평가하였고, 치료 뒤 세 지표가 모두 치료 전보다 나아졌다.',
+    point: '누구에게, 무엇을, 얼마 동안 했고, 무엇으로 평가해 어떻게 되었는지를 한 문단에 담습니다.',
+    source: PAPER.fibromyalgia
+  },
+  INTRODUCTION: {
+    text:
+      '길랑바레증후군에 한의 치료를 한 증례는 여럿 있지만, 대부분 근력이나 일상생활 점수만 평가했고 보행을 정량적으로 평가한 보고는 없었다. 이 증례는 면역글로불린 치료 뒤 재활과 한의 치료를 함께 받은 환자에서 보행 분석으로 균형과 보행의 변화를 확인하여 보고한다.',
+    point: '기존 보고에 없던 점을 문헌과 함께 밝히고, 그래서 이 증례를 보고한다는 문장으로 끝냅니다.',
+    source: PAPER.gbs
+  },
+  PATIENT_INFORMATION: {
+    text:
+      '환자는 30대 초반 한국인 남성으로 운동 관련 업종 취업을 준비하고 있었고, 미혼으로 부모와 함께 살았다. 우울, 무기력, 불면으로 내원하였으며, 과거 양극성 장애로 진단받아 약물 치료를 받다가 부작용으로 판단해 스스로 중단한 적이 있었다.',
+    point: '나이·성별, 사회적 배경, 주된 증상, 과거 진단과 치료 경과를 적습니다. 이름처럼 환자를 알아볼 수 있는 정보는 쓰지 않습니다.',
+    source: PAPER.bipolar
+  },
+  CLINICAL_FINDINGS: {
+    text:
+      '식사는 하루 2끼, 한 번에 1/3공기 정도였고 식후 명치 불편감을 호소하였다. 대변은 2~3일에 1회로 변비 양상이었고, 수면은 2시간 정도였다. 맥은 삭(數)하였고 설은 담홍(淡紅), 태는 박백(薄白)이었다.',
+    point: '문진·맥진·설진에서 확인한 소견을 항목별로, 숫자가 있으면 숫자로 적습니다.',
+    source: PAPER.fibromyalgia
+  },
+  TIMELINE: {
+    text:
+      '8월 28일 낙상 후 대퇴골 골절 수술 → 10월 8일 야간 섬망 발생 → 10월 11일 한방병원 입원 → 10월 15일 COVID-19 확진 → 11월 3일 억간산가진피반하 시작 → 11월 15일 처방 변경 → 12월 1일 퇴원.',
+    point: '증상이 생기고 바뀐 날, 치료를 시작하고 바꾼 날, 평가한 날을 시간 순서로 늘어놓습니다. 논문에서는 그림이나 표로 붙이기도 합니다.',
+    source: PAPER.dementia
+  },
+  DIAGNOSTIC_ASSESSMENT: {
+    text:
+      '1990년 미국류마티스학회 분류 기준(3개월 이상 지속된 전신 통증, 18개 압통점 중 11개 이상)에 따라 섬유근육통으로 진단하였다. 어깨·손가락 X-ray와 혈액·소변 검사에서는 이상이 없었다.',
+    point: '어떤 기준과 검사로 진단했는지, 다른 원인을 확인하려고 한 검사 결과까지 적습니다. 변증을 했다면 변증과 그 근거도 적습니다.',
+    source: PAPER.fibromyalgia
+  },
+  THERAPEUTIC_INTERVENTIONS: {
+    text: '오늘 연습하는 항목입니다. 작성 화면의 "CARE 기준" 상자에 이 환자 예시와 논문 예시가 요소별로 있습니다.',
+    point: '치료의 종류, 시행 방법(용량·기간·빈도), 치료를 바꾼 내용과 이유를 적습니다.',
+    source: '작성 화면 안내'
+  },
+  FOLLOW_UP_OUTCOMES: {
+    text:
+      '도수근력평가는 입원 시(4월 20일) 우측 상지/하지 5/3, 좌측 4-/3에서 5월 9일 양측 모두 5/4+로 바뀌었다. 치료와 관련된 부작용은 나타나지 않았다.',
+    point: '같은 도구로 잰 값을 시점과 함께 적고, 이상반응이 있었는지 없었는지도 적습니다.',
+    source: PAPER.gbs
+  },
+  DISCUSSION_CONCLUSION: {
+    text:
+      '이 증례에는 한계가 있다. 입원 당시 치매 평가를 하지 않아 그해 5월의 검사 결과를 기준으로 삼았고, 행동심리증상 평가 도구(NPI)를 쓰지 않아 증상 경과는 진료 기록에 의존하였다.',
+    point: '좋았던 점만 쓰지 않고, 결론을 얼마나 믿을 수 있는지에 영향을 주는 한계를 구체적으로 적습니다.',
+    source: PAPER.dementia
+  },
+  PATIENT_PERSPECTIVE: {
+    text: '치료 5일째 간병인은 "치매 증상은 이제 아침에는 거의 정상이에요. 하지만 오후로 갈수록 인지가 떨어져요."라고 말하였다. 퇴원 무렵 환자는 이제 다 나아서 집에 가도 될 것 같다고 하였다.',
+    point: '환자나 보호자가 한 말을 옮기고, 누가 언제 한 말인지 밝힙니다. 직접 한 말은 따옴표로 씁니다.',
+    source: PAPER.dementia
+  },
+  INFORMED_CONSENT: {
+    text: '환자에게 증례보고에 대한 동의를 얻었으며, 기관 임상시험심사위원회의 심의를 통과하였다(승인 번호 함께 기재).',
+    point: '동의를 받았다는 사실과 IRB 심의 여부·승인 번호를 적습니다.',
+    source: PAPER.gbs
+  }
+};
+
 /** 충분성 판단 선택지의 뜻과 짧은 예 (V2-07). 값은 기존 CONFIRMATION_JUDGMENT_OPTIONS와 같다. */
 export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string; example: string }> = {
   available_in_record: {

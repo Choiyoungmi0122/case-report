@@ -5,7 +5,7 @@ import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyOverviewPhase } from '../components/scaffold/ReadOnlyStageNavigator';
 import CaseNotesV2, { EMPTY_CASE_NOTE_DRAFT, type CaseNoteDraft } from '../components/scaffold/CaseNotesV2';
 import StageGuide from '../components/scaffold/StageGuide';
-import { V2_INTRO, V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
+import { CARE_OVERVIEW_EXAMPLES_V2, V2_INTRO, V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 import {
   EmrSearchBox,
   HighlightedText,
@@ -721,11 +721,31 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
       <ol>
         {CARE_OVERVIEW.map((item) => {
           const isToday = studySectionIds.includes(item.sectionId);
+          const example = isV2 ? CARE_OVERVIEW_EXAMPLES_V2[item.sectionId] : undefined;
           return (
             <li key={item.sectionId} className={isToday ? 'is-today' : ''}>
               <strong>{item.name}</strong>
               <span>{item.summary}</span>
               {isToday ? <em>오늘 연습</em> : null}
+              {example ? (
+                <details
+                  className="scaffold-v2__care-example"
+                  onToggle={(event) =>
+                    void logEvent('ui_action', {
+                      kind: 'care_overview_example_toggled',
+                      section: item.sectionId,
+                      open: event.currentTarget.open
+                    })
+                  }
+                >
+                  <summary>예시 보기</summary>
+                  <div className="scaffold-v2__care-example-body">
+                    <span className="scaffold-v2__care-example-text">{example.text}</span>
+                    <span className="scaffold-v2__care-example-point">볼 점 · {example.point}</span>
+                    <span className="scaffold-v2__care-example-source">출처 · {example.source}</span>
+                  </div>
+                </details>
+              ) : null}
             </li>
           );
         })}

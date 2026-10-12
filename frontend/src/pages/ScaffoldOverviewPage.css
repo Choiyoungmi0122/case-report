@@ -1544,6 +1544,69 @@
   white-space: nowrap;
 }
 
+/* CARE 13개 항목의 예시 (2026-10-12). 누르면 펼쳐진다. 모두 다른 환자 논문 예시다. */
+.scaffold-v2__care-example {
+  margin-top: 4px;
+}
+
+.scaffold-v2__care-example > summary {
+  display: inline-block;
+  padding: 1px 10px;
+  border: 1px solid #d9c48a;
+  border-radius: 999px;
+  background: #fff;
+  color: #7a5a14;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.scaffold-v2__care-example > summary::-webkit-details-marker {
+  display: none;
+}
+
+.scaffold-v2__care-example > summary::before {
+  content: '\25B8';
+  margin-right: 5px;
+}
+
+.scaffold-v2__care-example[open] > summary::before {
+  content: '\25BE';
+}
+
+.scaffold-v2__care-example > summary:focus-visible {
+  outline: 2px solid #b7791f;
+  outline-offset: 2px;
+}
+
+.scaffold-v2__care-example-body {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-left: 3px solid #d9c48a;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.scaffold-v2__care-example-text {
+  color: #3f3414;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.scaffold-v2__care-example-point {
+  color: #7a4b00;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scaffold-v2__care-example-source {
+  color: #8a7a55;
+  font-size: 12px;
+}
+
 @media (max-width: 980px) {
   .scaffold-v2__care-map ol {
     grid-template-columns: 1fr;
