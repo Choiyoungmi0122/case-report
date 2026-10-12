@@ -11,8 +11,9 @@
 .scaffold-workspace {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  min-height: 0;
+  /* 2026-10-12: 화면 높이에 가두지 않는다. 세 열이 화면 높이만큼 차지하고, 열 바깥에서
+     스크롤하면 페이지 전체가 내려가 위쪽 진행 표시·이동 띠가 화면 밖으로 밀려난다. */
+  min-height: 100vh;
   background: #f8fafc;
 }
 
@@ -177,7 +178,8 @@
 /* -------------------------------------------------------- three panels -- */
 
 .scaffold-workspace__grid {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  height: 100vh;
   min-height: 0;
   display: grid;
   grid-template-columns: 31% minmax(0, 1fr) 29%;
@@ -418,6 +420,7 @@
 
   .scaffold-workspace__grid {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
   }
 
   .scaffold-pane {
