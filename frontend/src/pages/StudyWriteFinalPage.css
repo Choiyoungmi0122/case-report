@@ -1,4 +1,34 @@
+/* 원문 EMR 유지하기: 왼쪽에 원문 칸, 오른쪽에 원고. 유지하지 않으면 원고만 가운데 */
+.sw-final-shell.is-record-pinned {
+  display: grid;
+  grid-template-columns: minmax(360px, 36%) minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 24px;
+}
+
+.sw-final-shell .sw-record--pinned {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  margin-top: 24px;
+  height: calc(100vh - 32px);
+}
+
+@media (max-width: 1000px) {
+  .sw-final-shell.is-record-pinned {
+    /* 1fr 이면 타임라인 표 너비만큼 칸이 늘어 화면이 옆으로 밀린다 */
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+  .sw-final-shell .sw-record--pinned {
+    position: static;
+    margin: 16px 20px 0;
+    height: 55vh;
+  }
+}
+
 .sw-final {
+  width: 100%;
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 20px 60px;
