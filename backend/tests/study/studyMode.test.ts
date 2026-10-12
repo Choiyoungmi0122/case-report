@@ -74,10 +74,27 @@ async function run() {
         text: '이전 검사 결과를 더 확인하고 싶다.',
         sourceEvidenceIds: ['evidence-1'],
         createdAt: '2026-08-18T09:01:00.000Z'
+      },
+      {
+        id: 'note-literature',
+        type: 'literature',
+        text: '같은 처방을 쓴 다른 증례보고를 찾아보고 싶다.',
+        sourceEvidenceIds: [],
+        createdAt: '2026-08-18T09:02:00.000Z'
+      },
+      {
+        id: 'note-unknown-type',
+        type: 'something-else',
+        text: '알 수 없는 분류는 눈에 띈 점으로 저장한다.',
+        sourceEvidenceIds: [],
+        createdAt: '2026-08-18T09:03:00.000Z'
       }
     ]
   });
-  assert.equal(noteBasedCaseMap?.caseNotes.length, 2);
+  assert.equal(noteBasedCaseMap?.caseNotes.length, 4);
+  // 문헌 확인 필요(2026-10-12)는 그대로 저장되고, 모르는 분류는 기존처럼 눈에 띈 점이 된다.
+  assert.equal(noteBasedCaseMap?.caseNotes[2].type, 'literature');
+  assert.equal(noteBasedCaseMap?.caseNotes[3].type, 'observation');
   assert.deepEqual(noteBasedCaseMap?.caseNotes[0].sourceEvidenceIds, []);
   assert.deepEqual(noteBasedCaseMap?.caseNotes[1].sourceEvidenceIds, ['evidence-1']);
   assert.equal(noteBasedCaseMap?.caseNotes[1].type, 'question');

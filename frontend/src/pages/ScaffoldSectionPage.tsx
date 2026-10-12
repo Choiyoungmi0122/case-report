@@ -14,6 +14,7 @@ import {
   type EmrAnchor
 } from '../components/scaffold/emrSearch';
 import { PaneCollapseButton, PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
+import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
 import StageGuide from '../components/scaffold/StageGuide';
 import {
   DRAFT_FLAG_GUIDE_V2,
@@ -1117,7 +1118,7 @@ export default function ScaffoldSectionPage() {
     const visitNo =
       typeof note.visitIndex === 'number' && note.visitIndex > 0 ? note.visitIndex : visitMatch ? Number(visitMatch[1]) : 0;
     const careTag = Array.isArray(note.careItems) && note.careItems.length > 0 ? ` [${note.careItems.join(', ')}]` : '';
-    const line = `${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}${careTag}: ${text}`;
+    const line = `${getCaseNoteTypeLabel(note.type)}${careTag}: ${text}`;
     caseMemoBuckets.set(visitNo, [...(caseMemoBuckets.get(visitNo) || []), line]);
   }
   const caseMemoGroups: SelfSummaryGroup[] = Array.from(caseMemoBuckets.entries())

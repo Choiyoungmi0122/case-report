@@ -41,8 +41,42 @@ export function getCaseNoteOrigin(note: ScaffoldV2CaseNote): 'own' | 'ai_suggest
   return note.id.startsWith(AI_NOTE_PREFIX) ? 'ai_suggestion' : 'own';
 }
 
-export function getCaseNoteTypeLabel(type: ScaffoldV2CaseNoteType) {
-  return type === 'question' ? '더 확인할 점' : '눈에 띈 점';
+/**
+ * 메모 분류 (2026-10-12 "문헌 확인 필요" 추가). 문헌 확인 필요는 이 환자 기록이 아니라 선행연구·다른 증례보고를
+ * 찾아봐야 할 것이다. 치료 개입 실습에는 쓰지 않고, 나중에 서론·고찰을 쓸 때 쓴다.
+ */
+export const CASE_NOTE_TYPE_OPTIONS: Array<{
+  type: ScaffoldV2CaseNoteType;
+  label: string;
+  hint: string;
+  prompt: string;
+  placeholder: string;
+}> = [
+  {
+    type: 'observation',
+    label: '눈에 띈 점',
+    hint: '기록을 읽으며 알아차린 것',
+    prompt: '어떤 점이 눈에 띄었나요?',
+    placeholder: '예: 한약 용량과 복용 기간이 처방란에 적혀 있다.'
+  },
+  {
+    type: 'question',
+    label: '더 확인할 점',
+    hint: '환자·보호자, 약봉투, 다른 병원 기록 등으로 더 확인해야 할 것',
+    prompt: '무엇을 더 확인하고 싶나요?',
+    placeholder: '예: 첫 한약을 다 먹은 뒤 다음 처방 전까지 복용했는지 확인하고 싶다.'
+  },
+  {
+    type: 'literature',
+    label: '문헌 확인 필요',
+    hint: '선행연구나 다른 증례보고를 찾아봐야 할 것 (나중에 서론·고찰에 씁니다)',
+    prompt: '어떤 문헌을 찾아보고 싶나요?',
+    placeholder: '예: 같은 처방을 화병에 쓴 다른 한의 증례보고가 있는지 찾아보고 싶다.'
+  }
+];
+
+export function getCaseNoteTypeLabel(type: ScaffoldV2CaseNoteType | string | undefined) {
+  return CASE_NOTE_TYPE_OPTIONS.find((option) => option.type === type)?.label || '눈에 띈 점';
 }
 
 type CaseNotesV2Props = {
@@ -78,6 +112,7 @@ export default function CaseNotesV2({
   const [sortMode, setSortMode] = useState<SortMode>('created');
 
   const suggestionById = useMemo(() => new Map(suggestions.map((item) => [item.id, item])), [suggestions]);
+  const draftTypeOption = CASE_NOTE_TYPE_OPTIONS.find((option) => option.type === draft.type) || CASE_NOTE_TYPE_OPTIONS[0];
 
   const visible = useMemo(() => {
     const filtered = notes.filter((note) => {
@@ -124,24 +159,28 @@ export default function CaseNotesV2({
           }}
         >
           <div className="scaffold-v2__memo-types" role="group" aria-label="메모 종류">
-            <button type="button" className={draft.type === 'observation' ? 'is-active' : ''} onClick={() => onDraftChange({ ...draft, type: 'observation' })}>
-              눈에 띈 점
-            </button>
-            <button type="button" className={draft.type === 'question' ? 'is-active' : ''} onClick={() => onDraftChange({ ...draft, type: 'question' })}>
-              더 확인할 점
-            </button>
+            {CASE_NOTE_TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.type}
+                type="button"
+                className={draft.type === option.type ? 'is-active' : ''}
+                // 문헌 확인 필요는 치료 개입 세부 항목(9a~9c)과 관계없어 고른 항목을 비운다
+                onClick={() => onDraftChange({ ...draft, type: option.type, careItems: option.type === 'literature' ? [] : draft.careItems })}
+                title={option.hint}
+                aria-pressed={draft.type === option.type}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+          <p className="scaffold-v2__memo-type-hint">{draftTypeOption.hint}</p>
           <label>
-            <span>{draft.type === 'observation' ? '어떤 점이 눈에 띄었나요?' : '무엇을 더 확인하고 싶나요?'}</span>
+            <span>{draftTypeOption.prompt}</span>
             <textarea
               rows={4}
               value={draft.text}
               onChange={(event) => onDraftChange({ ...draft, text: event.target.value })}
-              placeholder={
-                draft.type === 'observation'
-                  ? '예: 한약 용량과 복용 기간이 처방란에 적혀 있다.'
-                  : '예: 첫 한약을 다 먹은 뒤 다음 처방 전까지 복용했는지 확인하고 싶다.'
-              }
+              placeholder={draftTypeOption.placeholder}
             />
           </label>
           <div className="scaffold-v2__memo-meta-row">
@@ -161,6 +200,7 @@ export default function CaseNotesV2({
                 ))}
               </select>
             </label>
+            {draft.type !== 'literature' ? (
             <div className="scaffold-v2__memo-care" role="group" aria-label="CARE 세부 항목 (선택)">
               <span>관련 항목 (선택)</span>
               <div>
@@ -177,6 +217,7 @@ export default function CaseNotesV2({
                 ))}
               </div>
             </div>
+            ) : null}
           </div>
           <button type="submit" className="scaffold-v2__button is-primary" disabled={saving}>
             메모 추가
@@ -307,6 +348,7 @@ export default function CaseNotesV2({
                     ))}
                   </select>
                 </label>
+                {note.type !== 'literature' ? (
                 <div className="scaffold-v2__memo-care is-inline" role="group" aria-label="관련 항목">
                   {CASE_NOTE_CARE_OPTIONS.map((option) => (
                     <button
@@ -321,6 +363,7 @@ export default function CaseNotesV2({
                     </button>
                   ))}
                 </div>
+                ) : null}
               </div>
             </article>
           );

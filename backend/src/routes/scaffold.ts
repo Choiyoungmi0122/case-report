@@ -138,7 +138,7 @@ const VALID_V2_CLAIM_TYPES = new Set<ScaffoldV2ClaimType>([
 ]);
 
 const VALID_V2_EVIDENCE_ROLES = new Set<ScaffoldV2EvidenceRole>(VALID_V2_CLAIM_TYPES);
-const VALID_V2_CASE_NOTE_TYPES = new Set<ScaffoldV2CaseNoteType>(['observation', 'question']);
+const VALID_V2_CASE_NOTE_TYPES = new Set<ScaffoldV2CaseNoteType>(['observation', 'question', 'literature']);
 
 const VALID_V2_CLAIM_CONFIDENCE = new Set<ScaffoldV2ClaimConfidence>([
   'high',

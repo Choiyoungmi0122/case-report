@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import ScaffoldPageFrame from '../components/scaffold/ScaffoldPageFrame';
 import SessionTimer from '../components/scaffold/SessionTimer';
 import { ReadOnlyNavigatorBar, getReadOnlyOverviewPhase } from '../components/scaffold/ReadOnlyStageNavigator';
-import CaseNotesV2, { EMPTY_CASE_NOTE_DRAFT, type CaseNoteDraft } from '../components/scaffold/CaseNotesV2';
+import CaseNotesV2, { EMPTY_CASE_NOTE_DRAFT, getCaseNoteTypeLabel, type CaseNoteDraft } from '../components/scaffold/CaseNotesV2';
 import StageGuide from '../components/scaffold/StageGuide';
 import { CARE_OVERVIEW_EXAMPLES_V2, V2_INTRO, V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 import {
@@ -264,6 +264,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
 
   const observationNotes = caseNotes.filter((note) => note.type === 'observation');
   const questionNotes = caseNotes.filter((note) => note.type === 'question');
+  const literatureNotes = caseNotes.filter((note) => note.type === 'literature');
 
   // 실험용 경로에서는 정해진 몇 개 항목만 다룬다.
   const studySectionIds = useMemo(
@@ -1029,7 +1030,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                   {caseNotes.map((note, index) => (
                       <article key={note.id} className="scaffold-v2__memo-item">
                         <div>
-                          <span>{note.type === 'observation' ? '눈에 띈 점' : '더 확인할 점'} {index + 1}</span>
+                          <span>{getCaseNoteTypeLabel(note.type)} {index + 1}</span>
                           <button type="button" className="scaffold-v2__remove" title="메모 삭제" aria-label={`메모 ${index + 1} 삭제`} onClick={() => removeCaseNote(note.id)}>×</button>
                         </div>
                         <textarea rows={3} value={note.text} onChange={(event) => updateCaseNote(note.id, { text: event.target.value })} aria-label={`메모 ${index + 1} 내용`} />
@@ -1070,6 +1071,12 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                     <strong>{questionNotes.length}개 확인 질문</strong>
                     <span>{questionNotes.length > 0 ? '모르는 점을 질문으로 분리했습니다.' : '더 확인해야 할 정보가 있는지 한 번 생각해보세요.'}</span>
                   </div>
+                  {literatureNotes.length > 0 ? (
+                    <div>
+                      <strong>{literatureNotes.length}개 문헌 확인 메모</strong>
+                      <span>서론·고찰을 쓸 때 찾아볼 문헌을 따로 적어 두었습니다.</span>
+                    </div>
+                  ) : null}
                   {aiComparisonCandidates.length > 0 ? (
                     <section>
                       <h4>기록에서 함께 살펴볼 문장</h4>
@@ -1134,7 +1141,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                 <ol>
                   {caseNotes.map((note) => (
                       <li key={note.id}>
-                        <span>{note.type === 'observation' ? '눈에 띈 점' : '더 확인할 점'}</span>
+                        <span>{getCaseNoteTypeLabel(note.type)}</span>
                         <strong>{note.text}</strong>
                       </li>
                   ))}

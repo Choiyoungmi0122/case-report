@@ -2314,3 +2314,22 @@
   font-size: 13px;
   font-weight: 800;
 }
+
+/* 메모 분류 설명 한 줄 (2026-10-12, 문헌 확인 필요 추가와 함께) */
+.scaffold-v2__memo-type-hint {
+  margin: 6px 0 0;
+  color: #5a6c81;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* V2 메모 분류는 세 가지라 한 줄에 셋 (V1 은 두 칸 그대로) */
+.scaffold-v2__memo-composer--v2 .scaffold-v2__memo-types {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scaffold-v2__memo-composer--v2 .scaffold-v2__memo-types button {
+  padding: 8px 8px;
+  font-size: 14px;
+  word-break: keep-all;
+}

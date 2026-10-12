@@ -167,7 +167,11 @@ export interface ScaffoldV2LearnerEvidence {
   createdAt: string;
 }
 
-export type ScaffoldV2CaseNoteType = 'observation' | 'question';
+/**
+ * 메모 분류. 'literature'(문헌 확인 필요)는 2026-10-12 V2 에 추가했다. 선행연구·다른 증례보고를 찾아봐야 할 것으로,
+ * 나중에 서론·고찰에 쓴다. V1 메모에는 없다.
+ */
+export type ScaffoldV2CaseNoteType = 'observation' | 'question' | 'literature';
 
 export type ScaffoldV2CaseNoteOrigin = 'own' | 'ai_suggestion';
 

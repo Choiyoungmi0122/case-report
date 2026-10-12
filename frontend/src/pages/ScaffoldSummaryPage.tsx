@@ -13,6 +13,7 @@ import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
 import { getCompletedScaffoldSectionCount } from '../utils/scaffoldUi';
 import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import StageGuide from '../components/scaffold/StageGuide';
+import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
 import { V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -356,7 +357,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
           <ScaffoldBulletList
             items={caseNotes.map((note) => ({
               id: note.id,
-              text: `[${note.type === 'question' ? '더 확인할 점' : '눈에 띈 점'}${
+              text: `[${getCaseNoteTypeLabel(note.type)}${
                 note.id.startsWith('case-note-ai-') ? ' · AI 추천에서 가져옴' : ''
               }] ${note.text}`
             }))}

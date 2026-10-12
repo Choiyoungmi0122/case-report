@@ -75,7 +75,8 @@ const FIELD_LABELS: Record<string, string> = {
 
 const NOTE_TYPE_LABELS: Record<string, string> = {
   observation: '눈에 띈 점',
-  question: '더 확인할 점'
+  question: '더 확인할 점',
+  literature: '문헌 확인 필요'
 };
 
 function asArray<T = any>(value: unknown): T[] {

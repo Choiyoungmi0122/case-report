@@ -348,7 +348,8 @@ export interface ScaffoldV2LearnerEvidence {
   createdAt: string;
 }
 
-export type ScaffoldV2CaseNoteType = 'observation' | 'question';
+/** 'literature' = 문헌 확인 필요 (2026-10-12, V2). */
+export type ScaffoldV2CaseNoteType = 'observation' | 'question' | 'literature';
 
 export type ScaffoldV2CaseNoteOrigin = 'own' | 'ai_suggestion';
 
