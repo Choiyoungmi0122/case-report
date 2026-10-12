@@ -128,7 +128,9 @@ export function careChecklistText(): string {
  *  - CARE 설명 문서 원문(Riley et al., J Clin Epidemiol 2017;89:218-235)의 항목별 설명: 무엇을 써야 하는가.
  *    2026-10-12 원문 PDF 와 대조해 빠진 요소를 더했다(사용자 요청).
  *  - 그 지침으로 쓴 국내 한의 학술지 증례보고 5편의 관례: 어떻게 쓰는가(문체, 순서, 표기).
+ * 우선순위(사용자 결정 2026-10-12): 제1조건은 CARE 세부 항목 완수, 제2조건은 그 안에서 국내 증례보고 형식.
  * 둘이 다르면 CARE 원문의 요구를 지키고 표기만 국내 관례를 따른다(예: 제목의 "증례보고").
+ * 같은 우선순위가 SW-D·SW-R 프롬프트의 "우선순위" 블록에 있다(llm/prompts/studyWrite_draft.ts).
  */
 export const CARE_SECTION_WRITING_RULES: Record<string, string> = {
   TITLE:
