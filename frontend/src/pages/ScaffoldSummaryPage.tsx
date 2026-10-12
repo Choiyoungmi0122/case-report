@@ -21,6 +21,7 @@ import StageGuide from '../components/scaffold/StageGuide';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
 import { V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
 import ScaffoldSummaryV2 from '../components/scaffold/ScaffoldSummaryV2';
+import { buildSummaryHtml } from '../utils/summaryHtmlExport';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const objectUrl = window.URL.createObjectURL(blob);
@@ -126,6 +127,8 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
   const [error, setError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const viewedRef = useRef(false);
+  // HTML 내보내기에 쓰는 본문 영역
+  const exportBodyRef = useRef<HTMLDivElement>(null);
 
   const logEvent = async (
     eventType: 'final_summary_viewed' | 'export_requested' | 'session_completed',
@@ -305,6 +308,29 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     }
   };
 
+  // 화면에 보이는 본문을 HTML 파일 하나로 내보낸다(Word 대신 제출할 수 있다)
+  const handleExportHtml = async () => {
+    if (!caseId || !exportBodyRef.current) return;
+    setError(null);
+    try {
+      await logEvent('export_requested', {
+        exportMode: 'scaffold_review',
+        exportFormat: 'html',
+        completedSectionCount: getCompletedScaffoldSectionCount(data),
+        unresolvedSectionCount: unresolvedSections.length
+      });
+      const experimentCode = String(data?.experiment_code || data?.experimentCode || caseId);
+      const html = buildSummaryHtml(exportBodyRef.current, {
+        title: '내 학습 기록',
+        experimentCode,
+        caseTitle: data?.title || undefined
+      });
+      downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${experimentCode}_학습기록.html`);
+    } catch (nextError: any) {
+      setError(nextError.message || 'HTML 내보내기에 실패했습니다.');
+    }
+  };
+
   if (loading) {
     return <div style={{ padding: 24 }}>학습 기록을 불러오는 중입니다...</div>;
   }
@@ -325,9 +351,14 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
       <ScaffoldHero
         title="내 학습 기록"
         description={
-          isScaffoldV2Data(data)
+          <>
+          {isScaffoldV2Data(data)
             ? '기록을 어떻게 읽었는지(메모), AI를 보기 전에 무엇을 판단하고 썼는지(내 초안), AI 초안과 견주어 무엇을 알아차렸는지(표시한 문장, 돌아보기)를 차례로 모았습니다. "주요 특징"에 핵심을 먼저 모아 두었습니다.'
-            : 'AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다.'
+            : 'AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다.'}
+          <div style={{ marginTop: 8, fontSize: 14 }}>
+            <strong>제출:</strong> 이 기록은 Word 파일이나 HTML 파일로 내보내 제출할 수 있습니다. HTML 파일은 인터넷 브라우저로 열면 이 화면과 같은 모양으로 보입니다.
+          </div>
+          </>
         }
         actions={
           <>
@@ -342,11 +373,15 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
             <ScaffoldActionButton variant="primary" onClick={() => void handleExport()} disabled={isExporting}>
               {isExporting ? '내보내는 중...' : 'Word로 내보내기'}
             </ScaffoldActionButton>
+            <ScaffoldActionButton variant="primary" onClick={() => void handleExportHtml()}>
+              HTML로 내보내기
+            </ScaffoldActionButton>
           </>
         }
       />
 
       {/* V2: 교수자가 학생의 작성 방식과 부족한 점을 보기 쉽게 정리한 본문(components/scaffold/ScaffoldSummaryV2.tsx). V1 은 아래 기존 본문 그대로. */}
+      <div ref={exportBodyRef} style={{ display: 'contents' }}>
       {isScaffoldV2Data(data) ? (
         workedSections.length > 0 ? (
           <ScaffoldSummaryV2
@@ -583,6 +618,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
       </ScaffoldPanel>
       </>
       )}
+      </div>
     </ScaffoldPageFrame>
   );
 }

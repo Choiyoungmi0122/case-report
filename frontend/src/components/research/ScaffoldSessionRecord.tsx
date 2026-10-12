@@ -124,6 +124,7 @@ function judgmentLabel(value: string, isDraftSentence = false) {
 
 function eventLabel(row: TimelineRow) {
   if (row.eventType === 'ui_action') return UI_ACTION_LABELS[row.kind || ''] || row.kind || '화면 행동';
+  if (row.eventType === 'export_requested' && row.metadata?.exportFormat === 'html') return 'HTML 내보내기';
   return EVENT_LABELS[row.eventType] || row.eventType;
 }
 
