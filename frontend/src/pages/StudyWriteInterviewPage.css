@@ -1,4 +1,49 @@
+/* 왼쪽 칸: 원문 EMR 보기. 초안 화면 왼쪽 목록 맨 아래 버튼과 같은 자리(왼쪽 24px, 너비 200px, 위에서 약 710px)·꼴 */
+.sw-interview-shell {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 24px;
+}
+
+.sw-interview-shell__rail {
+  align-self: start;
+  /* 초안 화면: 머리글 + 섹션 12칸 아래. 화면이 낮으면 보이는 곳까지만 내린다 */
+  margin-top: min(710px, calc(100vh - 120px));
+}
+
+.sw-interview-shell__record {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #d9e0e8;
+  background: #fff;
+  color: #1f5f8b;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sw-interview-shell__record:hover {
+  background: #eef5fb;
+}
+
+@media (max-width: 900px) {
+  .sw-interview-shell {
+    grid-template-columns: 1fr;
+    padding: 0;
+  }
+  .sw-interview-shell__rail {
+    margin: 16px 20px 0;
+  }
+  .sw-interview-shell__record {
+    width: auto;
+  }
+}
+
 .sw-interview {
+  width: 100%;
   max-width: 1040px;
   min-height: 100vh;
   margin: 0 auto;
