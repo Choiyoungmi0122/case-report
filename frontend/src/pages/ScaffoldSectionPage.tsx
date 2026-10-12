@@ -13,7 +13,7 @@ import {
   useEmrSearch,
   type EmrAnchor
 } from '../components/scaffold/emrSearch';
-import { PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
+import { PaneCollapseButton, PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
 import StageGuide from '../components/scaffold/StageGuide';
 import {
   DRAFT_FLAG_GUIDE_V2,
@@ -931,6 +931,8 @@ export default function ScaffoldSectionPage() {
     setSourceAnchor({ visitIndex, quote });
     setExpandedVisits((prev) => (prev.has(visitIndex) ? prev : new Set(prev).add(visitIndex)));
     logUiAction('record_quote_opened', { visit: visitIndex + 1 });
+    // 원기록 열을 접어 두었으면 펼쳐서 그 구절을 보여 준다
+    if (isV2 && paneResize.collapsed.left) toggleSidePane('left', 'record_quote');
   };
   useEffect(() => {
     if (!sourceAnchor) return;
@@ -971,6 +973,14 @@ export default function ScaffoldSectionPage() {
   // V2: 3열 폭 조절 (이 브라우저에만 기억, 연구 데이터 아님)
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const paneResize = usePaneResize(isV2, workspaceGridRef);
+  // V2: 양쪽 열 접기·펼치기. 접은 열은 띠로 남고 가운데 작업 칸이 넓어진다. 행동 로그에 남긴다.
+  const sourceCollapsed = isV2 && paneResize.collapsed.left;
+  const summaryCollapsed = isV2 && paneResize.collapsed.right;
+  const toggleSidePane = (side: 'left' | 'right', by: 'button' | 'record_quote' = 'button') => {
+    const willOpen = paneResize.collapsed[side];
+    paneResize.setPaneCollapsed(side, !willOpen);
+    logUiAction('pane_toggled', { pane: side === 'left' ? 'source' : 'summary', open: willOpen, by });
+  };
   // V2: 충분성 판단 이유(선택). 질문별로 멈추면 저장한다.
   const [confirmationQuestionNotes, setConfirmationQuestionNotes] = useState<Record<string, string>>({});
   const noteSaveTimersRef = useRef<Record<string, number>>({});
@@ -1756,9 +1766,18 @@ export default function ScaffoldSectionPage() {
         style={paneResize.gridStyle}
       >
       {/* PANEL 1: SOURCE RECORD */}
-      <section className="scaffold-pane scaffold-pane--source" aria-label="환자 원기록">
+      <section className={`scaffold-pane scaffold-pane--source${sourceCollapsed ? ' is-collapsed' : ''}`} aria-label="환자 원기록">
         <div className="scaffold-pane__head">
-          <h2 className="scaffold-pane__title">환자 원기록</h2>
+          {sourceCollapsed ? (
+            <PaneCollapseButton side="left" collapsed paneLabel="환자 원기록" controlsId="scaffold-pane-source-body" onToggle={() => toggleSidePane('left')} />
+          ) : (
+          <>
+          <div className="scaffold-pane__title-row">
+            <h2 className="scaffold-pane__title">환자 원기록</h2>
+            {isV2 ? (
+              <PaneCollapseButton side="left" collapsed={false} paneLabel="환자 원기록" controlsId="scaffold-pane-source-body" onToggle={() => toggleSidePane('left')} />
+            ) : null}
+          </div>
           <p className="scaffold-pane__hint">
             {sectionProgress.draftRevealed
               ? '진료 방문 기록 (AI 초안과 대조)'
@@ -1777,10 +1796,13 @@ export default function ScaffoldSectionPage() {
               />
             </div>
           ) : null}
+          </>
+          )}
         </div>
 
         <div
           className="scaffold-pane__body"
+          id="scaffold-pane-source-body"
           ref={sourcePaneBodyRef}
           style={{ display: 'grid', gap: 8, alignContent: 'start', gridAutoRows: 'max-content' }}
         >
@@ -1909,7 +1931,7 @@ export default function ScaffoldSectionPage() {
         </div>
       </section>
 
-      {paneResize.active ? (
+      {paneResize.showHandle('left') ? (
         <PaneResizeHandle side="left" label="원기록 영역 폭 조절" onPointerDown={paneResize.startDrag} onNudge={paneResize.nudge} />
       ) : null}
 
@@ -3072,27 +3094,38 @@ export default function ScaffoldSectionPage() {
         </div>
       </section>
 
-      {paneResize.active ? (
+      {paneResize.showHandle('right') ? (
         <PaneResizeHandle side="right" label="내가 정리한 내용 영역 폭 조절" onPointerDown={paneResize.startDrag} onNudge={paneResize.nudge} />
       ) : null}
 
       {/* PANEL 3: THE LEARNER'S OWN SUMMARY - read-only, never AI-generated */}
       <section
-        className="scaffold-pane scaffold-pane--summary"
+        className={`scaffold-pane scaffold-pane--summary${summaryCollapsed ? ' is-collapsed' : ''}`}
         aria-label={sectionProgress.draftRevealed ? 'AI 공개 전 내가 정리한 내용' : '내가 정리한 내용'}
       >
         <div className="scaffold-pane__head">
-          <h2 className="scaffold-pane__title">
-            {sectionProgress.draftRevealed ? 'AI 공개 전 내가 정리한 내용' : '내가 정리한 내용'}
-          </h2>
+          {summaryCollapsed ? (
+            <PaneCollapseButton side="right" collapsed paneLabel="내가 정리한 내용" controlsId="scaffold-pane-summary-body" onToggle={() => toggleSidePane('right')} />
+          ) : (
+          <>
+          <div className="scaffold-pane__title-row">
+            <h2 className="scaffold-pane__title">
+              {sectionProgress.draftRevealed ? 'AI 공개 전 내가 정리한 내용' : '내가 정리한 내용'}
+            </h2>
+            {isV2 ? (
+              <PaneCollapseButton side="right" collapsed={false} paneLabel="내가 정리한 내용" controlsId="scaffold-pane-summary-body" onToggle={() => toggleSidePane('right')} />
+            ) : null}
+          </div>
           <p className="scaffold-pane__hint">
             {sectionProgress.draftRevealed
               ? '이 내용은 AI 초안을 보기 전에 판단한 것으로 더 이상 바뀌지 않습니다.'
               : '가운데에서 입력하거나 선택한 내용이 여기에 정리됩니다.'}
           </p>
+          </>
+          )}
         </div>
 
-        <div className="scaffold-pane__body">
+        <div className="scaffold-pane__body" id="scaffold-pane-summary-body">
           <ScaffoldSelfSummary
             groups={summaryGroups}
             frozen={sectionProgress.draftRevealed}

@@ -15,6 +15,9 @@ import {
  * - 기본 배치는 기존 CSS와 같다(31% / 나머지 / 29%).
  * - 각 열은 최소 폭을 지킨다. 화면이 좁으면(900px 미만) 기존 1열 배치 CSS가 그대로 적용되고 조절은 꺼진다.
  * - 조절한 폭은 이 브라우저에만 localStorage로 기억한다. 연구 데이터로 저장하거나 이벤트로 남기지 않는다.
+ * - 양쪽 열(원기록, 내가 정리한 내용)은 각각 접고 펼 수 있다 (2026-10-12). 접은 열은 좁은 띠로 남고,
+ *   가운데 작업 열이 빈 폭을 채운다. 접은 쪽 손잡이는 숨긴다. 접힘 상태는 기억하지 않는다
+ *   (같은 컴퓨터를 다음 참가자가 써도 처음에는 세 열이 다 보이게).
  */
 
 const STORAGE_KEY = 'scaffold-v2-pane-widths';
@@ -22,9 +25,13 @@ const DEFAULT_WIDTHS: PaneWidths = { left: 31, right: 29 };
 const MIN_SIDE_PX = 240;
 const MIN_CENTER_PX = 360;
 const HANDLE_PX = 10;
+/** 접은 열이 남기는 띠의 폭 */
+export const COLLAPSED_RAIL_PX = 44;
 const WIDE_QUERY = '(min-width: 900px)';
 
 export type PaneWidths = { left: number; right: number };
+export type PaneSide = 'left' | 'right';
+export type PaneCollapsed = { left: boolean; right: boolean };
 
 function readStoredWidths(): PaneWidths {
   try {
@@ -48,11 +55,20 @@ function writeStoredWidths(widths: PaneWidths) {
   }
 }
 
-function clampWidths(next: PaneWidths, gridWidthPx: number): PaneWidths {
+function clampWidths(next: PaneWidths, gridWidthPx: number, collapsed: PaneCollapsed = { left: false, right: false }): PaneWidths {
   if (!gridWidthPx) return next;
   const minSide = (MIN_SIDE_PX / gridWidthPx) * 100;
   const minCenter = (MIN_CENTER_PX / gridWidthPx) * 100;
-  const handles = ((HANDLE_PX * 2) / gridWidthPx) * 100;
+  const handle = (HANDLE_PX / gridWidthPx) * 100;
+  const rail = (COLLAPSED_RAIL_PX / gridWidthPx) * 100;
+  // 한쪽이 접혀 있으면 펼친 쪽만 맞춘다. 접힌 쪽의 저장 폭은 그대로 두어 다시 펼 때 돌아온다.
+  if (collapsed.left || collapsed.right) {
+    if (collapsed.left && collapsed.right) return next;
+    const maxOpen = Math.max(minSide, 100 - minCenter - rail - handle);
+    const clampOpen = (value: number) => Math.min(maxOpen, Math.max(minSide, value));
+    return collapsed.left ? { left: next.left, right: clampOpen(next.right) } : { left: clampOpen(next.left), right: next.right };
+  }
+  const handles = handle * 2;
   const maxTotal = Math.max(minSide * 2, 100 - minCenter - handles);
   let left = Math.max(minSide, next.left);
   let right = Math.max(minSide, next.right);
@@ -68,6 +84,7 @@ function clampWidths(next: PaneWidths, gridWidthPx: number): PaneWidths {
 
 export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement | null>) {
   const [widths, setWidths] = useState<PaneWidths>(() => readStoredWidths());
+  const [collapsed, setCollapsed] = useState<PaneCollapsed>({ left: false, right: false });
   const [isWide, setIsWide] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(WIDE_QUERY).matches : true
   );
@@ -84,11 +101,11 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
   const applyWidths = useCallback(
     (next: PaneWidths) => {
       const gridWidth = gridRef.current?.getBoundingClientRect().width || 0;
-      const clamped = clampWidths(next, gridWidth);
+      const clamped = clampWidths(next, gridWidth, collapsed);
       setWidths(clamped);
       writeStoredWidths(clamped);
     },
-    [gridRef]
+    [gridRef, collapsed]
   );
 
   const onPointerMove = useCallback(
@@ -152,19 +169,79 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
     }
   }, []);
 
-  const active = enabled && isWide;
-  const gridStyle = useMemo<CSSProperties | undefined>(
-    () =>
-      active
-        ? {
-            gridTemplateColumns: `${widths.left}% ${HANDLE_PX}px minmax(0, 1fr) ${HANDLE_PX}px ${widths.right}%`
-          }
-        : undefined,
-    [active, widths.left, widths.right]
+  const setPaneCollapsed = useCallback(
+    (side: PaneSide, value: boolean) => {
+      if (collapsed[side] === value) return;
+      const next = { ...collapsed, [side]: value };
+      setCollapsed(next);
+      // 다시 펼칠 때, 한쪽이 접힌 동안 넓혀 둔 반대쪽 폭 때문에 가운데가 최소 폭보다 좁아지지 않게 맞춘다.
+      // 화면에서만 맞추고 저장된 폭은 사용자가 다시 끌 때 바뀐다.
+      if (!value) {
+        const gridWidth = gridRef.current?.getBoundingClientRect().width || 0;
+        setWidths((current) => clampWidths(current, gridWidth, next));
+      }
+    },
+    [collapsed, gridRef]
   );
+
+  const active = enabled && isWide;
+  const gridStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!active) return undefined;
+    // 접은 쪽은 띠 폭만 남기고 손잡이 열을 뺀다. 가운데(1fr)가 남은 폭을 채운다.
+    const columns = [
+      collapsed.left ? `${COLLAPSED_RAIL_PX}px` : `${widths.left}%`,
+      ...(collapsed.left ? [] : [`${HANDLE_PX}px`]),
+      'minmax(0, 1fr)',
+      ...(collapsed.right ? [] : [`${HANDLE_PX}px`]),
+      collapsed.right ? `${COLLAPSED_RAIL_PX}px` : `${widths.right}%`
+    ];
+    return { gridTemplateColumns: columns.join(' ') };
+  }, [active, collapsed.left, collapsed.right, widths.left, widths.right]);
+  /** 그 쪽 손잡이를 그릴지. 접은 쪽은 손잡이가 없다. */
+  const showHandle = (side: PaneSide) => active && !collapsed[side];
   const isDefault = Math.abs(widths.left - DEFAULT_WIDTHS.left) < 0.01 && Math.abs(widths.right - DEFAULT_WIDTHS.right) < 0.01;
 
-  return { active, gridStyle, startDrag, nudge, reset, isDefault };
+  return { active, gridStyle, startDrag, nudge, reset, isDefault, collapsed, setPaneCollapsed, showHandle };
+}
+
+type PaneCollapseButtonProps = {
+  /** 왼쪽 열(원기록)인지 오른쪽 열(내 정리)인지. 화살표 방향을 정한다. */
+  side: PaneSide;
+  collapsed: boolean;
+  /** 열 이름. 버튼 이름과 띠에 세로로 쓴다. */
+  paneLabel: string;
+  controlsId: string;
+  onToggle: () => void;
+};
+
+/** 열 머리말의 접기·펼치기 버튼. 접힌 열에서는 띠 전체가 이 버튼이 된다. */
+export function PaneCollapseButton({ side, collapsed, paneLabel, controlsId, onToggle }: PaneCollapseButtonProps) {
+  // 접기는 열이 줄어드는 쪽(바깥), 펼치기는 열이 늘어나는 쪽(안쪽)을 가리킨다.
+  const outward = side === 'left' ? '«' : '»';
+  const inward = side === 'left' ? '»' : '«';
+  return (
+    <button
+      type="button"
+      className={`scaffold-pane__collapse${collapsed ? ' is-collapsed' : ''}`}
+      aria-expanded={!collapsed}
+      aria-controls={controlsId}
+      aria-label={collapsed ? `${paneLabel} 펼치기` : `${paneLabel} 접기`}
+      title={collapsed ? `${paneLabel} 펼치기` : `${paneLabel} 접기 (가운데 작업 칸이 넓어집니다)`}
+      onClick={onToggle}
+    >
+      {collapsed ? (
+        <>
+          <span className="scaffold-pane__collapse-arrow" aria-hidden="true">{inward}</span>
+          <span className="scaffold-pane__collapse-text">펼치기</span>
+          <span className="scaffold-pane__collapse-label">{paneLabel}</span>
+        </>
+      ) : (
+        <span className="scaffold-pane__collapse-text">
+          {side === 'left' ? `${outward} 접기` : `접기 ${outward}`}
+        </span>
+      )}
+    </button>
+  );
 }
 
 type PaneResizeHandleProps = {
