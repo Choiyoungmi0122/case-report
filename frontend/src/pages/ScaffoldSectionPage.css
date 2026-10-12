@@ -1705,3 +1705,44 @@ body.scaffold-pane-resizing textarea {
     gap: 0;
   }
 }
+
+/* 치료 개입 기준 상자: 요소(9a·9b·9c)마다 접고 펴기 (2026-10-12). 제목과 한 줄 기준은 접혀 있어도 보인다. */
+.scaffold-care-element > summary {
+  display: block;
+  cursor: pointer;
+  list-style: none;
+}
+
+.scaffold-care-element > summary::-webkit-details-marker {
+  display: none;
+}
+
+.scaffold-care-element > summary:focus-visible {
+  outline: 2px solid #b7791f;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.scaffold-care-element:not([open]) > summary p {
+  margin-bottom: 0;
+}
+
+.scaffold-care-element__toggle {
+  margin-left: auto;
+  padding: 1px 10px;
+  border: 1px solid #d9c48a;
+  border-radius: 999px;
+  background: #fff;
+  color: #7a5a14;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scaffold-care-element > summary:hover .scaffold-care-element__toggle {
+  background: #fff3d6;
+}
+
+.scaffold-care-element[open] > summary {
+  margin-bottom: 4px;
+}

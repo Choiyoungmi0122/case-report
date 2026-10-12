@@ -1160,6 +1160,19 @@ export default function ScaffoldSectionPage() {
   // 치료 개입 기준 상자의 논문 예시는 처음부터 펼쳐 둔다. 접힘 상태는 요소 코드별로 화면에서만 기억한다.
   // 펼친 채로 그려질 때도 브라우저가 toggle 이벤트를 보내므로, 상태가 실제로 바뀐 경우만 행동 로그에 남긴다.
   const [closedPaperExamples, setClosedPaperExamples] = useState<Set<string>>(() => new Set());
+  // 치료 개입 기준 상자의 요소(9a·9b·9c)는 하나씩 접고 편다. 처음에는 모두 접혀 있고 제목과 한 줄 기준만 보인다.
+  // 학습자가 직접 펴거나 접을 때만 행동 로그에 남긴다.
+  const [openCareElements, setOpenCareElements] = useState<Set<string>>(() => new Set());
+  const handleCareElementToggle = (code: string, open: boolean) => {
+    if (openCareElements.has(code) === open) return;
+    setOpenCareElements((prev) => {
+      const next = new Set(prev);
+      if (open) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+    logUiAction('care_element_toggled', { code, open });
+  };
   const handlePaperExamplesToggle = (code: string, open: boolean) => {
     const wasOpen = !closedPaperExamples.has(code);
     if (wasOpen === open) return;
@@ -2097,14 +2110,25 @@ export default function ScaffoldSectionPage() {
                   <p>{TI_GUIDE_V2.goal}</p>
                   <div className="scaffold-care-guide__elements">
                     {TI_GUIDE_V2.elements.map((element) => (
-                      <section key={element.code} className="scaffold-care-element" aria-label={`${element.code} ${element.label}`}>
-                        <h4>
-                          <span className={`scaffold-care-tag${element.required ? ' is-required' : ''}`}>
-                            {element.code} {element.required ? '필수' : '선택'}
-                          </span>
-                          {element.label}
-                        </h4>
-                        <p>{element.criteria}</p>
+                      <details
+                        key={element.code}
+                        className="scaffold-care-element"
+                        aria-label={`${element.code} ${element.label}`}
+                        open={openCareElements.has(element.code)}
+                        onToggle={(event) => handleCareElementToggle(element.code, event.currentTarget.open)}
+                      >
+                        <summary>
+                          <h4>
+                            <span className={`scaffold-care-tag${element.required ? ' is-required' : ''}`}>
+                              {element.code} {element.required ? '필수' : '선택'}
+                            </span>
+                            {element.label}
+                            <span className="scaffold-care-element__toggle" aria-hidden="true">
+                              {openCareElements.has(element.code) ? '접기' : '쓰는 법·작성 예 보기'}
+                            </span>
+                          </h4>
+                          <p>{element.criteria}</p>
+                        </summary>
                         <ul>
                           {element.howTo.map((item) => (
                             <li key={item}>{item}</li>
@@ -2149,7 +2173,7 @@ export default function ScaffoldSectionPage() {
                             </ul>
                           </details>
                         ) : null}
-                      </section>
+                      </details>
                     ))}
                   </div>
                   <p className="scaffold-care-guide__closing">
