@@ -910,6 +910,7 @@ export interface StudyWriteChatEntry {
   targetCode?: string;
   reason?: string;
   answeredAt?: string;
+  skippedAt?: string;
 }
 
 export interface StudyWriteAttachment {
@@ -1671,6 +1672,14 @@ export const caseApi = {
   /** 수정 요청 채팅의 "질문 받기": 이 섹션을 더 자세히 쓰기 위한 AI 질문을 채팅에 남긴다 */
   askStudyWriteChatQuestion: async (caseId: string, sectionId: string) => {
     const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/chat-question`);
+    return response.data;
+  },
+
+  /** "질문 받기"의 질문 건너뛰기 (저장된다) */
+  skipStudyWriteChatQuestion: async (caseId: string, sectionId: string, entryId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(
+      `/study-write/cases/${caseId}/sections/${sectionId}/chat-question/${entryId}/skip`
+    );
     return response.data;
   },
 

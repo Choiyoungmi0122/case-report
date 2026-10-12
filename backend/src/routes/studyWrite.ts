@@ -18,7 +18,7 @@ import {
 import { StudyWriteChatEntry, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
 import { findSubElement } from '../studyWrite/careSubElements';
-import { generateSectionChatQuestion } from '../studyWrite/chatQuestion';
+import { CHAT_QUESTION_SUMMARY_SECTIONS, generateSectionChatQuestion } from '../studyWrite/chatQuestion';
 import { mergeRegeneratedPart, parseTitleDraft, TitlePart } from '../studyWrite/titleKeywords';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
@@ -407,6 +407,7 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     if (chatAnswer) {
       if (!askedEntry) return res.status(400).json({ error: '답할 질문을 찾지 못했습니다.' });
       if (askedEntry.answeredAt) return res.status(400).json({ error: '이미 답한 질문입니다.' });
+      if (askedEntry.skippedAt) return res.status(400).json({ error: '건너뛴 질문입니다. 질문을 다시 받아 주세요.' });
       if (state.answersLockedAt) return res.status(400).json({ error: '최종 수정 단계에 들어가 답을 더할 수 없습니다.' });
       effectiveInstruction = `임상의에게 이 섹션을 더 자세히 쓰기 위해 "${askedEntry.text}"라고 물었고, 임상의가 이렇게 답했다: "${chatAnswer.answer}". 이 답에 담긴 사실을 이 섹션의 알맞은 자리에 반영한다. 답 가운데 "모른다", "적지 않았다", "기록하지 않았다"처럼 정보가 없다는 부분은 본문에 쓰지 않는다(부재 문장 금지). 답에 없는 내용은 더하지 않고, 답과 무관한 문장은 글자 그대로 둔다. 반영할 사실이 없으면 초안을 바꾸지 않는다.`;
     }
@@ -724,7 +725,7 @@ router.post('/cases/:caseId/sections/:sectionId/chat-question', async (req: Requ
     if (!sectionBefore?.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
     // 빠진 CARE 항목을 알아야 질문을 고를 수 있다. 점검이 없거나 하위 요소 기준 전 결과면 먼저 다시 점검한다
     const freshCheck =
-      sectionBefore.careCheck?.checklistVersion === 'care-checklist:v2'
+      sectionBefore.careCheck?.checklistVersion === 'care-checklist:v2' || CHAT_QUESTION_SUMMARY_SECTIONS.has(sectionId)
         ? null
         : await runCareCheck({ caseData, state, sectionId, draftText: sectionBefore.draftText });
     const stateForQuestion: StudyWriteState = freshCheck
@@ -738,23 +739,19 @@ router.post('/cases/:caseId/sections/:sectionId/chat-question', async (req: Requ
       const current = latestState.sections?.[sectionId];
       if (!current) throw new Error('이 섹션의 초안이 아직 없습니다.');
       const now = new Date().toISOString();
-      const entry: StudyWriteChatEntry = generated.question
-        ? {
-            id: `swc-${randomUUID()}`,
-            role: 'assistant',
-            text: generated.question,
-            at: now,
-            kind: 'question',
-            hint: generated.hint,
-            targetCode: generated.targetCode,
-            reason: generated.reason
-          }
-        : {
-            id: `swc-${randomUUID()}`,
-            role: 'assistant',
-            text: `지금은 더 여쭤볼 것이 없습니다. ${generated.reason || '기록과 답변으로 이 섹션의 CARE 항목을 쓸 수 있습니다.'}`,
-            at: now
-          };
+      const entry: StudyWriteChatEntry =
+        generated.kind === 'question'
+          ? {
+              id: `swc-${randomUUID()}`,
+              role: 'assistant',
+              text: generated.question,
+              at: now,
+              kind: 'question',
+              hint: generated.hint,
+              targetCode: generated.targetCode,
+              reason: generated.reason
+            }
+          : { id: `swc-${randomUUID()}`, role: 'assistant', text: generated.message, at: now };
       const merged: StudyWriteState = {
         ...latestState,
         sections: {
@@ -775,6 +772,38 @@ router.post('/cases/:caseId/sections/:sectionId/chat-question', async (req: Requ
     return res.json(result);
   } catch (error: any) {
     return res.status(400).json({ error: error?.message || '질문을 만들지 못했습니다.' });
+  }
+});
+
+/** "질문 받기"의 질문을 건너뛴다. 건너뛴 질문은 답을 기다리지 않고, 다시 묻지 않는다 */
+router.post('/cases/:caseId/sections/:sectionId/chat-question/:entryId/skip', async (req: Request, res: Response) => {
+  try {
+    const { caseId, sectionId, entryId } = req.params;
+    const result = await serialize(caseId, async () => {
+      const latest = await loadCase(caseId);
+      if (!latest) return null;
+      const state = normalizeStudyWriteState(latest.studyWrite);
+      if (state.submittedAt) throw new Error('이미 제출한 사례입니다.');
+      const current = state.sections?.[sectionId];
+      const entry = current?.chat.find((item) => item.id === entryId && item.kind === 'question');
+      if (!current || !entry) throw new Error('건너뛸 질문을 찾지 못했습니다.');
+      if (entry.answeredAt || entry.skippedAt) return buildDraftsResponse(latest, state, await listAttachments(latest.id));
+      const now = new Date().toISOString();
+      const merged: StudyWriteState = {
+        ...state,
+        sections: {
+          ...(state.sections || {}),
+          [sectionId]: { ...current, chat: current.chat.map((item) => (item.id === entryId ? { ...item, skippedAt: now } : item)) }
+        },
+        updatedAt: now
+      };
+      await saveState(latest.id, merged);
+      return buildDraftsResponse(latest, merged, await listAttachments(latest.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '건너뛰지 못했습니다.' });
   }
 });
 

@@ -226,13 +226,24 @@ export default function StudyWriteDraftPage() {
 
   // ── 수정 요청 채팅의 "질문 받기" ──
   const [askingQuestion, setAskingQuestion] = useState(false);
-  // 건너뛴 질문 (이 화면에서만. 다시 질문 받기를 누르면 새 질문)
-  const [skippedQuestionIds, setSkippedQuestionIds] = useState<string[]>([]);
-  // 답을 기다리는 AI 질문: 마지막 AI 질문이 아직 답이 없고 건너뛰지 않았으면
+  // 답을 기다리는 AI 질문: 마지막 AI 질문이 아직 답이 없고 건너뛰지 않았으면 (건너뛰기는 서버에 저장)
   const pendingQuestion = (() => {
     const last = [...(section?.chat || [])].reverse().find((entry) => entry.kind === 'question');
-    return last && !last.answeredAt && !skippedQuestionIds.includes(last.id) ? last : null;
+    return last && !last.answeredAt && !last.skippedAt ? last : null;
   })();
+  const [skipping, setSkipping] = useState(false);
+  const skipQuestion = async () => {
+    if (!caseId || !section || !pendingQuestion || skipping) return;
+    setSkipping(true);
+    setError(null);
+    try {
+      setData(await caseApi.skipStudyWriteChatQuestion(caseId, section.sectionId, pendingQuestion.id));
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '건너뛰지 못했습니다.');
+    } finally {
+      setSkipping(false);
+    }
+  };
   const askQuestion = async () => {
     if (!caseId || !section || askingQuestion) return;
     setAskingQuestion(true);
@@ -770,8 +781,8 @@ export default function StudyWriteDraftPage() {
                 {section.chat.map((entry) =>
                   entry.kind === 'question' ? (
                     // "질문 받기"로 AI 가 한 질문
-                    <div key={entry.id} className={`sw-chat sw-chat--assistant sw-chat--question${entry.answeredAt ? ' is-answered' : ''}`}>
-                      <span className="sw-chat__role">AI 질문{entry.answeredAt ? ' · 답함' : skippedQuestionIds.includes(entry.id) ? ' · 건너뜀' : ''}</span>
+                    <div key={entry.id} className={`sw-chat sw-chat--assistant sw-chat--question${entry.answeredAt || entry.skippedAt ? ' is-answered' : ''}`}>
+                      <span className="sw-chat__role">AI 질문{entry.answeredAt ? ' · 답함' : entry.skippedAt ? ' · 건너뜀' : ''}</span>
                       <div className="sw-chat__question">{renderClinicalAnonymizedText(dated(entry.text))}</div>
                       {entry.hint ? <small>답에 들어가면 좋은 것: {entry.hint}</small> : null}
                       {entry.reason ? <small className="sw-chat__reason">{dated(entry.reason)}</small> : null}
@@ -794,13 +805,8 @@ export default function StudyWriteDraftPage() {
                   {pendingQuestion ? (
                     <div className="sw-draft__ask is-answering">
                       <span>AI 질문에 답하는 중입니다. 보내면 답이 "내 답변"에 저장되고 이 섹션에 반영됩니다.</span>
-                      <button
-                        type="button"
-                        className="is-secondary"
-                        disabled={revising}
-                        onClick={() => setSkippedQuestionIds((prev) => [...prev, pendingQuestion.id])}
-                      >
-                        건너뛰기
+                      <button type="button" className="is-secondary" disabled={revising || skipping} onClick={() => void skipQuestion()}>
+                        {skipping ? '건너뛰는 중…' : '건너뛰기'}
                       </button>
                     </div>
                   ) : (

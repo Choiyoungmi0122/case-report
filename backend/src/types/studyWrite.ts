@@ -147,6 +147,8 @@ export interface StudyWriteChatEntry {
   targetCode?: string;
   reason?: string;
   answeredAt?: string;
+  /** 질문을 건너뛴 시각 (건너뛴 질문은 답을 기다리지 않고, 다시 묻지 않는다) */
+  skippedAt?: string;
 }
 
 export interface StudyWriteSectionState {
