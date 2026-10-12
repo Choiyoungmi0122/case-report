@@ -21,6 +21,7 @@ import {
   REVIEW_NOT_FLAGGED_NOTE_V2,
   REVIEW_STEPS_V2,
   SUFFICIENCY_OPTION_GUIDE_V2,
+  TI_SUFFICIENCY_QUESTIONS_V2,
   TI_GUIDE_V2,
   V2_STAGE_GUIDES
 } from '../utils/scaffoldV2Guide';
@@ -70,6 +71,8 @@ type ConfirmationQuestion = {
   id: string;
   question: string;
   description?: string;
+  /** V2: 선택지마다 그 질문에 맞는 예 */
+  optionExamples?: Record<string, string>;
 };
 
 type SelectedEvidenceItem = {
@@ -853,7 +856,11 @@ export default function ScaffoldSectionPage() {
 
   // Get section-specific confirmation questions
   const sectionType = detectSectionType(sectionId || '');
-  const confirmationQuestions = SECTION_CONFIRMATION_QUESTIONS[sectionType] || [];
+  // V2 치료 개입은 질문 문구·예시가 다르다(utils/scaffoldV2Guide.ts TI_SUFFICIENCY_QUESTIONS_V2). id 는 같다.
+  const confirmationQuestions: ConfirmationQuestion[] =
+    isScaffoldV2Data(scaffoldData) && sectionType === 'therapeutic_intervention'
+      ? TI_SUFFICIENCY_QUESTIONS_V2
+      : SECTION_CONFIRMATION_QUESTIONS[sectionType] || [];
 
   /**
    * Step 2 판단은 reviewItem으로 서버에 저장되지만 화면 state로는 복구되지 않아,
@@ -2523,6 +2530,20 @@ export default function ScaffoldSectionPage() {
             >
               <div style={{ display: 'grid', gap: 20 }}>
                 {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.step2} compact /> : null}
+                {isV2 ? (
+                  <section className="scaffold-sufficiency-legend" aria-label="선택지의 뜻">
+                    <h4>선택지의 뜻</h4>
+                    <dl>
+                      {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => (
+                        <div key={option.value}>
+                          <dt>{option.label}</dt>
+                          <dd>{SUFFICIENCY_OPTION_GUIDE_V2[option.value]?.description}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <p>질문마다 아래에는 그 질문에 맞는 예만 보입니다. 이 사례의 정답이 아닙니다.</p>
+                  </section>
+                ) : null}
                 {confirmationQuestions.map((question) => (
                   <div
                     key={question.id}
@@ -2553,7 +2574,8 @@ export default function ScaffoldSectionPage() {
 
                     <div style={{ display: 'grid', gap: 8 }}>
                       {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => {
-                        const guide = isV2 ? SUFFICIENCY_OPTION_GUIDE_V2[option.value] : undefined;
+                        // V2: 선택지 뜻은 위 "선택지의 뜻"에 한 번만 두고, 여기에는 이 질문에 맞는 예만 보인다.
+                        const guide = isV2 ? { example: question.optionExamples?.[option.value] } : undefined;
                         return (
                           <label
                             key={option.value}
@@ -2580,8 +2602,7 @@ export default function ScaffoldSectionPage() {
                             {guide ? (
                               <span className="scaffold-sufficiency-option__text">
                                 <strong>{option.label}</strong>
-                                <span>{guide.description}</span>
-                                <small>{guide.example}</small>
+                                {guide.example ? <small>{guide.example}</small> : null}
                               </span>
                             ) : (
                               option.label

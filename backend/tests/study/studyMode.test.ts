@@ -23,6 +23,11 @@ import {
   DEFAULT_STUDY_MEMO_SUGGESTIONS_V2,
   findMemoSuggestionAnchorErrors
 } from '../../src/study/cases/defaultStudyCaseMemoSuggestionsV2';
+import {
+  DEFAULT_STUDY_RECORD_POINTERS_V2,
+  findRecordPointerQuoteErrors
+} from '../../src/study/cases/defaultStudyCaseRecordPointersV2';
+import { DEFAULT_STUDY_RECORD_POINTERS } from '../../src/study/cases/defaultStudyCase';
 
 async function run() {
   assert.deepEqual(
@@ -830,6 +835,16 @@ async function run() {
     const count = DEFAULT_STUDY_MEMO_SUGGESTIONS_V2.filter((item) => item.visitIndex === visit).length;
     assert.ok(count >= 3 && count <= 4, `visit ${visit} has ${count} suggestions`);
   }
+
+  // Step 2 '기록에서 관련된 부분': 인용은 원기록에 그대로 있어야 한다. V2 는 ti_003(치료 변경과 이유)만 다르다.
+  assert.deepEqual(findRecordPointerQuoteErrors(DEFAULT_STUDY_RECORD_POINTERS), []);
+  assert.deepEqual(findRecordPointerQuoteErrors(), []);
+  assert.deepEqual(Object.keys(DEFAULT_STUDY_RECORD_POINTERS_V2).sort(), Object.keys(DEFAULT_STUDY_RECORD_POINTERS).sort());
+  assert.ok(
+    !DEFAULT_STUDY_RECORD_POINTERS_V2.ti_003.quotes.some((item) => item.quote.includes('속 불편감')),
+    'V2 ti_003 에는 내약성 구절이 없다'
+  );
+  assert.equal(DEFAULT_STUDY_RECORD_POINTERS_V2.ti_001, DEFAULT_STUDY_RECORD_POINTERS.ti_001);
 
   console.log('study mode tests passed');
 }

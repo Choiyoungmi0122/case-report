@@ -6,6 +6,7 @@ import {
   isFixedStudyCaseText
 } from '../study/cases/defaultStudyCase';
 import { DEFAULT_STUDY_MEMO_SUGGESTIONS_V2 } from '../study/cases/defaultStudyCaseMemoSuggestionsV2';
+import { DEFAULT_STUDY_RECORD_POINTERS_V2 } from '../study/cases/defaultStudyCaseRecordPointersV2';
 import { promptMeta, templateHashOf } from '../llm/promptRegistry';
 import { randomUUID } from 'crypto';
 import { CaseModel } from '../models/caseModel';
@@ -794,8 +795,11 @@ function buildScaffoldResponse(caseData: any, scaffoldState: ScaffoldState) {
     // 화면이 Scaffold V2(v3.0) 여부를 판단하는 데 쓴다. 저장값 그대로 돌려준다.
     versionMetadata: (caseData as any).versionMetadata || null,
     // 고정 실험 사례일 때만 질문별 원기록 구절과 방문별 메모 추천을 내려준다.
+    // V2 는 ti_003 질문을 치료 변경과 이유(9c)로 좁혀 그 질문의 구절만 다르다(defaultStudyCaseRecordPointersV2.ts).
     recordPointers: isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''))
-      ? DEFAULT_STUDY_RECORD_POINTERS
+      ? isStudyScaffoldV2Case(caseData)
+        ? DEFAULT_STUDY_RECORD_POINTERS_V2
+        : DEFAULT_STUDY_RECORD_POINTERS
       : {},
     // Scaffold V2(v3.0)는 치료 개입 중심 추천 세트를 쓰고, 카드에 보여줄 CARE 항목·원문 구절도 함께 내려준다.
     // V1 케이스는 기존 12개를 기존 모양({id, visitIndex, type, text})으로 내려준다.

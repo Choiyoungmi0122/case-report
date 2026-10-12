@@ -255,25 +255,76 @@ export const CARE_OVERVIEW_EXAMPLES_V2: Record<string, CareOverviewExample> = {
   }
 };
 
-/** 충분성 판단 선택지의 뜻과 짧은 예 (V2-07). 값은 기존 CONFIRMATION_JUDGMENT_OPTIONS와 같다. */
-export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string; example: string }> = {
+/**
+ * 충분성 판단 선택지의 뜻 (V2-07). 값은 기존 CONFIRMATION_JUDGMENT_OPTIONS와 같다.
+ * 2026-10-12: "추가 확인 필요"와 "현재 기록으로 확인할 수 없음"이 비슷해 보인다는 연구자 의견에 따라,
+ * 기록에 있는 양이 아니라 "다음에 할 일"로 구분해 고쳤다. 저장 값은 그대로다.
+ * 화면 위쪽에 한 번만 보여 주고, 질문마다에는 그 질문에 맞는 예(TI_SUFFICIENCY_QUESTIONS_V2)를 보인다.
+ */
+export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string }> = {
   available_in_record: {
-    description: '그 정보가 기록에 적혀 있어 그대로 옮겨 적을 수 있다.',
-    example: '예: 약 이름, 용량, 복용 기간이 처방란에 있다.'
+    description: '기록에 적혀 있어 그대로 옮겨 쓸 수 있다.'
   },
   needs_additional_confirmation: {
-    description: '일부는 있지만 빠지거나 불분명한 부분이 있어, 환자·보호자·다른 병원 기록 등으로 더 확인해야 쓸 수 있다.',
-    example: '예: 약을 먹는다고는 적혀 있는데 이름이나 용량이 없다.'
+    description:
+      '기록에 일부만 있거나 빠져 있지만, 환자·보호자, 약봉투, 다른 병원 기록 등으로 확인할 수 있다. 쓰기 전에 확인한다.'
   },
   needs_instructor_review: {
-    description: '기록은 있지만 증례보고에 어떻게 해석하거나 표현해야 할지 교수자와 상의하고 싶다.',
-    example: '예: 변증과 치료 원칙을 증례보고에 어떻게 쓰는지 묻고 싶다.'
+    description: '기록은 있지만, 증례보고에 어떻게 해석하거나 표현할지 교수자와 상의하고 싶다.'
   },
   cannot_confirm_in_record: {
-    description: '그 정보가 기록에 전혀 없어 지금은 쓸 수 없다.',
-    example: '예: 교육한 자가 치료를 실제로 했는지 보여 주는 기록이 없다.'
+    description: '기록에 없고 확인할 방법도 없다. 증례보고에는 "기록되지 않았다"고 쓰거나 뺀다.'
   }
 };
+
+/**
+ * Scaffold V2 치료 개입 Step 2 질문 (2026-10-12).
+ * - id 는 V1과 같다(서버 공개 게이트가 ti_001~ti_003 을 요구한다).
+ * - ti_003 은 V1 "치료 중 발생한 부작용이나 치료 변경이 기록되어 있나요?"에서 CARE 9c(치료 변경과 이유)로 좁혔다.
+ *   이상반응은 CARE 10d(추적 관찰 및 결과)에 속한다. 저장되는 판단에는 질문 문장(sourceText)이 함께 남으므로
+ *   V1 답과 구분할 수 있다. 변경 이력: docs/scaffold_v2_changelog.md
+ * - optionExamples: 선택지마다 그 질문에 맞는 짧은 예. 이 사례의 답이 아니라 일반적인 경우다.
+ */
+export const TI_SUFFICIENCY_QUESTIONS_V2: Array<{
+  id: string;
+  question: string;
+  description: string;
+  optionExamples: Record<string, string>;
+}> = [
+  {
+    id: 'ti_001',
+    question: '치료 방법, 약물, 용량 등이 명확하게 기록되어 있나요?',
+    description: '어떤 치료를 했는지 명확해야 합니다.',
+    optionExamples: {
+      available_in_record: '예: 처방란에 약 이름, 1회 용량, 하루 복용 횟수가 적혀 있다.',
+      needs_additional_confirmation: '예: 다른 병원 약을 먹는다고만 적혀 있어, 약봉투나 처방전을 봐야 이름과 용량을 알 수 있다.',
+      needs_instructor_review: '예: 변증과 치료 원칙을 치료 개입에 쓸지, 쓴다면 어떻게 쓸지 묻고 싶다.',
+      cannot_confirm_in_record: '예: 뜸을 했다고만 있고 부위나 시간은 어디에도 적혀 있지 않다.'
+    }
+  },
+  {
+    id: 'ti_002',
+    question: '치료 시작 시점과 기간/빈도가 기록되어 있나요?',
+    description: '치료 경과 추적에 필요한 정보입니다.',
+    optionExamples: {
+      available_in_record: '예: 처방한 날짜와 "2주분"이 적혀 있다.',
+      needs_additional_confirmation: '예: 다 먹었는지가 적혀 있지 않아, 다음 내원 때 물어보면 언제 끝났는지 알 수 있다.',
+      needs_instructor_review: '예: 내원 간격이 일정하지 않은데 빈도를 어떻게 적을지 묻고 싶다.',
+      cannot_confirm_in_record: '예: 집에서 하라고 교육한 운동을 실제로 몇 번 했는지 적힌 곳이 없다.'
+    }
+  },
+  {
+    id: 'ti_003',
+    question: '치료를 바꾼 내용과 그 이유가 기록되어 있나요?',
+    description: '무엇을 추가·중단·변경했는지와 왜 그랬는지입니다. 다른 병원 약의 변경도 포함합니다.',
+    optionExamples: {
+      available_in_record: '예: "속쓰림을 호소하여 처방 변경"처럼 바꾼 내용과 이유가 함께 적혀 있다.',
+      needs_additional_confirmation: '예: 처방이 바뀌었는데 이유가 없다. 담당 한의사에게 물어보면 알 수 있다.',
+      needs_instructor_review: '예: 적힌 내용을 치료를 바꾼 이유로 써도 되는지 판단이 서지 않는다.',
+      cannot_confirm_in_record: '예: 다른 병원에서 약이 바뀌었다고만 하고, 무엇이 왜 바뀌었는지 확인할 길이 없다.'
+    }
+  }
+];
 
 /** AI 초안 문장 검토 사용법 (V2-08). 화면 상단에 짧게 보여 준다. */
 export const REVIEW_STEPS_V2: Array<{ title: string; body: string }> = [
