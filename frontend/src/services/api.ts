@@ -898,6 +898,18 @@ export interface StudyWriteDraftVersion {
   notes?: string[];
 }
 
+/** 원고 검사 결과 한 건 (backend studyWrite/manuscriptCheck.ts) */
+export interface StudyWriteManuscriptFinding {
+  id: string;
+  sectionId: string;
+  sectionName: string;
+  kind: string;
+  severity: 'error' | 'warn' | 'info';
+  message: string;
+  excerpt?: string;
+  evidence?: string;
+}
+
 export interface StudyWriteChatEntry {
   id: string;
   role: 'user' | 'assistant';
@@ -1666,6 +1678,14 @@ export const caseApi = {
       instruction,
       ...(selectedText ? { selectedText } : {})
     });
+    return response.data;
+  },
+
+  /** 원고 검사 (코드 검사) */
+  checkStudyWriteManuscript: async (caseId: string) => {
+    const response = await api.get<{ checkedAt: string; findings: StudyWriteManuscriptFinding[] }>(
+      `/study-write/cases/${caseId}/manuscript-check`
+    );
     return response.data;
   },
 

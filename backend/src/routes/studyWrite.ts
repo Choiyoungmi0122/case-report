@@ -19,6 +19,7 @@ import { StudyWriteChatEntry, StudyWriteSectionState, StudyWriteState } from '..
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
 import { findSubElement } from '../studyWrite/careSubElements';
 import { CHAT_QUESTION_SUMMARY_SECTIONS, generateSectionChatQuestion } from '../studyWrite/chatQuestion';
+import { checkManuscript } from '../studyWrite/manuscriptCheck';
 import { mergeRegeneratedPart, parseTitleDraft, TitlePart } from '../studyWrite/titleKeywords';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
@@ -252,6 +253,19 @@ function buildDraftsResponse(caseData: any, state: StudyWriteState, attachments:
     sections
   };
 }
+
+/** 원고 검사 (코드 검사, AI 호출 없음): 용량·날짜·시점·추측·부재·처방명·이상반응·환자 관점·남은 표시 */
+router.get('/cases/:caseId/manuscript-check', async (req: Request, res: Response) => {
+  try {
+    const caseData = await loadCase(req.params.caseId);
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const state = normalizeStudyWriteState(caseData.studyWrite);
+    const findings = checkManuscript({ caseData, state });
+    return res.json({ checkedAt: new Date().toISOString(), findings });
+  } catch (error: any) {
+    return res.status(500).json({ error: error?.message || '원고를 검사하지 못했습니다.' });
+  }
+});
 
 router.get('/cases/:caseId/drafts', async (req: Request, res: Response) => {
   try {

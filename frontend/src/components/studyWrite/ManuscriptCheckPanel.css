@@ -1,0 +1,218 @@
+/* 원고 검사: 오른쪽에서 열리는 창 (원문 EMR 보기와 같은 꼴) */
+.sw-check {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sw-check__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 30, 45, 0.35);
+}
+
+.sw-check__panel {
+  position: relative;
+  width: min(720px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f7f9fb;
+  box-shadow: -8px 0 24px rgba(15, 30, 45, 0.18);
+}
+
+.sw-check__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e3e8ee;
+}
+
+.sw-check__head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  color: #17324d;
+}
+
+.sw-check__head p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #5a6c81;
+}
+
+.sw-check__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #d6dde6;
+  border-radius: 8px;
+  background: #fff;
+  color: #3d4b5c;
+  cursor: pointer;
+}
+
+.sw-check__summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid #e3e8ee;
+  font-size: 13px;
+}
+
+.sw-check__summary > span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.sw-check__summary .is-error {
+  background: #fadcd5;
+  color: #a93b24;
+}
+
+.sw-check__summary .is-warn {
+  background: #fde9bf;
+  color: #7a4b00;
+}
+
+.sw-check__summary .is-info {
+  background: #eef1f5;
+  color: #4a5568;
+}
+
+.sw-check__summary label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: #3d4b5c;
+}
+
+.sw-check__summary button {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid #8fb0d3;
+  background: #eef5fb;
+  color: #1f5f8b;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-check__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 20px 24px;
+}
+
+.sw-check__section {
+  margin-bottom: 14px;
+}
+
+.sw-check__section h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 14.5px;
+  color: #17324d;
+}
+
+.sw-check__section h3 .is-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1f5f8b;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.sw-check__section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sw-check__item {
+  padding: 8px 10px;
+  border: 1px solid #e3e8ee;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13.5px;
+}
+
+.sw-check__item.is-error {
+  border-left-color: #c8402a;
+}
+
+.sw-check__item.is-warn {
+  border-left-color: #d98a12;
+}
+
+.sw-check__item.is-info {
+  border-left-color: #b8c2cf;
+}
+
+.sw-check__tags {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-size: 11.5px;
+}
+
+.sw-check__tags em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.sw-check__item.is-error .sw-check__tags em {
+  color: #a93b24;
+}
+
+.sw-check__item.is-warn .sw-check__tags em {
+  color: #7a4b00;
+}
+
+.sw-check__tags span {
+  color: #5a6c81;
+}
+
+.sw-check__item p {
+  margin: 0;
+  color: #1f2a37;
+}
+
+.sw-check__item blockquote {
+  margin: 5px 0 0;
+  padding: 4px 8px;
+  border-left: 3px solid #d6dde6;
+  background: #f7f9fb;
+  color: #3d4b5c;
+  font-size: 12.5px;
+}
+
+.sw-check__item small {
+  display: block;
+  margin-top: 4px;
+  color: #6b7a8c;
+  font-size: 12px;
+}
+
+.sw-check__empty,
+.sw-check__time {
+  color: #6b7a8c;
+  font-size: 13px;
+}

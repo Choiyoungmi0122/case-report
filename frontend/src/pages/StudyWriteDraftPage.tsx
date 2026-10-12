@@ -28,6 +28,7 @@ import { convertRelativeDates, toRawOffset } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
 import TitleKeywordsEditor from '../components/studyWrite/TitleKeywordsEditor';
 import RecordViewer from '../components/studyWrite/RecordViewer';
+import ManuscriptCheckPanel from '../components/studyWrite/ManuscriptCheckPanel';
 import { parseTitleDraft } from '../utils/titleKeywords';
 import './StudyWriteDraftPage.css';
 
@@ -87,6 +88,8 @@ export default function StudyWriteDraftPage() {
   const [tab, setTab] = useState<'chat' | 'care' | 'answers'>('chat');
   // 원문 EMR 보기 (왼쪽 목록 맨 아래)
   const [recordOpen, setRecordOpen] = useState(false);
+  // 원고 검사 (코드 검사)
+  const [checkOpen, setCheckOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const [instruction, setInstruction] = useState('');
   // 보낸 뒤 입력 칸 높이를 원래대로
@@ -595,7 +598,22 @@ export default function StudyWriteDraftPage() {
           <button type="button" className="sw-draft__nav-item sw-draft__nav-record" onClick={() => setRecordOpen(true)}>
             <span>원문 EMR 보기</span>
           </button>
+          <button type="button" className="sw-draft__nav-item sw-draft__nav-record" onClick={() => setCheckOpen(true)}>
+            <span>원고 검사</span>
+          </button>
         </nav>
+        {caseId ? (
+          <ManuscriptCheckPanel
+            caseId={caseId}
+            isOpen={checkOpen}
+            onClose={() => setCheckOpen(false)}
+            formatText={dated}
+            onGoToSection={(sectionId) => {
+              setSelectedId(sectionId);
+              setCheckOpen(false);
+            }}
+          />
+        ) : null}
         {caseId ? (
           <RecordViewer
             caseId={caseId}

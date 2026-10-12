@@ -6,6 +6,7 @@ import TimelineTable, { parseTimelineRows } from '../components/studyWrite/Timel
 import { careCompliance, complianceLevel, uncheckedSuffix } from '../utils/studyWriteCare';
 import { convertRelativeDates } from '../utils/relativeDates';
 import DateAnchorBar from '../components/studyWrite/DateAnchorBar';
+import ManuscriptCheckPanel from '../components/studyWrite/ManuscriptCheckPanel';
 import TitleKeywordsEditor from '../components/studyWrite/TitleKeywordsEditor';
 import { parseTitleDraft } from '../utils/titleKeywords';
 import './StudyWriteFinalPage.css';
@@ -25,6 +26,8 @@ export default function StudyWriteFinalPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // 원고 검사 (코드 검사)
+  const [checkOpen, setCheckOpen] = useState(false);
   const locked = useRef(false);
 
   useEffect(() => {
@@ -132,6 +135,9 @@ export default function StudyWriteFinalPage() {
               초안 화면으로
             </button>
           ) : null}
+          <button type="button" className="is-secondary" disabled={!data} onClick={() => setCheckOpen(true)}>
+            원고 검사
+          </button>
           {caseId ? (
             <a className="sw-final__download" href={caseApi.studyWriteManuscriptUrl(caseId)}>
               Word로 내려받기
@@ -146,6 +152,18 @@ export default function StudyWriteFinalPage() {
       </header>
 
       {error ? <div className="sw-final__error">{error}</div> : null}
+      {caseId ? (
+        <ManuscriptCheckPanel
+          caseId={caseId}
+          isOpen={checkOpen}
+          onClose={() => setCheckOpen(false)}
+          formatText={dated}
+          onGoToSection={(sectionId) => {
+            setCheckOpen(false);
+            document.getElementById(`sw-final-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        />
+      ) : null}
       {data && caseId ? (
         <DateAnchorBar caseId={caseId} data={data} onChange={setData} onApplyToText={submitted ? undefined : () => void applyDatesToText()} />
       ) : null}
@@ -157,7 +175,7 @@ export default function StudyWriteFinalPage() {
 
       <div className="sw-final__body">
         {data?.sections.map((section) => (
-          <section key={section.sectionId} className="sw-final__section">
+          <section key={section.sectionId} id={`sw-final-${section.sectionId}`} className="sw-final__section">
             <div className="sw-final__section-head">
               <h2>{section.name}</h2>
               <span>
