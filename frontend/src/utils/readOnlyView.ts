@@ -50,6 +50,11 @@ export function isTelemetryRequest(url: string | undefined): boolean {
   return /\/(scaffold|research)\/(events|session)(\?|$)/.test(String(url || ''));
 }
 
-export function readOnlyViewPath(caseId: string): string {
-  return `/study/scaffold/cases/${caseId}?readonly=1&phase=read`;
+/**
+ * 다시 보기 시작 주소. 실험 모드가 아닌 V2 사례(전체 섹션 시험·시연)는 일반 경로로 열어
+ * 실험용 타이머와 "치료 개입 1개" 집계가 붙지 않게 한다 (2026-10-12).
+ */
+export function readOnlyViewPath(caseId: string, options?: { fullSection?: boolean }): string {
+  const base = options?.fullSection ? '/scaffold' : '/study/scaffold';
+  return `${base}/cases/${caseId}?readonly=1&phase=read`;
 }

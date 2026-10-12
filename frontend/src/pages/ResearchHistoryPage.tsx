@@ -4,6 +4,7 @@ import { caseApi, ResearchHistoryResponse } from '../services/api';
 import ScaffoldSessionRecord from '../components/research/ScaffoldSessionRecord';
 import StudyWriteSessionRecord from '../components/research/StudyWriteSessionRecord';
 import { readOnlyViewPath } from '../utils/readOnlyView';
+import { isScaffoldV2Version } from '../utils/scaffoldVersion';
 import { sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
 
 function asArray<T = any>(value: unknown): T[] {
@@ -400,7 +401,16 @@ export default function ResearchHistoryPage() {
                     type="button"
                     style={styles.secondaryButton}
                     title="참가자가 보던 실습 화면을 새 탭에서 엽니다. 이 참가자의 기록은 바뀌지 않습니다."
-                    onClick={() => window.open(readOnlyViewPath(history.caseId), '_blank', 'noopener')}
+                    onClick={() =>
+                      window.open(
+                        readOnlyViewPath(history.caseId, {
+                          fullSection:
+                            isScaffoldV2Version(exportData?.versionMetadata?.scaffoldVersion) && !exportData?.studyConfig?.studyMode
+                        }),
+                        '_blank',
+                        'noopener'
+                      )
+                    }
                   >
                     참가자 화면 다시 보기 (읽기 전용)
                   </button>
