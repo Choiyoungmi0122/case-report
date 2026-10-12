@@ -5,6 +5,8 @@ import './RecordViewer.css';
 /**
  * 실험용 Write 초안 화면의 "원문 EMR 보기": 이 사례에 넣은 (비식별) 진료 기록을 회차별로 보여 준다.
  * 처음 열 때 한 번만 불러온다. 낱말을 찾으면 강조하고 그 낱말이 있는 회차만 남길 수 있다.
+ * onPinnedChange 를 주면 왼쪽 위에 "유지하기"가 생긴다. 유지하면 덮는 창이 아니라 화면 안의 칸으로 그려지고
+ * (자리는 부르는 화면이 정한다), 다른 곳을 눌러도·Esc 를 눌러도 닫히지 않는다.
  */
 
 function visitLabel(visits: Visit[], index: number, relativeDates: boolean): string {
@@ -36,8 +38,11 @@ export default function RecordViewer(props: {
   relativeDates: boolean;
   /** "첫 기록일 +N일"을 실제 날짜로 바꿔 보여 줄 때 (첫 기록일을 넣은 경우) */
   formatDate?: (label: string) => string;
+  pinned?: boolean;
+  onPinnedChange?: (pinned: boolean) => void;
 }) {
-  const { caseId, isOpen, onClose, relativeDates, formatDate } = props;
+  const { caseId, isOpen, onClose, relativeDates, formatDate, onPinnedChange } = props;
+  const pinned = Boolean(props.pinned && onPinnedChange);
   const [visits, setVisits] = useState<Visit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -52,13 +57,13 @@ export default function RecordViewer(props: {
   }, [caseId, isOpen, visits]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || pinned) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, pinned, onClose]);
 
   const needle = query.trim();
   const counts = useMemo(
@@ -70,11 +75,27 @@ export default function RecordViewer(props: {
   if (!isOpen) return null;
 
   return (
-    <div className="sw-record" role="dialog" aria-modal="true" aria-label="원문 EMR">
-      <div className="sw-record__backdrop" onClick={onClose} />
+    <div
+      className={`sw-record${pinned ? ' sw-record--pinned' : ''}`}
+      role={pinned ? 'region' : 'dialog'}
+      aria-modal={pinned ? undefined : true}
+      aria-label="원문 EMR"
+    >
+      {pinned ? null : <div className="sw-record__backdrop" onClick={onClose} />}
       <aside className="sw-record__panel">
         <header className="sw-record__head">
-          <div>
+          {onPinnedChange ? (
+            <button
+              type="button"
+              className={`sw-record__pin${pinned ? ' is-on' : ''}`}
+              aria-pressed={pinned}
+              title={pinned ? '유지를 풀면 다시 덮는 창으로 돌아갑니다' : '왼쪽에 계속 띄워 둡니다. 다른 곳을 눌러도 닫히지 않습니다'}
+              onClick={() => onPinnedChange(!pinned)}
+            >
+              {pinned ? '유지 풀기' : '유지하기'}
+            </button>
+          ) : null}
+          <div className="sw-record__title">
             <h2>원문 EMR</h2>
             <p>이 사례에 넣은 비식별 진료 기록입니다. 고칠 수는 없고 보기만 합니다.</p>
           </div>
@@ -87,7 +108,7 @@ export default function RecordViewer(props: {
             value={query}
             placeholder="기록에서 찾기 (예: 황련, 두근거림)"
             onChange={(event) => setQuery(event.target.value)}
-            autoFocus
+            autoFocus={!pinned}
           />
           {needle ? <span>{total}곳</span> : null}
           <label>

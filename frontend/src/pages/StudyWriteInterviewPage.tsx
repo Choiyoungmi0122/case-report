@@ -30,6 +30,8 @@ function formatElapsed(fromIso?: string) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+const RECORD_PINNED_KEY = 'swInterviewRecordPinned';
+
 export default function StudyWriteInterviewPage() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -48,8 +50,24 @@ export default function StudyWriteInterviewPage() {
   // 전문용어 확인 화면에서 회차별 원문을 보여 주기 위한 방문 기록
   const [visits, setVisits] = useState<Visit[]>([]);
   const [termModalOpen, setTermModalOpen] = useState(false);
-  // 원문 EMR 보기 (초안 화면과 같은 왼쪽 칸)
-  const [recordOpen, setRecordOpen] = useState(false);
+  // 원문 EMR 보기 (초안 화면과 같은 왼쪽 칸). "유지하기"를 누르면 왼쪽 칸에 계속 띄운다 (이 브라우저에만 기억)
+  const [recordPinned, setRecordPinned] = useState(() => {
+    try {
+      return window.localStorage.getItem(RECORD_PINNED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [recordOpen, setRecordOpen] = useState(recordPinned);
+  const changeRecordPinned = (next: boolean) => {
+    setRecordPinned(next);
+    try {
+      if (next) window.localStorage.setItem(RECORD_PINNED_KEY, '1');
+      else window.localStorage.removeItem(RECORD_PINNED_KEY);
+    } catch {
+      // 저장하지 못해도 이 화면에서는 그대로 유지된다
+    }
+  };
   const [, setTick] = useState(0);
   const processingKicked = useRef(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -229,11 +247,26 @@ export default function StudyWriteInterviewPage() {
   const waitingForAnalysis = Boolean(data && roundComplete && !finished && data.nextRound.ok && !data.analysis.ready);
 
   return (
-    <div className="sw-interview-shell">
+    <div className={`sw-interview-shell${recordPinned && recordOpen ? ' is-record-pinned' : ''}`}>
       <nav className="sw-interview-shell__rail" aria-label="기록">
-        <button type="button" className="sw-interview-shell__record" onClick={() => setRecordOpen(true)}>
-          원문 EMR 보기
-        </button>
+        {recordPinned && recordOpen ? null : (
+          <button type="button" className="sw-interview-shell__record" onClick={() => setRecordOpen(true)}>
+            원문 EMR 보기
+          </button>
+        )}
+        {caseId ? (
+          <RecordViewer
+            caseId={caseId}
+            isOpen={recordOpen}
+            onClose={() => {
+              setRecordOpen(false);
+              changeRecordPinned(false);
+            }}
+            relativeDates={Boolean(data?.interview.inputSource?.relativeDates)}
+            pinned={recordPinned}
+            onPinnedChange={changeRecordPinned}
+          />
+        ) : null}
       </nav>
       <div className="sw-interview">
         <header className="sw-interview__header">
@@ -445,14 +478,6 @@ export default function StudyWriteInterviewPage() {
             }}
             pendingTerms={pendingTerms}
             visits={visits}
-            relativeDates={Boolean(data?.interview.inputSource?.relativeDates)}
-          />
-        ) : null}
-        {caseId ? (
-          <RecordViewer
-            caseId={caseId}
-            isOpen={recordOpen}
-            onClose={() => setRecordOpen(false)}
             relativeDates={Boolean(data?.interview.inputSource?.relativeDates)}
           />
         ) : null}

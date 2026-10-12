@@ -29,6 +29,18 @@
   background: #eef5fb;
 }
 
+/* 유지하기: 왼쪽 칸을 넓혀 원문을 계속 띄운다 */
+.sw-interview-shell.is-record-pinned {
+  grid-template-columns: minmax(360px, 38%) minmax(0, 1fr);
+}
+
+.sw-interview-shell.is-record-pinned .sw-interview-shell__rail {
+  position: sticky;
+  top: 16px;
+  margin-top: 16px;
+  height: calc(100vh - 32px);
+}
+
 @media (max-width: 900px) {
   .sw-interview-shell {
     grid-template-columns: 1fr;
@@ -36,6 +48,14 @@
   }
   .sw-interview-shell__rail {
     margin: 16px 20px 0;
+  }
+  .sw-interview-shell.is-record-pinned {
+    grid-template-columns: 1fr;
+  }
+  .sw-interview-shell.is-record-pinned .sw-interview-shell__rail {
+    position: static;
+    margin: 16px 20px 0;
+    height: 55vh;
   }
   .sw-interview-shell__record {
     width: auto;

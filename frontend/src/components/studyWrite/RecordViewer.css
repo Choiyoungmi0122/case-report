@@ -33,6 +33,31 @@
   border-bottom: 1px solid #e3e8ee;
 }
 
+.sw-record__title {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 왼쪽 위: 유지하기 */
+.sw-record__pin {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #8fb0d3;
+  border-radius: 8px;
+  background: #eef5fb;
+  color: #1f5f8b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-record__pin.is-on {
+  border-color: #1f5f8b;
+  background: #1f5f8b;
+  color: #fff;
+}
+
 .sw-record__head h2 {
   margin: 0 0 4px;
   font-size: 18px;
@@ -152,6 +177,22 @@
   margin: 20px 0;
   color: #6b7a8c;
   font-size: 13.5px;
+}
+
+/* 유지하기: 덮는 창이 아니라 부르는 화면의 칸을 채운다 */
+.sw-record--pinned {
+  position: static;
+  z-index: auto;
+  display: block;
+  height: 100%;
+}
+
+.sw-record--pinned .sw-record__panel {
+  width: 100%;
+  border: 1px solid #d9e0e8;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: none;
 }
 
 @media (max-width: 640px) {
