@@ -2486,46 +2486,50 @@ export default function ScaffoldSectionPage() {
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    padding: 12,
-                    border: '1px solid #d7e0e8',
-                    borderRadius: 8,
-                    background: '#f8fafc'
-                  }}
-                >
-                  <div style={{ color: '#17324d', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-                    Step 1 완료 기준
-                  </div>
-                  <div style={{ color: '#52606d', fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
-                    내 초안을 쓰면 다음으로 넘어갈 수 있습니다. 이 항목에 쓸 내용을 기록에서 찾지 못했다면 아래 항목을 확인하세요.
-                  </div>
-                  <label
+                {/* V2 는 "Step 1 완료 기준"(근거를 찾지 못했다는 확인란)을 보이지 않는다(2026-10-12 연구자 요청).
+                    내 초안을 쓰면 넘어가고, 이 사례는 치료 개입 정보가 기록에 많아 확인란을 쓸 일이 거의 없다. V1 은 그대로다. */}
+                {!isV2 ? (
+                  <div
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      color: '#17324d',
-                      fontSize: 15,
-                      cursor: 'pointer'
+                      padding: 12,
+                      border: '1px solid #d7e0e8',
+                      borderRadius: 8,
+                      background: '#f8fafc'
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={noRelevantEvidenceConfirmed}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        setNoRelevantEvidenceConfirmed(checked);
-                        if (checked) {
-                          setSelectedEvidenceItems([]);
-                          setKeyInformationItems([]);
-                          setKeyInformationDraft('');
-                        }
+                    <div style={{ color: '#17324d', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
+                      Step 1 완료 기준
+                    </div>
+                    <div style={{ color: '#52606d', fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
+                      내 초안을 쓰면 다음으로 넘어갈 수 있습니다. 이 항목에 쓸 내용을 기록에서 찾지 못했다면 아래 항목을 확인하세요.
+                    </div>
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        color: '#17324d',
+                        fontSize: 15,
+                        cursor: 'pointer'
                       }}
-                    />
-                    현재 기록에서 이 항목에 사용할 관련 근거를 찾지 못했습니다.
-                  </label>
-                </div>
+                    >
+                      <input
+                        type="checkbox"
+                        checked={noRelevantEvidenceConfirmed}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setNoRelevantEvidenceConfirmed(checked);
+                          if (checked) {
+                            setSelectedEvidenceItems([]);
+                            setKeyInformationItems([]);
+                            setKeyInformationDraft('');
+                          }
+                        }}
+                      />
+                      현재 기록에서 이 항목에 사용할 관련 근거를 찾지 못했습니다.
+                    </label>
+                  </div>
+                ) : null}
               </div>
 
               {/* Action Button */}
@@ -2539,6 +2543,9 @@ export default function ScaffoldSectionPage() {
                     ? '저장 중...'
                     : '다음: 정보 충분성 확인'}
                 </ScaffoldActionButton>
+                {isV2 && !step1Complete ? (
+                  <p style={{ margin: '8px 0 0', color: '#5a6c81', fontSize: 13.5 }}>내 초안을 쓰면 다음으로 넘어갈 수 있습니다.</p>
+                ) : null}
               </div>
             </ScaffoldPanel>
           )}
