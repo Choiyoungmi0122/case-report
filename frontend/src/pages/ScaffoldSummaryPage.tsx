@@ -10,7 +10,7 @@ import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
-import { getCompletedScaffoldSectionCount } from '../utils/scaffoldUi';
+import { getCompletedScaffoldSectionCount, sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
 import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import StageGuide from '../components/scaffold/StageGuide';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
@@ -383,8 +383,10 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
           const keyItems = parseReflectionList(preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo);
           const missingItems = parseReflectionList(preAi.learnerIdentifiedMissingItems);
           const ownDraft = String(preAi.learnerNotes || '').trim();
-          const sufficiencyItems = reviewItems.filter(
-            (item) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence'
+          // 답한 순서가 아니라 질문 순서로 보인다
+          const sufficiencyItems = sortBySufficiencyQuestionOrder(
+            reviewItems.filter((item) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence'),
+            (item) => item.id
           );
           // 학습자가 다시 볼 문장으로 표시한 것만 보여준다.
           const sentenceItems = reviewItems.filter(

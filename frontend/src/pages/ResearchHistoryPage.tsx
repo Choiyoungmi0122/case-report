@@ -4,6 +4,7 @@ import { caseApi, ResearchHistoryResponse } from '../services/api';
 import ScaffoldSessionRecord from '../components/research/ScaffoldSessionRecord';
 import StudyWriteSessionRecord from '../components/research/StudyWriteSessionRecord';
 import { readOnlyViewPath } from '../utils/readOnlyView';
+import { sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
 
 function asArray<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -57,7 +58,11 @@ function SectionHistory({ section, exportData }: { section: any; exportData: any
   const draft = asArray(exportData.sectionDrafts).find((item) => item.sectionId === sectionId);
   const reviewItems = asArray(scaffoldData.reviewItems).filter((item) => item.sectionId === sectionId);
   const postAiItems = reviewItems.filter((item) => item.sourceType === 'draft_sentence');
-  const preAiItems = reviewItems.filter((item) => item.sourceType !== 'draft_sentence');
+  // 답한 순서가 아니라 질문 순서로 보인다
+  const preAiItems = sortBySufficiencyQuestionOrder(
+    reviewItems.filter((item) => item.sourceType !== 'draft_sentence'),
+    (item: any) => item.id
+  );
   const adequacy = exportData.sectionAdequacyReviews?.[sectionId];
   const sectionResearch = scaffoldData.sections?.[sectionId] || {};
   const timing = sectionResearch.sectionTiming || {};

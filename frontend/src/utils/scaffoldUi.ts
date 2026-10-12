@@ -377,3 +377,17 @@ export function sectionIdToUppercaseKey(sectionId: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join('_');
 }
+
+/**
+ * Step 2 충분성 판단을 질문 순서(ti_001, ti_002 …)로 보이게 정렬한다 (2026-10-12).
+ * 판단 항목 id 는 "<섹션>-custom-0-ti-001" 꼴이고 끝의 "ti-001"이 질문 번호다. 저장된 순서(답한 순서)가 아니라
+ * 질문 순서로 보여 준다. 번호가 없는 항목은 맨 뒤에 두고, 그 사이 순서는 그대로 둔다(안정 정렬).
+ */
+export function sufficiencyQuestionOrderKey(id: string | undefined | null): string {
+  const match = String(id || '').match(/([a-z]{2})-(\d{3})$/i);
+  return match ? `${match[1].toLowerCase()}-${match[2]}` : '~';
+}
+
+export function sortBySufficiencyQuestionOrder<T>(items: T[], getId: (item: T) => string | undefined | null): T[] {
+  return [...items].sort((a, b) => sufficiencyQuestionOrderKey(getId(a)).localeCompare(sufficiencyQuestionOrderKey(getId(b))));
+}

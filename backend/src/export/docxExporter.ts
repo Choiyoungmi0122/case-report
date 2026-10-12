@@ -592,9 +592,14 @@ function buildScaffoldSummaryChildren(caseData: Case) {
       children.push(makeBodyParagraph('기록에 부족하다고 본 내용'));
       missingItems.forEach((item) => children.push(buildBulletParagraph(safeText(item))));
     }
-    const sufficiencyJudgments: any[] = (snapshot?.reviewItemJudgments || []).filter(
-      (item: any) => item.sourceType !== 'draft_sentence'
-    );
+    // 답한 순서가 아니라 질문 순서(ti-001, ti-002 …)로 쓴다. 번호가 없는 항목은 뒤에 둔다.
+    const questionOrderKey = (id: unknown) => {
+      const match = String(id || '').match(/([a-z]{2})-(\d{3})$/i);
+      return match ? `${match[1].toLowerCase()}-${match[2]}` : '~';
+    };
+    const sufficiencyJudgments: any[] = (snapshot?.reviewItemJudgments || [])
+      .filter((item: any) => item.sourceType !== 'draft_sentence')
+      .sort((a: any, b: any) => questionOrderKey(a.itemId).localeCompare(questionOrderKey(b.itemId)));
     if (sufficiencyJudgments.length > 0) {
       children.push(makeBodyParagraph('정보가 충분한지에 대한 판단'));
       sufficiencyJudgments.forEach((item: any) => {

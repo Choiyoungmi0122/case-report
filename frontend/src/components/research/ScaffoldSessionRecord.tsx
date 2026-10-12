@@ -5,6 +5,7 @@ import {
   getSectionConfig
 } from '../../utils/scaffoldUi';
 import { getStudySectionIdsForVersion } from '../../utils/scaffoldVersion';
+import { sortBySufficiencyQuestionOrder } from '../../utils/scaffoldUi';
 
 /**
  * 연구자용 조회 화면에서 Scaffold 세션 한 건을 지금의 진행 순서대로 보여준다:
@@ -300,7 +301,11 @@ export default function ScaffoldSessionRecord({ exportData, experimentCode }: { 
         const progress = progressList.find((item) => item.sectionId === sectionId);
         const draft = drafts.find((item) => item.sectionId === sectionId);
         const items = reviewItems.filter((item) => item.sectionId === sectionId);
-        const sufficiency = items.filter((item) => item.sourceType !== 'draft_sentence');
+        // 답한 순서가 아니라 질문 순서로 보인다
+        const sufficiency = sortBySufficiencyQuestionOrder(
+          items.filter((item) => item.sourceType !== 'draft_sentence'),
+          (item: any) => item.id
+        );
         const flagged = items.filter((item) => item.sourceType === 'draft_sentence' && item.judgment !== 'pending');
         const post = reflection?.postAiReflection || {};
 
