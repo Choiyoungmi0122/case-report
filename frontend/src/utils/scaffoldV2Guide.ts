@@ -265,9 +265,10 @@ export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string }
   available_in_record: {
     description: '기록에 적혀 있어 그대로 옮겨 쓸 수 있다.'
   },
+  // 2026-10-12 연구자 요청: 선행연구·다른 증례보고를 찾아봐야 쓸 수 있는 경우도 "추가 확인 필요"에 넣는다.
   needs_additional_confirmation: {
     description:
-      '기록에 일부만 있거나 빠져 있지만, 환자·보호자, 약봉투, 다른 병원 기록 등으로 확인할 수 있다. 쓰기 전에 확인한다.'
+      '기록에 일부만 있거나 빠져 있어, 환자·보호자, 약봉투, 다른 병원 기록을 확인하거나 선행연구·다른 증례보고를 찾아봐야 쓸 수 있다. 쓰기 전에 확인한다.'
   },
   needs_instructor_review: {
     description: '기록은 있지만, 증례보고에 어떻게 해석하거나 표현할지 교수자와 상의하고 싶다.'
@@ -297,7 +298,8 @@ export const TI_SUFFICIENCY_QUESTIONS_V2: Array<{
     description: '어떤 치료를 했는지 명확해야 합니다.',
     optionExamples: {
       available_in_record: '예: 처방란에 약 이름, 1회 용량, 하루 복용 횟수가 적혀 있다.',
-      needs_additional_confirmation: '예: 다른 병원 약을 먹는다고만 적혀 있어, 약봉투나 처방전을 봐야 이름과 용량을 알 수 있다.',
+      needs_additional_confirmation:
+        '예: 다른 병원 약을 먹는다고만 적혀 있어 약봉투나 처방전을 봐야 이름과 용량을 알 수 있다. 처방 이름만 있어 구성 약재와 용량을 문헌에서 찾아봐야 한다.',
       needs_instructor_review: '예: 변증과 치료 원칙을 치료 개입에 쓸지, 쓴다면 어떻게 쓸지 묻고 싶다.',
       cannot_confirm_in_record: '예: 뜸을 했다고만 있고 부위나 시간은 어디에도 적혀 있지 않다.'
     }
