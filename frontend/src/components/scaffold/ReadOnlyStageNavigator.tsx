@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import type { ScaffoldStateResponse } from '../../services/api';
 import { getReadOnlyViewCaseId } from '../../utils/readOnlyView';
-import { getSectionConfig } from '../../utils/scaffoldUi';
-import { getStudySectionIds } from '../../utils/scaffoldVersion';
+import { getSectionConfig, getSectionsByGroup } from '../../utils/scaffoldUi';
+import { getStudySectionIds, isScaffoldV2Data } from '../../utils/scaffoldVersion';
 
 export type ReadOnlyStage = 'pre' | 'post';
 
@@ -109,8 +109,12 @@ export function buildReadOnlyStops(params: {
   sectionIds: string[];
   revealedSectionIds: string[];
   sectionLabel: (sectionId: string) => string;
+  /** 실험 모드가 아닌 사례(전체 섹션)는 일반 경로로 연다 */
+  basePath?: string;
+  /** AI 비교 단계가 없는 "추가 작성" 섹션. 화면 하나만 둔다 */
+  writeOnlySectionIds?: string[];
 }): ReadOnlyStop[] {
-  const base = `/study/scaffold/cases/${params.caseId}`;
+  const base = `${params.basePath || '/study/scaffold'}/cases/${params.caseId}`;
   const stops: ReadOnlyStop[] = [
     { key: 'read', label: '기록 읽기 · 메모', path: `${base}?phase=read` },
     { key: 'overview', label: 'CARE 항목 개요', path: `${base}?phase=write` }
@@ -118,6 +122,10 @@ export function buildReadOnlyStops(params: {
 
   for (const sectionId of params.sectionIds) {
     const label = params.sectionLabel(sectionId);
+    if (params.writeOnlySectionIds?.includes(sectionId)) {
+      stops.push({ key: `${sectionId}:pre`, label: `${label} · 추가 작성`, path: `${base}/sections/${sectionId}?stage=pre` });
+      continue;
+    }
     stops.push({
       key: `${sectionId}:pre`,
       label: `${label} · AI 초안 보기 전`,
@@ -152,8 +160,13 @@ export function ReadOnlyNavigatorBar({
   if (!caseId || !data || getReadOnlyViewCaseId() !== caseId) return null;
 
   const available = (data.sectionStates || []).map((item) => item.sectionId as string);
-  const studied = getStudySectionIds(data).filter((id) => available.includes(id));
+  // 실험 모드가 아닌 V2 사례(전체 섹션 시험·시연)는 모든 섹션을 훑어볼 수 있게 한다 (2026-10-12).
+  // 학생 V1 기록은 studyConfig 가 비어 있어도 예전처럼 실험 경로·실험 섹션으로 연다.
+  const fullSectionV2 = isScaffoldV2Data(data) && !data.studyConfig?.studyMode;
+  const studyMode = !fullSectionV2;
+  const studied = studyMode ? getStudySectionIds(data).filter((id) => available.includes(id)) : [];
   const sectionIds = studied.length > 0 ? studied : available;
+  const writeOnlySectionIds = getSectionsByGroup('additional_authoring').map((section) => section.sectionId as string);
   const revealedSectionIds = (data.scaffoldState?.sectionProgress || [])
     .filter((item) => item.draftRevealed)
     .map((item) => item.sectionId as string);
@@ -164,7 +177,9 @@ export function ReadOnlyNavigatorBar({
         caseId,
         sectionIds,
         revealedSectionIds,
-        sectionLabel: (sectionId) => getSectionConfig(sectionId)?.displayName || sectionId
+        sectionLabel: (sectionId) => getSectionConfig(sectionId)?.displayName || sectionId,
+        basePath: studyMode ? '/study/scaffold' : '/scaffold',
+        writeOnlySectionIds
       })}
       currentKey={currentKey}
       onGo={(path) => navigate(path)}
