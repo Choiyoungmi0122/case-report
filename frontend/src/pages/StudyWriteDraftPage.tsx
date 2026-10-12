@@ -996,7 +996,10 @@ export default function StudyWriteDraftPage() {
                             {sub.id} {sub.required ? '필수' : '선택'}
                           </span>
                           <strong>{sub.label}</strong>
-                          <em className="sw-care-sub__state">{STATUS_LABEL[sub.status]}</em>
+                          <em className="sw-care-sub__state">
+                            {STATUS_LABEL[sub.status]}
+                            {sub.disagreed ? <span className="sw-care-split" title="두 번 점검한 판정이 갈렸습니다. 원고를 직접 확인해 주세요."> · 판정 갈림</span> : null}
+                          </em>
                         </div>
                         <p className="sw-care-sub__criterion">
                           {sub.criterion}

@@ -160,6 +160,14 @@ export function normalizeSubElementId(raw: string): string {
   return match ? `${match[1]}-${match[2]}` : compact;
 }
 
+/** 마지막 방문의 첫 기록일 기준 일수 (날짜가 없으면 null) */
+function lastVisitDay(caseData: any): number | null {
+  const visits: any[] = Array.isArray(caseData?.visits) ? caseData.visits : [];
+  const first = visits[0]?.date ? new Date(visits[0].date).getTime() : NaN;
+  const last = visits[visits.length - 1]?.date ? new Date(visits[visits.length - 1].date).getTime() : NaN;
+  return Number.isNaN(first) || Number.isNaN(last) ? null : Math.round((last - first) / 86400000);
+}
+
 let herbalNameCache: string[] | null = null;
 /** 용어 사전의 처방명. "○○산", "○○음"처럼 낱말 꼴로 가려낼 수 없는 처방을 찾는 데 쓴다 */
 function herbalPrescriptionNames(): string[] {
@@ -170,6 +178,83 @@ function herbalPrescriptionNames(): string[] {
       .filter((name) => name.length >= 2);
   }
   return herbalNameCache;
+}
+
+/**
+ * CARE 점검(SW-C)을 같은 입력으로 몇 번 돌려 합칠지. gpt-4.1-mini 가 같은 초안에서 판정을 바꾸는 일이 있어
+ * (임교수 테스트 6 타임라인: 세 번 중 두 번 과거력 행·진단 검사 칸을 "없음"으로 봄) 두 번 돌리고,
+ * 두 번 다 "없음"일 때만 "없음"으로 둔다 (사용자 결정 2026-10-12). 비용은 두 배, 시간은 동시에 돌려 그대로.
+ */
+export const CARE_CHECK_RUNS = 2;
+
+/**
+ * 타임라인 표 구조로 코드가 확실히 "있음"이라 할 수 있는 하위 요소. 두 번 점검해도 모델이 같은 표의 과거력 행·진단 검사 칸을
+ * 꾸준히 "없음"으로 읽는 일이 있어(임교수 테스트 6, 2026-10-12) 구조로 확인되면 "있음"으로 올린다. 확인되지 않으면 모델 판정을 둔다.
+ *  7-1 모든 행에 날짜 칸 / 7-2 첫 행이 과거력·발병 / 7-3 진단 검사 칸이 하나라도 채워짐 / 7-4 치료 개입 칸이 채워짐 / 7-5 마지막 행이 마지막 방문
+ */
+export function timelineStructurePresent(draftText: string, lastVisitDay: number | null): Set<string> {
+  const rows = String(draftText || '')
+    .split('\n')
+    .map((line) => line.split('|').map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 4);
+  const out = new Set<string>();
+  if (rows.length === 0) return out;
+  const filled = (cell: string | undefined) => Boolean(cell && cell !== '-' && cell !== '–');
+  if (rows.every((cells) => filled(cells[0]))) out.add('7-1');
+  if (/과거력|발병|이전\s*치료|병력/.test(rows[0][0])) out.add('7-2');
+  if (rows.some((cells) => filled(cells[2]))) out.add('7-3');
+  if (rows.filter((cells) => filled(cells[3])).length >= Math.max(1, rows.length - 1)) out.add('7-4');
+  if (lastVisitDay !== null) {
+    const lastDays = (rows[rows.length - 1][0].match(/\+(\d+)/g) || []).map((value) => Number(value.slice(1)));
+    if (lastDays.includes(lastVisitDay)) out.add('7-5');
+  }
+  return out;
+}
+
+type CareCheckOutput = z.infer<typeof StudyWriteCareCheckOutputSchema>;
+type CareVerdict = { status: CareCheckOutput['items'][number]['status']; hint: string };
+
+/** 합칠 때 고르는 순서: 있음 > 해당 없음 > 초안에 빠짐 > 없음. 하나라도 있음이면 있음 */
+const CARE_STATUS_RANK: Record<string, number> = { present: 0, not_applicable: 1, in_record_not_in_draft: 2, not_in_record: 3 };
+
+function pickVerdict<T extends CareVerdict>(candidates: T[]): T {
+  return [...candidates].sort((a, b) => (CARE_STATUS_RANK[a.status] ?? 9) - (CARE_STATUS_RANK[b.status] ?? 9))[0];
+}
+
+/** 여러 번의 점검 결과를 항목·하위 요소마다 합친다. 판정이 갈린 곳을 함께 돌려준다 */
+export function mergeCareCheckOutputs(outputs: CareCheckOutput[]): CareCheckOutput & {
+  disagreedItemCodes: Set<string>;
+  disagreedSubIds: Set<string>;
+} {
+  const itemGroups = new Map<string, CareCheckOutput['items']>();
+  const subGroups = new Map<string, CareCheckOutput['subItems']>();
+  for (const output of outputs) {
+    const seenItems = new Set<string>();
+    for (const item of output.items) {
+      const key = normalizeCareItemCode(item.code);
+      if (!key || seenItems.has(key)) continue;
+      seenItems.add(key);
+      itemGroups.set(key, [...(itemGroups.get(key) || []), item]);
+    }
+    const seenSubs = new Set<string>();
+    for (const sub of output.subItems || []) {
+      const key = normalizeSubElementId(sub.id);
+      if (!key || seenSubs.has(key)) continue;
+      seenSubs.add(key);
+      subGroups.set(key, [...(subGroups.get(key) || []), sub]);
+    }
+  }
+  const disagreedItemCodes = new Set<string>();
+  const disagreedSubIds = new Set<string>();
+  const items = [...itemGroups.entries()].map(([key, group]) => {
+    if (new Set(group.map((item) => item.status)).size > 1) disagreedItemCodes.add(key);
+    return pickVerdict(group);
+  });
+  const subItems = [...subGroups.entries()].map(([key, group]) => {
+    if (new Set(group.map((sub) => sub.status)).size > 1) disagreedSubIds.add(key);
+    return pickVerdict(group);
+  });
+  return { items, subItems, disagreedItemCodes, disagreedSubIds };
 }
 
 export async function runCareCheck(params: {
@@ -193,20 +278,31 @@ export async function runCareCheck(params: {
   const evidenceById = new Map(subDefs.map((sub) => [sub.id, conditionByEvidence(sub, conditionText)] as const));
   const promptSubDefs = subDefs.filter((sub) => evidenceById.get(sub.id) !== false);
   const conditionMetIds = new Set(subDefs.filter((sub) => evidenceById.get(sub.id) === true).map((sub) => sub.id));
-  const output = await callLLMWithSchema(
-    StudyWriteCareCheckOutputSchema,
-    studyWriteCareCheckSystemPrompt,
-    buildStudyWriteCareCheckUserPrompt({
-      sectionId,
-      sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
-      careItems: careItemsText(sectionId),
-      recordText,
-      currentDraft: draftText,
-      qaText,
-      subElements: subElementsText(promptSubDefs, conditionMetIds)
-    }),
-    { model: getModelForChain('chain4'), label: `SW-C ${sectionId}` }
+  const userPrompt = buildStudyWriteCareCheckUserPrompt({
+    sectionId,
+    sectionName: CARE_SECTION_NAMES[sectionId] || sectionId,
+    careItems: careItemsText(sectionId),
+    recordText,
+    currentDraft: draftText,
+    qaText,
+    subElements: subElementsText(promptSubDefs, conditionMetIds)
+  });
+  // 같은 입력으로 두 번 점검해 합친다: 둘 다 "없음"일 때만 "없음" (CARE_CHECK_RUNS 설명)
+  const runs = await Promise.allSettled(
+    Array.from({ length: CARE_CHECK_RUNS }, () =>
+      callLLMWithSchema(StudyWriteCareCheckOutputSchema, studyWriteCareCheckSystemPrompt, userPrompt, {
+        model: getModelForChain('chain4'),
+        label: `SW-C ${sectionId}`
+      })
+    )
   );
+  const outputs = runs.flatMap((run) => (run.status === 'fulfilled' ? [run.value] : []));
+  if (outputs.length === 0) throw (runs[0] as PromiseRejectedResult).reason;
+  if (outputs.length < runs.length) console.warn(`[SW-C ${sectionId}] ${runs.length - outputs.length} of ${runs.length} runs failed; using the rest`);
+  const output = mergeCareCheckOutputs(outputs);
+  // 타임라인: 표 구조로 확인되는 요소는 "있음"으로 올린다
+  const structurePresent =
+    sectionId === 'TIMELINE' ? timelineStructurePresent(draftText, lastVisitDay(caseData)) : new Set<string>();
   const subById = new Map<string, (typeof output.subItems)[number]>();
   for (const sub of output.subItems || []) {
     const key = normalizeSubElementId(sub.id);
@@ -230,17 +326,27 @@ export async function runCareCheck(params: {
           id: sub.id,
           label: sub.label,
           required: sub.required,
+          ...(output.disagreedSubIds.has(normalizeSubElementId(sub.id)) ? { disagreed: true } : {}),
           group: sub.group,
           groupLabel: sub.groupLabel,
           criterion: sub.criterion,
           source: sub.source,
           ...(sub.condition ? { condition: sub.condition } : {}),
-          status: conditionFalse
-            ? ('not_applicable' as const)
-            : conditionConflict
-              ? ('unchecked' as const)
-              : found?.status || ('unchecked' as const),
-          hint: conditionFalse ? '' : conditionConflict ? '기록에 해당 내용이 있어 다시 점검이 필요합니다.' : found?.hint || '',
+          status: structurePresent.has(sub.id) && !conditionFalse
+            ? ('present' as const)
+            : conditionFalse
+              ? ('not_applicable' as const)
+              : conditionConflict
+                ? ('unchecked' as const)
+                : found?.status || ('unchecked' as const),
+          hint:
+            structurePresent.has(sub.id) && !conditionFalse
+              ? ''
+              : conditionFalse
+                ? ''
+                : conditionConflict
+                  ? '기록에 해당 내용이 있어 다시 점검이 필요합니다.'
+                  : found?.hint || '',
           ...(sub.condition && typeof conditionMet === 'boolean' ? { conditionMet } : {})
         };
       });
@@ -259,6 +365,7 @@ export async function runCareCheck(params: {
     promptVersion: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION,
     promptTemplateHash: promptMeta('SW_C').promptTemplateHash,
     checklistVersion: subDefs.length > 0 ? CARE_CHECKLIST_VERSION : 'care-checklist:v1',
+    checkRuns: outputs.length,
     ...(hasModalityGroups
       ? { modalities: { checked: modalities, skipped: [...new Set(skippedModalities(sectionId, itemCodes, modalities))] } }
       : {}),
@@ -271,6 +378,7 @@ export async function runCareCheck(params: {
         required: def.required,
         status: found?.status || 'unchecked',
         hint: found?.hint || (found ? '' : '점검 결과를 받지 못했습니다. "전체 점검하기"로 다시 점검하면 판정됩니다.'),
+        ...(output.disagreedItemCodes.has(normalizeCareItemCode(def.code)) ? { disagreed: true } : {}),
         ...(subItems.length > 0 ? { subItems } : {})
       };
     })

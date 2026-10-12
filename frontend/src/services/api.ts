@@ -868,6 +868,8 @@ export interface StudyWriteCareSubItem {
   source: string;
   condition?: string;
   conditionMet?: boolean;
+  /** 두 번 점검한 판정이 갈림 */
+  disagreed?: boolean;
   status: StudyWriteCareItemStatus;
   hint: string;
 }
@@ -876,6 +878,7 @@ export interface StudyWriteCareCheck {
   checkedAt: string;
   promptVersion: string;
   checklistVersion?: string;
+  checkRuns?: number;
   modalities?: { checked: string[]; skipped: string[] };
   items: Array<{
     code: string;
@@ -883,6 +886,7 @@ export interface StudyWriteCareCheck {
     required: boolean;
     status: StudyWriteCareItemStatus;
     hint: string;
+    disagreed?: boolean;
     subItems?: StudyWriteCareSubItem[];
   }>;
 }

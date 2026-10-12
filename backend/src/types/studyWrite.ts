@@ -95,6 +95,8 @@ export interface StudyWriteCareSubItem {
   condition?: string;
   /** 조건이 붙은 요소에서 모델이 판정한 조건 충족 여부. false 면 status 는 not_applicable */
   conditionMet?: boolean;
+  /** 두 번 점검한 판정이 갈렸으면 true (합친 판정은 있음 쪽, drafting.CARE_CHECK_RUNS) */
+  disagreed?: boolean;
   status: StudyWriteCareItemStatus;
   hint: string;
 }
@@ -105,6 +107,8 @@ export interface StudyWriteCareCheck {
   promptTemplateHash?: string;
   /** 'care-checklist:v1' 항목만, 'care-checklist:v2' 하위 요소까지. 없으면 v1 */
   checklistVersion?: string;
+  /** 같은 입력으로 점검한 횟수 (2026-10-12부터 2, 그 전 결과는 없음 = 1) */
+  checkRuns?: number;
   /** 9b 개입 묶음: 점검한 것과, 기록·답변·초안에서 찾지 못해 점검하지 않은 것 */
   modalities?: { checked: string[]; skipped: string[] };
   items: Array<{
@@ -113,6 +117,8 @@ export interface StudyWriteCareCheck {
     required: boolean;
     status: StudyWriteCareItemStatus;
     hint: string;
+    /** 두 번 점검한 판정이 갈렸으면 true */
+    disagreed?: boolean;
     subItems?: StudyWriteCareSubItem[];
   }>;
 }
