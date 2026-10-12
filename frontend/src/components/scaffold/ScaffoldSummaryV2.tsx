@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ScaffoldStateResponse } from '../../services/api';
 import { renderClinicalAnonymizedText } from '../../utils/publicationRenderer';
-import { sortBySufficiencyQuestionOrder, splitScaffoldDraftSentences } from '../../utils/scaffoldUi';
+import { getSectionsByGroup, sortBySufficiencyQuestionOrder, splitScaffoldDraftSentences } from '../../utils/scaffoldUi';
 import { getCaseNoteTypeLabel } from './CaseNotesV2';
 import './ScaffoldSummaryV2.css';
 
@@ -128,7 +128,14 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
       })
       .sort((a, b) => a.number - b.number);
     const post = reflection?.postAiReflection || {};
-    return { sectionId, progress, ownDraft, missingItems, keyItems, selectedEvidence, sufficiency, flagged, aiDraft, post };
+    // AI 비교 단계 없이 글만 쓰는 "추가 작성" 항목(제목·초록·서론·고찰·환자 관점·환자 동의 등)
+    const writeOnly =
+      getSectionsByGroup('additional_authoring').some((item) => item.sectionId === sectionId) &&
+      !progress?.recordReviewCompleted &&
+      !progress?.draftRevealed &&
+      sufficiency.length === 0 &&
+      flagged.length === 0;
+    return { sectionId, progress, ownDraft, missingItems, keyItems, selectedEvidence, sufficiency, flagged, aiDraft, post, writeOnly };
   });
 
   // ---------------------------------------------------------------- 1. 한눈에 보기
@@ -334,7 +341,26 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
         )}
       </section>
 
-      {sections.map((section) => {
+      {sections.some((section) => section.writeOnly) ? (
+        <section className="scaffold-summary-v2__panel" aria-labelledby="summary-v2-write-only">
+          <h2 id="summary-v2-write-only">추가 작성한 항목</h2>
+          <p className="scaffold-summary-v2__lead">AI 초안과 비교하는 단계 없이 학생이 직접 쓴 항목입니다.</p>
+          <dl className="scaffold-summary-v2__reflection">
+            {sections
+              .filter((section) => section.writeOnly)
+              .map((section) => (
+                <div key={section.sectionId}>
+                  <dt>
+                    {sectionName(section.sectionId)} · {section.ownDraft.length}자
+                  </dt>
+                  <dd style={{ whiteSpace: 'pre-wrap' }}>{section.ownDraft || '쓰지 않았습니다.'}</dd>
+                </div>
+              ))}
+          </dl>
+        </section>
+      ) : null}
+
+      {sections.filter((section) => !section.writeOnly).map((section) => {
         const careMap = data.careElementMap?.[section.sectionId] || [];
         return (
           <section key={section.sectionId} className="scaffold-summary-v2__panel" aria-label={sectionName(section.sectionId)}>

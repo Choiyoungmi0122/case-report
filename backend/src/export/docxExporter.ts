@@ -742,6 +742,9 @@ const V2_FLAG_FILL: Record<string, string> = {
   want_to_add: 'C6F6D5'
 };
 
+/** AI 비교 단계 없이 글만 쓰는 "추가 작성" 항목 (frontend utils/scaffoldUi.ts 의 additional_authoring 그룹과 같다). */
+const V2_WRITE_ONLY_SECTION_IDS = new Set(['PATIENT_PERSPECTIVE', 'INFORMED_CONSENT', 'DISCUSSION_CONCLUSION', 'INTRODUCTION', 'TITLE', 'ABSTRACT']);
+
 const v2NoteTypeLabel = (type: string) => V2_NOTE_TYPE_LABELS[type] || '눈에 띈 점';
 const v2SufficiencyLabel = (judgment: string) => V2_SUFFICIENCY_LABELS[judgment] || scaffoldJudgmentLabelKo(judgment);
 const v2IsAiNote = (note: any) => note?.origin === 'ai_suggestion' || String(note?.id || '').startsWith('case-note-ai-');
@@ -1030,7 +1033,10 @@ function buildScaffoldSummaryChildrenV2(caseData: Case) {
       return (
         Boolean(progress?.recordReviewCompleted || progress?.draftRevealed) ||
         snapshots.some((item: any) => item.sectionId === sectionId) ||
-        reviewItems.some((item: any) => item.sectionId === sectionId)
+        reviewItems.some((item: any) => item.sectionId === sectionId) ||
+        // AI 비교 단계가 없는 "추가 작성" 항목도 학생이 쓴 글이 있으면 넣는다
+        (V2_WRITE_ONLY_SECTION_IDS.has(sectionId) &&
+          Boolean(safeText(reflections.find((item: any) => item.sectionId === sectionId)?.learnerNotes)))
       );
     });
   const multiSection = workedSectionIds.length > 1;
@@ -1072,7 +1078,13 @@ function buildScaffoldSummaryChildrenV2(caseData: Case) {
       })
       .sort((a: any, b: any) => a.number - b.number);
     const post = reflection.postAiReflection || {};
-    return { sectionId, progress, ownDraft, missingItems, keyItems, selectedEvidence, sufficiency, aiDraft, aiSentenceList, flagged, post };
+    const writeOnly =
+      V2_WRITE_ONLY_SECTION_IDS.has(sectionId) &&
+      !progress.recordReviewCompleted &&
+      !progress.draftRevealed &&
+      sufficiency.length === 0 &&
+      flagged.length === 0;
+    return { sectionId, progress, ownDraft, missingItems, keyItems, selectedEvidence, sufficiency, aiDraft, aiSentenceList, flagged, post, writeOnly };
   });
 
   const children: Array<Paragraph | Table> = [
@@ -1259,7 +1271,24 @@ function buildScaffoldSummaryChildrenV2(caseData: Case) {
     return children;
   }
 
-  for (const section of sections) {
+  const writeOnlySections = sections.filter((section) => section.writeOnly);
+  if (writeOnlySections.length > 0) {
+    children.push(v2H1('추가 작성한 항목'));
+    children.push(v2Para('AI 초안과 비교하는 단계 없이 학생이 직접 쓴 항목입니다.', { color: V2_MUTED, keepNext: true }));
+    children.push(
+      v2Table(
+        [],
+        writeOnlySections.map((section) => [
+          [scaffoldSectionLabelKo(section.sectionId), `${section.ownDraft.length}자`],
+          section.ownDraft ? section.ownDraft.split(/\n+/).filter(Boolean) : ['쓰지 않았습니다.']
+        ]),
+        [24, 76],
+        { firstColumnFill: 'F1F5F9' }
+      )
+    );
+  }
+
+  for (const section of sections.filter((item) => !item.writeOnly)) {
     const label = scaffoldSectionLabelKo(section.sectionId);
     if (multiSection) children.push(v2H1(label));
 

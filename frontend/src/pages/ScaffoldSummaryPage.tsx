@@ -10,7 +10,7 @@ import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
-import { getCompletedScaffoldSectionCount, sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
+import { getCompletedScaffoldSectionCount, getSectionsByGroup, sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
 import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import StageGuide from '../components/scaffold/StageGuide';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
@@ -243,10 +243,14 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
         return (
           Boolean(progress?.recordReviewCompleted || progress?.draftRevealed) ||
           snapshotBySection.has(sectionState.sectionId) ||
-          reviewItems.some((item) => item.sectionId === sectionState.sectionId)
+          reviewItems.some((item) => item.sectionId === sectionState.sectionId) ||
+          // V2: AI 비교 단계가 없는 "추가 작성" 항목도 학생이 쓴 글이 있으면 기록에 넣는다 (2026-10-12)
+          (isScaffoldV2Data(data) &&
+            getSectionsByGroup('additional_authoring').some((section) => section.sectionId === sectionState.sectionId) &&
+            Boolean(String(reflectionBySection.get(sectionState.sectionId)?.learnerNotes || '').trim()))
         );
       }),
-    [data, progressBySection, snapshotBySection, reviewItems]
+    [data, progressBySection, snapshotBySection, reviewItems, reflectionBySection]
   );
 
   const instructorListItems = useMemo(() => {

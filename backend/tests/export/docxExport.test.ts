@@ -253,6 +253,13 @@ async function run() {
   assert.match(v2Text, /\[2 기록과 다름\]/, '표시한 문장은 AI 초안의 문장 번호(2)로');
   assert.match(v2Text, /\[기록\] 황련해독탕 2주 처방/);
   assert.match(v2Text, /문헌 확인 필요/);
+  // "추가 작성" 항목(AI 비교 없음)도 학생이 쓴 글이 있으면 Word 에 들어간다
+  const v2WithWriteOnly: any = JSON.parse(JSON.stringify(v2Case));
+  v2WithWriteOnly.sectionStates.push({ sectionId: CareSection.INTRODUCTION });
+  v2WithWriteOnly.scaffoldState.sectionReflections.push({ sectionId: CareSection.INTRODUCTION, learnerNotes: '서론 시험 문장이다.' });
+  const writeOnlyText = await extractRawText((await exportCaseToDocx(v2WithWriteOnly, 'scaffold_review')).buffer);
+  assert.ok(writeOnlyText.includes('추가 작성한 항목') && writeOnlyText.includes('서론 시험 문장이다.'), '추가 작성 항목이 Word 에 있어야 한다');
+
   // V1 사례는 기존 구조 그대로
   const v1Export = await exportCaseToDocx({ ...v2Case, versionMetadata: { scaffoldVersion: 'v2.0' } }, 'scaffold_review');
   const v1Text = await extractRawText(v1Export.buffer);
