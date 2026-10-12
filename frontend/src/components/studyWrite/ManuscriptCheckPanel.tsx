@@ -3,7 +3,8 @@ import { caseApi, StudyWriteManuscriptFinding } from '../../services/api';
 import './ManuscriptCheckPanel.css';
 
 /**
- * 원고 검사 (코드 검사, AI 호출 없음). backend studyWrite/manuscriptCheck.ts 의 결과를 섹션별로 보여 준다.
+ * 원고 검사. 열면 코드 검사(backend studyWrite/manuscriptCheck.ts, AI 없음)를 하고,
+ * "AI 검사"를 누르면 AI 원고 검사(studyWrite/aiManuscriptCheck.ts)를 더한다. 결과는 섹션별로 함께 보여 준다.
  * 고치지는 않는다. "이 섹션으로"를 누르면 그 섹션으로 간다.
  */
 
@@ -19,7 +20,13 @@ const KIND_LABEL: Record<string, string> = {
   consistency: '섹션 사이 불일치',
   voice: '말한 사람',
   marker: '남은 표시',
-  added_answer: '초안 단계 추가 답'
+  added_answer: '초안 단계 추가 답',
+  ai_contradicted: '기록과 반대',
+  ai_misread: '기록을 잘못 읽음',
+  ai_unsupported: '근거 없음',
+  ai_wrong_speaker: '말한 사람',
+  ai_wrong_timing: '시점',
+  ai_cross: '섹션 사이 불일치'
 };
 
 export default function ManuscriptCheckPanel(props: {
@@ -36,6 +43,11 @@ export default function ManuscriptCheckPanel(props: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(true);
+  // AI 검사 결과 (누를 때만 돈다. 창을 닫았다 열어도 남아 있고, 검사 시각을 함께 보여 준다)
+  const [aiFindings, setAiFindings] = useState<StudyWriteManuscriptFinding[] | null>(null);
+  const [aiMeta, setAiMeta] = useState<{ checkedAt: string; seconds: number; droppedCount: number; failedSections: string[] } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const fmt = (text?: string) => (text ? (formatText ? formatText(text) : text) : '');
 
   const run = useCallback(async () => {
@@ -52,6 +64,20 @@ export default function ManuscriptCheckPanel(props: {
     }
   }, [caseId]);
 
+  const runAi = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await caseApi.runStudyWriteAiManuscriptCheck(caseId);
+      setAiFindings(result.findings);
+      setAiMeta({ checkedAt: result.checkedAt, seconds: result.seconds, droppedCount: result.droppedCount, failedSections: result.failedSections });
+    } catch (nextError: any) {
+      setAiError(nextError?.response?.data?.error || nextError?.message || 'AI 검사를 하지 못했습니다.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // 열 때마다 다시 검사한다 (그 사이 원고가 바뀌었을 수 있다)
   useEffect(() => {
     if (isOpen) void run();
@@ -66,22 +92,24 @@ export default function ManuscriptCheckPanel(props: {
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
 
+  const all = useMemo(() => [...(findings || []), ...(aiFindings || [])], [findings, aiFindings]);
   const counts = useMemo(() => {
     const out = { error: 0, warn: 0, info: 0 };
-    for (const finding of findings || []) out[finding.severity] += 1;
+    for (const finding of all) out[finding.severity] += 1;
     return out;
-  }, [findings]);
+  }, [all]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { sectionName: string; items: StudyWriteManuscriptFinding[] }>();
-    for (const finding of findings || []) {
+    const order = { error: 0, warn: 1, info: 2 };
+    for (const finding of [...all].sort((a, b) => order[a.severity] - order[b.severity])) {
       if (!showInfo && finding.severity === 'info') continue;
       const group = map.get(finding.sectionId) || { sectionName: finding.sectionName, items: [] };
       group.items.push(finding);
       map.set(finding.sectionId, group);
     }
     return [...map.entries()];
-  }, [findings, showInfo]);
+  }, [all, showInfo]);
 
   if (!isOpen) return null;
 
@@ -110,6 +138,26 @@ export default function ManuscriptCheckPanel(props: {
             {loading ? '검사 중…' : '다시 검사'}
           </button>
         </div>
+        <div className="sw-check__ai">
+          <div>
+            <strong>AI 검사</strong>
+            <span>
+              문장마다 기록·답과 대조하고(기록과 반대, 잘못 읽음, 근거 없음, 말한 사람, 시점), 섹션 사이 불일치를 찾습니다. 약 10초, 1회 약 $0.25.
+              AI 결과는 틀릴 수 있으니 근거를 보고 판단해 주세요.
+            </span>
+            {aiMeta ? (
+              <small>
+                {new Date(aiMeta.checkedAt).toLocaleTimeString()} 검사 · {aiFindings?.length || 0}건
+                {aiMeta.droppedCount > 0 ? ` · 원고와 맞지 않아 버린 지적 ${aiMeta.droppedCount}건` : ''}
+                {aiMeta.failedSections.length > 0 ? ` · 검사 못 한 곳: ${aiMeta.failedSections.join(', ')}` : ''}
+              </small>
+            ) : null}
+            {aiError ? <small className="is-error">{aiError}</small> : null}
+          </div>
+          <button type="button" disabled={aiLoading} onClick={() => void runAi()}>
+            {aiLoading ? 'AI 검사 중…' : aiFindings ? 'AI 다시 검사' : 'AI 검사'}
+          </button>
+        </div>
         <div className="sw-check__body">
           {error ? <p className="sw-check__empty">{error}</p> : null}
           {!error && loading && !findings ? <p className="sw-check__empty">검사하는 중…</p> : null}
@@ -132,6 +180,7 @@ export default function ManuscriptCheckPanel(props: {
                     <div className="sw-check__tags">
                       <em>{SEVERITY_LABEL[finding.severity]}</em>
                       <span>{KIND_LABEL[finding.kind] || finding.kind}</span>
+                      {finding.kind.startsWith('ai_') ? <b className="sw-check__ai-tag">AI</b> : null}
                     </div>
                     <p>{fmt(finding.message)}</p>
                     {finding.excerpt ? <blockquote>{fmt(finding.excerpt)}</blockquote> : null}

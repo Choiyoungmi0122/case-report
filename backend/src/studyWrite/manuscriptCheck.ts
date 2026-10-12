@@ -60,6 +60,15 @@ export function recordVisits(caseData: any): RecordVisit[] {
   return out;
 }
 
+/** 초진: 내용이 있는 첫 방문 (첫 기록일에 "진료 내용이 기재되어 있지 않습니다"만 있는 프리셋이 있다) */
+export function firstContentVisit(visits: RecordVisit[]): RecordVisit | undefined {
+  return visits.find(
+    (visit) =>
+      !/기재되어\s*있지\s*않|내용이\s*없/.test(visit.text) &&
+      visit.text.replace(/\[[^\]]*\]|내원일\s*:.*|익명 진료기록.*/g, '').trim().length > 20
+  );
+}
+
 /** 첩약 목록에서 "약재 숫자" 쌍. 괄호 안 쉼표 목록 "(생반하 9,복령 9,…)" */
 export function recordHerbDoses(visits: RecordVisit[]): { herbs: Set<string>; pairs: Set<string>; hasUnitG: boolean } {
   const herbs = new Set<string>();
@@ -118,12 +127,8 @@ export function checkManuscript(params: { caseData: any; state: StudyWriteState 
   const visits = recordVisits(caseData);
   const visitDays = new Set(visits.map((visit) => visit.day).filter((day) => !Number.isNaN(day)));
   // 초진: 내용이 있는 첫 방문 (첫 기록일에 기록이 비어 있는 프리셋이 있다)
-  const firstContentVisit = visits.find(
-    (visit) =>
-      !/기재되어\s*있지\s*않|내용이\s*없/.test(visit.text) &&
-      visit.text.replace(/\[[^\]]*\]|내원일\s*:.*|익명 진료기록.*/g, '').trim().length > 20
-  );
-  const firstDay = firstContentVisit ? firstContentVisit.day : 0;
+  const firstVisit = firstContentVisit(visits);
+  const firstDay = firstVisit ? firstVisit.day : 0;
   const { herbs, pairs, hasUnitG } = recordHerbDoses(visits);
   const formulas = recordFormulaNames(visits);
   const qaText = allQuestions(state)

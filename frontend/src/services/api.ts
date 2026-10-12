@@ -1681,6 +1681,19 @@ export const caseApi = {
     return response.data;
   },
 
+  /** AI 원고 검사 (SW-V1 섹션별 기록·답 대조 + SW-V2 섹션 사이 비교) */
+  runStudyWriteAiManuscriptCheck: async (caseId: string) => {
+    const response = await api.post<{
+      checkedAt: string;
+      seconds: number;
+      model: string;
+      droppedCount: number;
+      failedSections: string[];
+      findings: StudyWriteManuscriptFinding[];
+    }>(`/study-write/cases/${caseId}/manuscript-check/ai`, {}, { timeout: 400000 });
+    return response.data;
+  },
+
   /** 원고 검사 (코드 검사) */
   checkStudyWriteManuscript: async (caseId: string) => {
     const response = await api.get<{ checkedAt: string; findings: StudyWriteManuscriptFinding[] }>(

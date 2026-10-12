@@ -30,6 +30,14 @@ import {
 import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPrompt } from './prompts/studyWrite_questions';
 import { STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION, studyWriteCareQuestionSystemPrompt } from './prompts/studyWrite_careQuestion';
 import { STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION, studyWriteChatQuestionSystemPrompt } from './prompts/studyWrite_chatQuestion';
+import {
+  STUDY_WRITE_VERIFY_CROSS_PROMPT_VERSION,
+  STUDY_WRITE_VERIFY_EVIDENCE_PROMPT_VERSION,
+  STUDY_WRITE_VERIFY_SECTION_PROMPT_VERSION,
+  studyWriteVerifyCrossSystemPrompt,
+  studyWriteVerifyEvidenceSystemPrompt,
+  studyWriteVerifySectionSystemPrompt
+} from './prompts/studyWrite_verify';
 import { getModelForChain } from './models';
 import { PromptSet, SharedChainKey, SHARED_CHAIN_KEYS } from './promptSets';
 import { chain1SystemPrompt as scaffoldChain1SystemPrompt } from './prompts/scaffold/chain1_splitTag';
@@ -66,6 +74,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-Q4 v2: 2026-10-12 빠진 CARE 요소 목록 안에서만 질문(세부 사항 순서 삭제), 기전·이론적 근거·"기록에 있나요?" 질문 금지. 제목·초록·문헌 요소·빠진 것 없음은 코드가 거름.
  *  - SW-D v8 / SW-R v8: 2026-10-12 타임라인 진단 검사 칸 규칙(질의응답의 모든 답에서 검사·과거력, 타 기관 검사는 과거력 행). 타임라인은 섹션과 상관없이 모든 답을 받음(drafting.buildQaText, SW-C 입력도 같음).
  *  - SW-D v9 / SW-R v9: 2026-10-12 작업 규칙 1-1(다른 섹션용 답은 이 섹션 규칙에 맞는 사실만). 환자 정보·임상 소견·진단 평가·초록도 모든 답을 받음. 임상 소견에 타 기관 과거 검사·주소 중복 금지.
+ *  - SW-V1 v1 / SW-V2 v1 / SW-V3 v1: 2026-10-12 AI 원고 검사 (새 체인). V1 섹션별 기록·답 대조, V2 섹션 사이 불일치, V3 "근거 없음" 지적의 근거 다시 찾기. 고치지 않고 찾기만.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',
@@ -89,7 +98,10 @@ export const PROMPT_VERSIONS = {
   SW_R: STUDY_WRITE_REVISE_PROMPT_VERSION.split(':')[1],
   SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1],
   SW_Q3: STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION.split(':')[1],
-  SW_Q4: STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION.split(':')[1]
+  SW_Q4: STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION.split(':')[1],
+  SW_V1: STUDY_WRITE_VERIFY_SECTION_PROMPT_VERSION.split(':')[1],
+  SW_V2: STUDY_WRITE_VERIFY_CROSS_PROMPT_VERSION.split(':')[1],
+  SW_V3: STUDY_WRITE_VERIFY_EVIDENCE_PROMPT_VERSION.split(':')[1]
 } as const;
 
 export type PromptKey = keyof typeof PROMPT_VERSIONS;
@@ -117,7 +129,10 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   SW_R: studyWriteReviseSystemPrompt,
   SW_C: studyWriteCareCheckSystemPrompt,
   SW_Q3: studyWriteCareQuestionSystemPrompt,
-  SW_Q4: studyWriteChatQuestionSystemPrompt
+  SW_Q4: studyWriteChatQuestionSystemPrompt,
+  SW_V1: studyWriteVerifySectionSystemPrompt,
+  SW_V2: studyWriteVerifyCrossSystemPrompt,
+  SW_V3: studyWriteVerifyEvidenceSystemPrompt
 };
 
 /** getModelForChain 의 키. */
@@ -142,7 +157,10 @@ const MODEL_KEYS: Record<PromptKey, string> = {
   SW_R: 'chain6',
   SW_C: 'chain4',
   SW_Q3: 'chain4',
-  SW_Q4: 'chain4'
+  SW_Q4: 'chain4',
+  SW_V1: 'chain6',
+  SW_V2: 'chain6',
+  SW_V3: 'chain4'
 };
 
 /** 기존 generationMetadata.promptTemplateHash 와 같은 방식: sha256(version + system prompt, 구분자 포함). */

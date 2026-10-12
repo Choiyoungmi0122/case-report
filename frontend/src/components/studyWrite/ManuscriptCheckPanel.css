@@ -216,3 +216,59 @@
   color: #6b7a8c;
   font-size: 13px;
 }
+
+/* AI 검사 줄 */
+.sw-check__ai {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: #f3f7fc;
+  border-bottom: 1px solid #e3e8ee;
+  font-size: 12.5px;
+  color: #3d4b5c;
+}
+
+.sw-check__ai > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sw-check__ai strong {
+  font-size: 13.5px;
+  color: #17324d;
+}
+
+.sw-check__ai small {
+  color: #5a6c81;
+}
+
+.sw-check__ai small.is-error {
+  color: #a93b24;
+}
+
+.sw-check__ai > button {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #1f5f8b;
+  background: #1f5f8b;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sw-check__ai > button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sw-check__ai-tag {
+  padding: 0 6px;
+  border-radius: 4px;
+  background: #e4eef8;
+  color: #1f5f8b;
+  font-size: 11px;
+}

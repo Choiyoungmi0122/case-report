@@ -20,6 +20,7 @@ import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE
 import { findSubElement } from '../studyWrite/careSubElements';
 import { CHAT_QUESTION_SUMMARY_SECTIONS, generateSectionChatQuestion } from '../studyWrite/chatQuestion';
 import { checkManuscript } from '../studyWrite/manuscriptCheck';
+import { runAiManuscriptCheck } from '../studyWrite/aiManuscriptCheck';
 import { mergeRegeneratedPart, parseTitleDraft, TitlePart } from '../studyWrite/titleKeywords';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
@@ -264,6 +265,20 @@ router.get('/cases/:caseId/manuscript-check', async (req: Request, res: Response
     return res.json({ checkedAt: new Date().toISOString(), findings });
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || '원고를 검사하지 못했습니다.' });
+  }
+});
+
+/** AI 원고 검사 (SW-V1 섹션별 기록·답 대조 + SW-V2 섹션 사이 비교). 고치지 않고 찾기만 한다 */
+router.post('/cases/:caseId/manuscript-check/ai', async (req: Request, res: Response) => {
+  try {
+    const caseData = await loadCase(req.params.caseId);
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const state = normalizeStudyWriteState(caseData.studyWrite);
+    const started = Date.now();
+    const result = await runAiManuscriptCheck({ caseData, state });
+    return res.json({ checkedAt: new Date().toISOString(), seconds: Math.round((Date.now() - started) / 100) / 10, ...result });
+  } catch (error: any) {
+    return res.status(500).json({ error: error?.message || 'AI 검사를 하지 못했습니다.' });
   }
 });
 
