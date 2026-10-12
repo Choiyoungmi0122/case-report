@@ -10,7 +10,7 @@ import './ScaffoldSummaryV2.css';
  *
  * 교수자가 이 화면만 보고 학생이 증례보고를 어떻게 쓰려 했는지와 무엇이 부족한지 판단할 수 있게 정리한다.
  *  1. 한눈에 보기: 메모·초안·판단·표시한 문장의 개수와 분포 (사실만 센다. 점수를 매기지 않는다)
- *  2. 교수자가 먼저 볼 것: 학생이 스스로 적은 부족한 점, AI 초안에서 찾은 문제, 질문, 기록에 없다고 본 것
+ *  2. 주요 특징: 스스로 돌아본 내 초안, AI 초안에서 짚은 점, 궁금한 점, 더 확인하려는 정보 (2026-10-12 이름을 순화)
  *  3. 단계별 기록: 메모 표 → AI 보기 전 판단 표 → 내 초안과 AI 초안 나란히 → 표시한 문장 → 돌아보기
  *  4. 참고: 이 사례의 기록에 있는 정보 (연구자가 정리한 CARE 세부 항목표)
  * 저장된 값만 보여 주고 새로 추정하지 않는다. V1 화면은 ScaffoldSummaryPage 의 기존 본문을 그대로 쓴다.
@@ -185,7 +185,7 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
     }
   ];
 
-  // ---------------------------------------------------------------- 2. 교수자가 먼저 볼 것
+  // ---------------------------------------------------------------- 2. 주요 특징
   const selfGaps = sections.filter((section) => String(section.post.changedJudgment || '').trim());
   const aiProblems: string[] = [
     ...sections
@@ -269,10 +269,10 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
       </section>
 
       <section className="scaffold-summary-v2__panel is-attention" aria-labelledby="summary-v2-attention">
-        <h2 id="summary-v2-attention">교수자가 먼저 볼 것</h2>
+        <h2 id="summary-v2-attention">주요 특징</h2>
         <div className="scaffold-summary-v2__attention-grid">
           <div>
-            <h3>학생이 스스로 본 내 초안의 부족한 점</h3>
+            <h3>스스로 돌아본 내 초안</h3>
             {selfGaps.length > 0 ? (
               selfGaps.map((section) => (
                 <p key={section.sectionId}>
@@ -285,16 +285,16 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
             )}
           </div>
           <div>
-            <h3>학생이 AI 초안에서 찾은 문제</h3>
+            <h3>AI 초안에서 짚은 점</h3>
             {renderBullets(aiProblems, '적은 내용이 없습니다.')}
           </div>
           <div>
-            <h3>학생의 질문</h3>
-            {renderBullets(questions, '질문이 없습니다.')}
+            <h3>궁금한 점</h3>
+            {renderBullets(questions, '적은 내용이 없습니다.')}
           </div>
           <div>
-            <h3>기록에 없다고 보거나 더 확인하려는 것</h3>
-            {renderBullets(toCheck, '없습니다.')}
+            <h3>더 확인하려는 정보</h3>
+            {renderBullets(toCheck, '적은 내용이 없습니다.')}
           </div>
         </div>
       </section>
@@ -459,7 +459,7 @@ export default function ScaffoldSummaryV2({ data, sectionIds, sectionName, judgm
                 <dd>{section.post.missingInDraft || '적은 내용이 없습니다.'}</dd>
               </div>
               <div>
-                <dt>교수님이나 전문가에게 확인하고 싶은 것</dt>
+                <dt>교수님이나 전문가에게 묻고 싶은 것</dt>
                 <dd>{section.post.unresolvedQuestion || '적은 내용이 없습니다.'}</dd>
               </div>
             </dl>
