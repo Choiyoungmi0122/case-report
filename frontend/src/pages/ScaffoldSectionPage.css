@@ -1654,58 +1654,6 @@ body.scaffold-pane-resizing textarea {
   color: #5a6c81;
 }
 
-/* Step 2 선택지의 뜻: 질문마다 반복하지 않고 위에 한 번만 (2026-10-12) */
-.scaffold-sufficiency-legend {
-  padding: 12px 14px;
-  border: 1px solid #d7e0e8;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.scaffold-sufficiency-legend h4 {
-  margin: 0 0 8px;
-  color: #17324d;
-  font-size: 15px;
-}
-
-.scaffold-sufficiency-legend dl {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
-.scaffold-sufficiency-legend dl > div {
-  display: grid;
-  grid-template-columns: 11em minmax(0, 1fr);
-  gap: 8px;
-}
-
-.scaffold-sufficiency-legend dt {
-  color: #17324d;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.scaffold-sufficiency-legend dd {
-  margin: 0;
-  color: #3f5367;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.scaffold-sufficiency-legend p {
-  margin: 8px 0 0;
-  color: #6b7c90;
-  font-size: 12.5px;
-}
-
-@media (max-width: 1199px) {
-  .scaffold-sufficiency-legend dl > div {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-}
-
 /* 치료 개입 기준 상자: 요소(9a·9b·9c)마다 접고 펴기 (2026-10-12). 제목과 한 줄 기준은 접혀 있어도 보인다. */
 .scaffold-care-element > summary {
   display: block;

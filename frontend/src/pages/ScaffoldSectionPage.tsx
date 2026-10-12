@@ -2562,20 +2562,6 @@ export default function ScaffoldSectionPage() {
             >
               <div style={{ display: 'grid', gap: 20 }}>
                 {isV2 ? <StageGuide guide={V2_STAGE_GUIDES.step2} compact /> : null}
-                {isV2 ? (
-                  <section className="scaffold-sufficiency-legend" aria-label="선택지의 뜻">
-                    <h4>선택지의 뜻</h4>
-                    <dl>
-                      {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => (
-                        <div key={option.value}>
-                          <dt>{option.label}</dt>
-                          <dd>{SUFFICIENCY_OPTION_GUIDE_V2[option.value]?.description}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <p>질문마다 아래에는 그 질문에 맞는 예만 보입니다. 이 사례의 정답이 아닙니다.</p>
-                  </section>
-                ) : null}
                 {confirmationQuestions.map((question) => (
                   <div
                     key={question.id}
@@ -2606,8 +2592,14 @@ export default function ScaffoldSectionPage() {
 
                     <div style={{ display: 'grid', gap: 8 }}>
                       {CONFIRMATION_JUDGMENT_OPTIONS.map((option) => {
-                        // V2: 선택지 뜻은 위 "선택지의 뜻"에 한 번만 두고, 여기에는 이 질문에 맞는 예만 보인다.
-                        const guide = isV2 ? { example: question.optionExamples?.[option.value] } : undefined;
+                        // V2: 선택지마다 뜻(SUFFICIENCY_OPTION_GUIDE_V2)과 이 질문에 맞는 예를 함께 보인다.
+                        // (2026-10-12: 위쪽 "선택지의 뜻" 상자는 연구자 요청으로 없앴다.)
+                        const guide = isV2
+                          ? {
+                              description: SUFFICIENCY_OPTION_GUIDE_V2[option.value]?.description,
+                              example: question.optionExamples?.[option.value]
+                            }
+                          : undefined;
                         return (
                           <label
                             key={option.value}
@@ -2634,6 +2626,7 @@ export default function ScaffoldSectionPage() {
                             {guide ? (
                               <span className="scaffold-sufficiency-option__text">
                                 <strong>{option.label}</strong>
+                                {guide.description ? <span>{guide.description}</span> : null}
                                 {guide.example ? <small>{guide.example}</small> : null}
                               </span>
                             ) : (

@@ -259,7 +259,7 @@ export const CARE_OVERVIEW_EXAMPLES_V2: Record<string, CareOverviewExample> = {
  * 충분성 판단 선택지의 뜻 (V2-07). 값은 기존 CONFIRMATION_JUDGMENT_OPTIONS와 같다.
  * 2026-10-12: "추가 확인 필요"와 "현재 기록으로 확인할 수 없음"이 비슷해 보인다는 연구자 의견에 따라,
  * 기록에 있는 양이 아니라 "다음에 할 일"로 구분해 고쳤다. 저장 값은 그대로다.
- * 화면 위쪽에 한 번만 보여 주고, 질문마다에는 그 질문에 맞는 예(TI_SUFFICIENCY_QUESTIONS_V2)를 보인다.
+ * 질문마다 선택지 아래에 이 뜻과 그 질문에 맞는 예(TI_SUFFICIENCY_QUESTIONS_V2)를 함께 보인다.
  */
 export const SUFFICIENCY_OPTION_GUIDE_V2: Record<string, { description: string }> = {
   available_in_record: {
