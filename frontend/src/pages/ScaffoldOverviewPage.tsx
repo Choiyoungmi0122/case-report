@@ -49,10 +49,11 @@ const PHASES: Array<{
   shortDescription: string;
 }> = [
   { id: 'case_understanding', number: 1, label: '증례 이해', shortDescription: '자유 메모와 궁금한 점' },
-  { id: 'core_message', number: 2, label: '핵심 메시지', shortDescription: '증례표상과 교육점' },
-  { id: 'claim_evidence', number: 3, label: '주장·근거 연결', shortDescription: '근거의 역할과 재사용' },
-  { id: 'section_drafting', number: 4, label: '원고 작성', shortDescription: 'CARE 섹션 구성' },
-  { id: 'final_review', number: 5, label: '최종 검토', shortDescription: '일관성과 누락 확인' }
+  // 2026-10-12: '핵심 메시지'(증례표상·보고 가치·교육점) 단계를 뺐다. 써도 다른 곳에서 다시 쓰이지 않았다.
+  // 예전에 저장된 값은 지우지 않는다(persistCaseMap 이 그대로 다시 보낸다).
+  { id: 'claim_evidence', number: 2, label: '주장·근거 연결', shortDescription: '근거의 역할과 재사용' },
+  { id: 'section_drafting', number: 3, label: '원고 작성', shortDescription: 'CARE 섹션 구성' },
+  { id: 'final_review', number: 4, label: '최종 검토', shortDescription: '일관성과 누락 확인' }
 ];
 
 const CLAIM_TYPE_LABELS: Record<ScaffoldV2ClaimType, string> = {
@@ -221,7 +222,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   useEffect(() => {
     const caseMap = data?.scaffoldState.caseMap;
     if (!caseMap) return;
-    if (!readOnlyView) setCurrentPhase(caseMap.currentPhase);
+    // 핵심 메시지 단계에 머물러 있던 사례는 다음 단계(주장·근거 연결)로 연다
+    if (!readOnlyView) setCurrentPhase(caseMap.currentPhase === 'core_message' ? 'claim_evidence' : caseMap.currentPhase);
     setSelectedEvidenceIds(caseMap.selectedEvidenceIds || []);
     setEvidenceReflections(caseMap.evidenceReflections || []);
     setLearnerAddedEvidence(caseMap.learnerAddedEvidence || []);
@@ -368,7 +370,6 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     if (!memoOptional && !phaseComplete[currentPhase]) {
       const messages: Partial<Record<ScaffoldV2Phase, string>> = {
         case_understanding: '눈에 띈 점을 메모로 하나 이상 남겨주세요.',
-        core_message: '증례표상, 보고 가치, 핵심 교육 메시지를 모두 작성해주세요.',
         claim_evidence: '근거와 CARE 섹션이 연결된 주장을 하나 이상 완성해주세요.'
       };
       setError(messages[currentPhase] || '현재 단계를 먼저 완료해주세요.');
@@ -562,7 +563,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   if (!data) return <div className="scaffold-v2-error">{error || '데이터를 찾을 수 없습니다.'}</div>;
 
   // 실험용 경로에서는 '기록 읽기 -> CARE 섹션 작성' 두 단계만 보여준다.
-  // 핵심 메시지, 주장·근거 연결, 주장 중심 전체 검토는 일반 학습 경로에만 둔다.
+  // 주장·근거 연결, 주장 중심 전체 검토는 일반 학습 경로에만 둔다.
   const visiblePhases = studyMode
     ? PHASES.filter((phase) => phase.id === 'case_understanding' || phase.id === 'section_drafting')
     : PHASES;
@@ -756,7 +757,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <div>
             <div className="scaffold-v2__kicker">{isScaffoldV2Data(data) ? 'Scaffold V2' : 'Scaffold v2'}</div>
             <h1>{data.title || '증례보고 작성'}</h1>
-            <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '전체 증례의 근거와 핵심 메시지를 먼저 구성한 뒤 CARE 원고로 전환합니다.'}</p>
+            <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '전체 증례의 근거와 주장을 먼저 구성한 뒤 CARE 원고로 전환합니다.'}</p>
           </div>
           <div className="scaffold-v2__case-meta">
             <span>실험번호</span>
@@ -1085,68 +1086,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>
                 {saving ? '저장 중...' : '수정한 메모 저장'}
               </button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo(studyMode ? 'section_drafting' : 'core_message')} disabled={saving}>
-                {studyMode ? '다음: CARE 항목 작성' : '다음: 핵심 메시지 작성'}
+              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo(studyMode ? 'section_drafting' : 'claim_evidence')} disabled={saving}>
+                {studyMode ? '다음: CARE 항목 작성' : '다음: 주장·근거 연결'}
               </button>
-            </div>
-          </section>
-        ) : null}
-
-        {currentPhase === 'core_message' ? (
-          <section className="scaffold-v2__stage scaffold-v2__message-stage" aria-labelledby="core-message-title">
-            <div className="scaffold-v2__stage-heading">
-              <div>
-                <span>2단계</span>
-                <h2 id="core-message-title">증례를 한 문장으로 설명하기</h2>
-                <p>앞에서 남긴 메모를 종합해 증례의 임상적 특징과 독자가 가져갈 메시지를 정리합니다.</p>
-              </div>
-              <strong>{caseNotes.length}개 메모 사용 가능</strong>
-            </div>
-
-            <div className="scaffold-v2__message-layout">
-              <form className="scaffold-v2__form" onSubmit={(event) => event.preventDefault()}>
-                <label>
-                  <span>증례표상</span>
-                  <small>환자의 핵심 특성, 문제, 시간 경과를 한두 문장으로 요약합니다.</small>
-                  <textarea value={problemRepresentation} onChange={(event) => setProblemRepresentation(event.target.value)} rows={4} placeholder="예: 기저질환이 있는 중년 환자에서 반복되는 증상과 치료 후 변화를 관찰한 증례" />
-                </label>
-                <label>
-                  <span>이 증례를 보고할 가치</span>
-                  <small>희귀성만이 아니라 진단적 어려움, 예상 밖의 경과, 실무적 교훈을 적습니다.</small>
-                  <textarea value={reportabilityRationale} onChange={(event) => setReportabilityRationale(event.target.value)} rows={4} placeholder="이 증례가 기존 진료나 학습에 더하는 점을 적으세요." />
-                </label>
-                <label>
-                  <span>핵심 교육 메시지</span>
-                  <small>한 줄에 하나씩 작성합니다.</small>
-                  <textarea value={teachingPointsDraft} onChange={(event) => setTeachingPointsDraft(event.target.value)} rows={5} placeholder={'초기 증상만으로 판단하지 않아야 한다.\n치료 반응을 시간 순서로 확인해야 한다.'} />
-                </label>
-                <label>
-                  <span>주요 독자</span>
-                  <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder="예: 일차진료 의사, 전공의, 관련 전문과" />
-                </label>
-              </form>
-
-              <aside className="scaffold-v2__selection-summary" aria-label="내 증례 메모 요약">
-                <div className="scaffold-v2__column-heading">
-                  <h3>내 증례 메모</h3>
-                  <span>{caseNotes.length}개</span>
-                </div>
-                <ol>
-                  {caseNotes.map((note) => (
-                      <li key={note.id}>
-                        <span>{getCaseNoteTypeLabel(note.type)}</span>
-                        <strong>{note.text}</strong>
-                      </li>
-                  ))}
-                </ol>
-                {caseNotes.length === 0 ? <div className="scaffold-v2__empty">앞 단계에서 증례 메모를 작성해주세요.</div> : null}
-              </aside>
-            </div>
-
-            <div className="scaffold-v2__stage-actions">
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 증례 이해</button>
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>{saving ? '저장 중...' : '핵심 메시지 저장'}</button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo('claim_evidence')} disabled={saving}>다음: 주장·근거 연결</button>
             </div>
           </section>
         ) : null}
@@ -1155,7 +1097,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <section className="scaffold-v2__stage" aria-labelledby="claim-map-title">
             <div className="scaffold-v2__stage-heading">
               <div>
-                <span>3단계</span>
+                <span>2단계</span>
                 <h2 id="claim-map-title">주장과 근거의 관계 만들기</h2>
                 <p>같은 근거를 여러 주장과 CARE 섹션에 연결할 수 있습니다. 연결 이유와 불확실성도 함께 남깁니다.</p>
               </div>
@@ -1227,14 +1169,14 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               ))}
               {claims.length === 0 ? (
                 <div className="scaffold-v2__empty is-large">
-                  핵심 메시지를 뒷받침할 첫 주장을 추가하세요.
+                  기록에서 말할 수 있는 첫 주장을 추가하세요.
                   <button type="button" className="scaffold-v2__button is-primary" onClick={() => setClaims([createClaim()])}>첫 주장 만들기</button>
                 </div>
               ) : null}
             </div>
 
             <div className="scaffold-v2__stage-actions">
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('core_message')} disabled={saving}>이전: 핵심 메시지</button>
+              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 증례 이해</button>
               <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>{saving ? '저장 중...' : '주장 지도 저장'}</button>
               <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo('section_drafting')} disabled={saving}>다음: CARE 원고 작성</button>
             </div>
@@ -1245,7 +1187,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <section className="scaffold-v2__stage" aria-labelledby="section-drafting-title">
             <div className="scaffold-v2__stage-heading">
               <div>
-                <span>{studyMode ? '2단계' : '4단계'}</span>
+                <span>{studyMode ? '2단계' : '3단계'}</span>
                 <h2 id="section-drafting-title">{studyMode ? 'CARE 항목별로 정리하고 AI 초안과 비교하기' : 'CARE 섹션별 원고 작성'}</h2>
                 <p>
                   {isV2
@@ -1346,7 +1288,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <section className="scaffold-v2__stage" aria-labelledby="final-review-title">
             <div className="scaffold-v2__stage-heading">
               <div>
-                <span>5단계</span>
+                <span>4단계</span>
                 <h2 id="final-review-title">전체 원고 검토 준비</h2>
                 <p>주장과 근거의 연결, 추가 확인 항목, CARE 섹션 완료 상태를 함께 확인합니다.</p>
               </div>
