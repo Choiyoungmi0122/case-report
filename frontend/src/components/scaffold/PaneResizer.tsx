@@ -83,8 +83,26 @@ function clampWidths(next: PaneWidths, gridWidthPx: number, collapsed: PaneColla
 }
 
 export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement | null>) {
-  const [widths, setWidths] = useState<PaneWidths>(() => readStoredWidths());
+  // 저장된 폭(사용자가 끈 값)과 화면에 실제로 쓰는 폭을 나눈다. 실제 폭은 지금 격자 폭과 접힘 상태에 맞춰
+  // 매번 다시 맞춘다. 넓은 창에서 저장한 폭이나 한쪽을 접은 채 넓힌 폭을 그대로 쓰면 가운데 칸이 짓눌린다.
+  const [storedWidths, setStoredWidths] = useState<PaneWidths>(() => readStoredWidths());
   const [collapsed, setCollapsed] = useState<PaneCollapsed>({ left: false, right: false });
+  const [gridWidth, setGridWidth] = useState(0);
+  const observedRef = useRef<{ element: HTMLElement; observer: ResizeObserver } | null>(null);
+  // 격자는 데이터를 불러온 뒤에 그려지므로 렌더마다 확인해, 새 요소가 생기면 그때 관찰을 건다.
+  useEffect(() => {
+    const element = gridRef.current;
+    if (observedRef.current?.element === element) return;
+    observedRef.current?.observer.disconnect();
+    observedRef.current = null;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setGridWidth(element.getBoundingClientRect().width));
+    observer.observe(element);
+    observedRef.current = { element, observer };
+    setGridWidth(element.getBoundingClientRect().width);
+  });
+  useEffect(() => () => observedRef.current?.observer.disconnect(), []);
+  const widths = useMemo(() => clampWidths(storedWidths, gridWidth, collapsed), [storedWidths, gridWidth, collapsed]);
   const [isWide, setIsWide] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(WIDE_QUERY).matches : true
   );
@@ -102,7 +120,7 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
     (next: PaneWidths) => {
       const gridWidth = gridRef.current?.getBoundingClientRect().width || 0;
       const clamped = clampWidths(next, gridWidth, collapsed);
-      setWidths(clamped);
+      setStoredWidths(clamped);
       writeStoredWidths(clamped);
     },
     [gridRef, collapsed]
@@ -161,7 +179,7 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
   );
 
   const reset = useCallback(() => {
-    setWidths(DEFAULT_WIDTHS);
+    setStoredWidths(DEFAULT_WIDTHS);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -169,20 +187,10 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
     }
   }, []);
 
-  const setPaneCollapsed = useCallback(
-    (side: PaneSide, value: boolean) => {
-      if (collapsed[side] === value) return;
-      const next = { ...collapsed, [side]: value };
-      setCollapsed(next);
-      // 다시 펼칠 때, 한쪽이 접힌 동안 넓혀 둔 반대쪽 폭 때문에 가운데가 최소 폭보다 좁아지지 않게 맞춘다.
-      // 화면에서만 맞추고 저장된 폭은 사용자가 다시 끌 때 바뀐다.
-      if (!value) {
-        const gridWidth = gridRef.current?.getBoundingClientRect().width || 0;
-        setWidths((current) => clampWidths(current, gridWidth, next));
-      }
-    },
-    [collapsed, gridRef]
-  );
+  // 다시 펼칠 때 가운데가 최소 폭보다 좁아지지 않는 것은 위의 widths(실제 폭) 계산이 맡는다.
+  const setPaneCollapsed = useCallback((side: PaneSide, value: boolean) => {
+    setCollapsed((prev) => (prev[side] === value ? prev : { ...prev, [side]: value }));
+  }, []);
 
   const active = enabled && isWide;
   const gridStyle = useMemo<CSSProperties | undefined>(() => {
