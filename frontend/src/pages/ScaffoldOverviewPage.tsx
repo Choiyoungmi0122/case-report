@@ -21,8 +21,6 @@ import {
   type ScaffoldV2CaseNote,
   type ScaffoldV2CaseNoteType,
   type ScaffoldV2Claim,
-  type ScaffoldV2ClaimConfidence,
-  type ScaffoldV2ClaimType,
   type ScaffoldV2EvidenceReflection,
   type ScaffoldV2LearnerEvidence,
   type ScaffoldV2Phase
@@ -30,7 +28,6 @@ import {
 import {
   isScaffoldSectionComplete,
   SECTION_GROUP_DESCRIPTIONS,
-  SCAFFOLD_SECTIONS,
   getSectionsByGroup,
   type SectionGroup,
   CARE_EXAMPLE_RECORD,
@@ -49,27 +46,11 @@ const PHASES: Array<{
   shortDescription: string;
 }> = [
   { id: 'case_understanding', number: 1, label: '증례 이해', shortDescription: '자유 메모와 궁금한 점' },
-  // 2026-10-12: '핵심 메시지'(증례표상·보고 가치·교육점) 단계를 뺐다. 써도 다른 곳에서 다시 쓰이지 않았다.
-  // 예전에 저장된 값은 지우지 않는다(persistCaseMap 이 그대로 다시 보낸다).
-  { id: 'claim_evidence', number: 2, label: '주장·근거 연결', shortDescription: '근거의 역할과 재사용' },
-  { id: 'section_drafting', number: 3, label: '원고 작성', shortDescription: 'CARE 섹션 구성' },
-  { id: 'final_review', number: 4, label: '최종 검토', shortDescription: '일관성과 누락 확인' }
+  // 2026-10-12: '핵심 메시지', '주장·근거 연결', '최종 검토' 단계를 뺐다(초보자에게 부담이 크고, 같은 생각을
+  // 메모·Step 2 판단·AI 문장 표시가 섹션 안에서 이미 시킨다). 일반 경로도 실험 경로와 같은 두 단계다.
+  // 예전에 저장된 값(증례표상, 주장 등)은 지우지 않는다(persistCaseMap 이 그대로 다시 보낸다).
+  { id: 'section_drafting', number: 2, label: '원고 작성', shortDescription: 'CARE 섹션 구성' }
 ];
-
-const CLAIM_TYPE_LABELS: Record<ScaffoldV2ClaimType, string> = {
-  presentation: '환자 상태',
-  diagnosis: '진단 판단',
-  intervention: '치료 선택',
-  outcome: '치료 결과',
-  novelty: '증례 의의'
-};
-
-const CLAIM_CONFIDENCE_LABELS: Record<ScaffoldV2ClaimConfidence, string> = {
-  high: '높음',
-  medium: '중간',
-  low: '낮음',
-  unresolved: '판단 보류'
-};
 
 const GROUP_TITLES: Record<SectionGroup, string> = {
   record_facts: '기록 정보',
@@ -109,19 +90,6 @@ function parseMultiline(value: string) {
         .filter(Boolean)
     )
   );
-}
-
-function createClaim(): ScaffoldV2Claim {
-  return {
-    id: `claim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    type: 'presentation',
-    text: '',
-    rationale: '',
-    evidenceIds: [],
-    targetSectionIds: [],
-    confidence: 'unresolved',
-    missingInformation: ''
-  };
 }
 
 function evidenceText(card: NonNullable<ScaffoldStateResponse['evidenceCards']>[number]) {
@@ -222,8 +190,10 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   useEffect(() => {
     const caseMap = data?.scaffoldState.caseMap;
     if (!caseMap) return;
-    // 핵심 메시지 단계에 머물러 있던 사례는 다음 단계(주장·근거 연결)로 연다
-    if (!readOnlyView) setCurrentPhase(caseMap.currentPhase === 'core_message' ? 'claim_evidence' : caseMap.currentPhase);
+    // 뺀 단계(핵심 메시지·주장·근거 연결·최종 검토)에 머물러 있던 사례는 원고 작성 단계로 연다
+    if (!readOnlyView) {
+      setCurrentPhase(caseMap.currentPhase === 'case_understanding' ? 'case_understanding' : 'section_drafting');
+    }
     setSelectedEvidenceIds(caseMap.selectedEvidenceIds || []);
     setEvidenceReflections(caseMap.evidenceReflections || []);
     setLearnerAddedEvidence(caseMap.learnerAddedEvidence || []);
@@ -370,7 +340,6 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     if (!memoOptional && !phaseComplete[currentPhase]) {
       const messages: Partial<Record<ScaffoldV2Phase, string>> = {
         case_understanding: '눈에 띈 점을 메모로 하나 이상 남겨주세요.',
-        claim_evidence: '근거와 CARE 섹션이 연결된 주장을 하나 이상 완성해주세요.'
       };
       setError(messages[currentPhase] || '현재 단계를 먼저 완료해주세요.');
       return;
@@ -533,40 +502,11 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
     setError(null);
   };
 
-  const updateClaim = (claimId: string, updates: Partial<ScaffoldV2Claim>) => {
-    setClaims((previous) =>
-      previous.map((claim) => (claim.id === claimId ? { ...claim, ...updates } : claim))
-    );
-  };
-
-  const toggleClaimEvidence = (claimId: string, evidenceId: string) => {
-    const claim = claims.find((item) => item.id === claimId);
-    if (!claim) return;
-    updateClaim(claimId, {
-      evidenceIds: claim.evidenceIds.includes(evidenceId)
-        ? claim.evidenceIds.filter((id) => id !== evidenceId)
-        : [...claim.evidenceIds, evidenceId]
-    });
-  };
-
-  const toggleClaimSection = (claimId: string, sectionId: string) => {
-    const claim = claims.find((item) => item.id === claimId);
-    if (!claim) return;
-    updateClaim(claimId, {
-      targetSectionIds: claim.targetSectionIds.includes(sectionId)
-        ? claim.targetSectionIds.filter((id) => id !== sectionId)
-        : [...claim.targetSectionIds, sectionId]
-    });
-  };
-
   if (loading) return <div className="scaffold-v2-loading">Scaffold v2를 불러오는 중입니다...</div>;
   if (!data) return <div className="scaffold-v2-error">{error || '데이터를 찾을 수 없습니다.'}</div>;
 
-  // 실험용 경로에서는 '기록 읽기 -> CARE 섹션 작성' 두 단계만 보여준다.
-  // 주장·근거 연결, 주장 중심 전체 검토는 일반 학습 경로에만 둔다.
-  const visiblePhases = studyMode
-    ? PHASES.filter((phase) => phase.id === 'case_understanding' || phase.id === 'section_drafting')
-    : PHASES;
+  // 실험 경로와 일반 경로 모두 '기록 읽기 -> CARE 섹션 작성' 두 단계다.
+  const visiblePhases = PHASES;
   const currentPhaseIndex = Math.max(
     0,
     visiblePhases.findIndex((phase) => phase.id === currentPhase)
@@ -757,7 +697,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <div>
             <div className="scaffold-v2__kicker">{isScaffoldV2Data(data) ? 'Scaffold V2' : 'Scaffold v2'}</div>
             <h1>{data.title || '증례보고 작성'}</h1>
-            <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '전체 증례의 근거와 주장을 먼저 구성한 뒤 CARE 원고로 전환합니다.'}</p>
+            <p>{studyMode ? '환자 기록을 먼저 읽고, CARE 항목별로 내 정리와 AI 초안을 비교합니다.' : '환자 기록을 먼저 읽고, CARE 섹션별로 내 정리와 AI 초안을 비교합니다.'}</p>
           </div>
           <div className="scaffold-v2__case-meta">
             <span>실험번호</span>
@@ -796,12 +736,11 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
         <div
           className="scaffold-v2__metrics"
           aria-label="증례 작업 현황"
-          style={studyMode ? { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' } : undefined}
+          style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
         >
           <div><strong>{visits.length}</strong><span>방문 기록</span></div>
           <div><strong>{evidenceItems.length}</strong><span>AI 추출 문장</span></div>
           <div><strong>{caseNotes.length}</strong><span>증례 메모</span></div>
-          {studyMode ? null : <div><strong>{validClaims.length}</strong><span>연결된 주장</span></div>}
           <div><strong>{completedCount}/{totalSections}</strong><span>완료 섹션</span></div>
         </div>
 
@@ -1086,99 +1025,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
               <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>
                 {saving ? '저장 중...' : '수정한 메모 저장'}
               </button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo(studyMode ? 'section_drafting' : 'claim_evidence')} disabled={saving}>
-                {studyMode ? '다음: CARE 항목 작성' : '다음: 주장·근거 연결'}
+              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo('section_drafting')} disabled={saving}>
+                다음: CARE 항목 작성
               </button>
-            </div>
-          </section>
-        ) : null}
-
-        {currentPhase === 'claim_evidence' ? (
-          <section className="scaffold-v2__stage" aria-labelledby="claim-map-title">
-            <div className="scaffold-v2__stage-heading">
-              <div>
-                <span>2단계</span>
-                <h2 id="claim-map-title">주장과 근거의 관계 만들기</h2>
-                <p>같은 근거를 여러 주장과 CARE 섹션에 연결할 수 있습니다. 연결 이유와 불확실성도 함께 남깁니다.</p>
-              </div>
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => setClaims((previous) => [...previous, createClaim()])}>주장 추가</button>
-            </div>
-
-            <div className="scaffold-v2__claim-list">
-              {claims.map((claim, index) => (
-                <article key={claim.id} className="scaffold-v2__claim">
-                  <div className="scaffold-v2__claim-heading">
-                    <strong>주장 {index + 1}</strong>
-                    <button type="button" className="scaffold-v2__remove" title="주장 삭제" aria-label={`주장 ${index + 1} 삭제`} onClick={() => setClaims((previous) => previous.filter((item) => item.id !== claim.id))}>×</button>
-                  </div>
-
-                  <div className="scaffold-v2__claim-grid">
-                    <label>
-                      <span>주장 유형</span>
-                      <select value={claim.type} onChange={(event) => updateClaim(claim.id, { type: event.target.value as ScaffoldV2ClaimType })}>
-                        {Object.entries(CLAIM_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </label>
-                    <label>
-                      <span>근거 확실성</span>
-                      <select value={claim.confidence} onChange={(event) => updateClaim(claim.id, { confidence: event.target.value as ScaffoldV2ClaimConfidence })}>
-                        {Object.entries(CLAIM_CONFIDENCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </label>
-                  </div>
-
-                  <label className="scaffold-v2__claim-text">
-                    <span>원고에서 말하려는 내용</span>
-                    <textarea value={claim.text} onChange={(event) => updateClaim(claim.id, { text: event.target.value })} rows={3} placeholder="기록을 근거로 주장할 수 있는 내용을 작성하세요." />
-                  </label>
-                  <label className="scaffold-v2__claim-text">
-                    <span>이 근거들이 주장을 뒷받침하는 이유</span>
-                    <textarea value={claim.rationale || ''} onChange={(event) => updateClaim(claim.id, { rationale: event.target.value })} rows={2} placeholder="사실과 해석을 구분해 연결 이유를 적으세요." />
-                  </label>
-
-                  <fieldset>
-                    <legend>연결할 SOAP 근거</legend>
-                    <div className="scaffold-v2__claim-evidence">
-                      {evidenceItems.map((item) => (
-                        <label key={item.id}>
-                          <input type="checkbox" checked={claim.evidenceIds.includes(item.id)} onChange={() => toggleClaimEvidence(claim.id, item.id)} />
-                          <span>{item.text}</span>
-                        </label>
-                      ))}
-                      {evidenceItems.length === 0 ? <div className="scaffold-v2__empty">연결할 수 있는 SOAP 근거가 없습니다.</div> : null}
-                    </div>
-                  </fieldset>
-
-                  <fieldset>
-                    <legend>이 주장이 사용될 CARE 섹션</legend>
-                    <div className="scaffold-v2__section-options">
-                      {SCAFFOLD_SECTIONS.filter((section) => (data.sectionStates || []).some((state) => state.sectionId === section.sectionId)).map((section) => (
-                        <label key={section.sectionId}>
-                          <input type="checkbox" checked={claim.targetSectionIds.includes(section.sectionId)} onChange={() => toggleClaimSection(claim.id, section.sectionId)} />
-                          <span>{section.displayName}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-
-                  <label className="scaffold-v2__claim-text">
-                    <span>부족하거나 추가 확인이 필요한 정보</span>
-                    <input value={claim.missingInformation || ''} onChange={(event) => updateClaim(claim.id, { missingInformation: event.target.value })} placeholder="없다면 비워둘 수 있습니다." />
-                  </label>
-                </article>
-              ))}
-              {claims.length === 0 ? (
-                <div className="scaffold-v2__empty is-large">
-                  기록에서 말할 수 있는 첫 주장을 추가하세요.
-                  <button type="button" className="scaffold-v2__button is-primary" onClick={() => setClaims([createClaim()])}>첫 주장 만들기</button>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="scaffold-v2__stage-actions">
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 증례 이해</button>
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void persistCaseMap()} disabled={saving}>{saving ? '저장 중...' : '주장 지도 저장'}</button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => void continueTo('section_drafting')} disabled={saving}>다음: CARE 원고 작성</button>
             </div>
           </section>
         ) : null}
@@ -1187,7 +1036,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
           <section className="scaffold-v2__stage" aria-labelledby="section-drafting-title">
             <div className="scaffold-v2__stage-heading">
               <div>
-                <span>{studyMode ? '2단계' : '3단계'}</span>
+                <span>2단계</span>
                 <h2 id="section-drafting-title">{studyMode ? 'CARE 항목별로 정리하고 AI 초안과 비교하기' : 'CARE 섹션별 원고 작성'}</h2>
                 <p>
                   {isV2
@@ -1250,12 +1099,10 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
                       {sections.map((section) => {
                         const progress = data.scaffoldState.sectionProgress.find((item) => item.sectionId === section.sectionId);
                         const status = getStudentStatus(progress);
-                        const linkedClaimCount = claims.filter((claim) => claim.targetSectionIds.includes(section.sectionId)).length;
                         return (
                           <div key={section.sectionId} className="scaffold-v2__section-row">
                             <div>
                               <strong>{section.displayName}</strong>
-                              {studyMode ? null : <span>{linkedClaimCount > 0 ? `연결된 주장 ${linkedClaimCount}개` : '연결된 주장 없음'}</span>}
                             </div>
                             <span className={`scaffold-v2__status is-${status}`}>{getStatusLabel(status)}</span>
                             <button type="button" className="scaffold-v2__button is-secondary" onClick={() => navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/sections/${section.sectionId}`)}>{getSectionButtonLabel(status)}</button>
@@ -1269,52 +1116,8 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             </div>
 
             <div className="scaffold-v2__stage-actions">
-              {studyMode ? (
-                <>
-                  <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 기록 읽기</button>
-                  <button type="button" className="scaffold-v2__button is-primary" onClick={() => navigate(`/study/scaffold/cases/${caseId}/summary`)}>내 학습 기록 보기</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('claim_evidence')} disabled={saving}>이전: 주장·근거 연결</button>
-                  <button type="button" className="scaffold-v2__button is-primary" onClick={() => void changePhase('final_review')} disabled={saving}>전체 검토 보기</button>
-                </>
-              )}
-            </div>
-          </section>
-        ) : null}
-
-        {currentPhase === 'final_review' ? (
-          <section className="scaffold-v2__stage" aria-labelledby="final-review-title">
-            <div className="scaffold-v2__stage-heading">
-              <div>
-                <span>4단계</span>
-                <h2 id="final-review-title">전체 원고 검토 준비</h2>
-                <p>주장과 근거의 연결, 추가 확인 항목, CARE 섹션 완료 상태를 함께 확인합니다.</p>
-              </div>
-              <strong>{phaseComplete.final_review ? '검토 준비 완료' : '확인 필요'}</strong>
-            </div>
-
-            <div className="scaffold-v2__review-grid">
-              <section><span>근거 연결</span><strong>{validClaims.length} / {claims.filter((claim) => claim.text.trim()).length}</strong><p>근거와 사용 섹션이 모두 지정된 주장</p></section>
-              <section><span>추가 확인</span><strong>{unresolvedClaims.length}</strong><p>판단 보류 또는 부족 정보가 남은 주장</p></section>
-              <section><span>CARE 작성</span><strong>{completedCount} / {totalSections}</strong><p>AI 초안 검토까지 끝낸 섹션과 글을 저장한 추가 작성 섹션</p></section>
-            </div>
-
-            {unresolvedClaims.length > 0 ? (
-              <section className="scaffold-v2__review-list">
-                <h3>추가 확인이 필요한 주장</h3>
-                <ul>
-                  {unresolvedClaims.map((claim) => (
-                    <li key={claim.id}><strong>{claim.text || CLAIM_TYPE_LABELS[claim.type]}</strong><span>{claim.missingInformation || '근거 확실성을 판단해야 합니다.'}</span></li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
-            <div className="scaffold-v2__stage-actions">
-              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('section_drafting')} disabled={saving}>이전: 원고 작성</button>
-              <button type="button" className="scaffold-v2__button is-primary" onClick={() => navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/summary`)}>최종 요약 열기</button>
+              <button type="button" className="scaffold-v2__button is-secondary" onClick={() => void changePhase('case_understanding')} disabled={saving}>이전: 기록 읽기</button>
+              <button type="button" className="scaffold-v2__button is-primary" onClick={() => navigate(`${studyMode ? '/study/scaffold' : '/scaffold'}/cases/${caseId}/summary`)}>내 학습 기록 보기</button>
             </div>
           </section>
         ) : null}
