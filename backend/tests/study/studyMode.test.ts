@@ -863,6 +863,18 @@ async function run() {
   );
   assert.equal(DEFAULT_STUDY_RECORD_POINTERS_V2.ti_001, DEFAULT_STUDY_RECORD_POINTERS.ti_001);
 
+  // 섹션 완료 판정: AI 검토 완료 또는 "추가 작성" 섹션의 authoringCompleted (2026-10-12)
+  {
+    const { isScaffoldProgressComplete } = await import('../../src/utils/scaffoldProgress');
+    const reviewed = { sectionId: 'THERAPEUTIC_INTERVENTIONS', recordReviewCompleted: true, missingInfoReviewCompleted: true, draftRevealed: true, draftReviewCompleted: true };
+    assert.equal(isScaffoldProgressComplete(reviewed), true);
+    assert.equal(isScaffoldProgressComplete({ ...reviewed, draftReviewCompleted: false }), false);
+    assert.equal(isScaffoldProgressComplete({ sectionId: 'INTRODUCTION', authoringCompleted: true }), true);
+    assert.equal(isScaffoldProgressComplete({ sectionId: 'INTRODUCTION', authoringCompleted: false }), false);
+    // 추가 작성 섹션이 아니면 authoringCompleted 로 완료되지 않는다
+    assert.equal(isScaffoldProgressComplete({ sectionId: 'THERAPEUTIC_INTERVENTIONS', authoringCompleted: true }), false);
+  }
+
   console.log('study mode tests passed');
 }
 

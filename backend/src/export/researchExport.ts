@@ -290,6 +290,7 @@ function buildSectionTiming(scaffoldState: any, sectionId: string) {
   const postAiReviewCompletedAt =
     firstSectionEventTimestamp(events, sectionId, 'draft_review_completed') ||
     (progress?.draftReviewCompleted ? progress?.completedAt || reflection?.completedAt : undefined);
+  // "추가 작성" 섹션은 AI 검토가 없으므로 위 값은 비어 있고, 아래 completedAt 만 채워진다(authoringCompleted).
   const completedAt =
     reflection?.completedAt ||
     firstSectionEventTimestamp(events, sectionId, 'section_completed') ||

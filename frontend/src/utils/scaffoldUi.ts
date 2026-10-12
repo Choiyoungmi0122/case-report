@@ -333,14 +333,25 @@ export function splitScaffoldDraftSentences(text: string) {
     .filter(Boolean);
 }
 
+/**
+ * 섹션 완료 판정 (2026-10-12). AI 초안 검토까지 끝냈거나, AI 비교 단계 없는 "추가 작성" 섹션에 글을 저장해
+ * authoringCompleted 가 켜진 경우. 백엔드 utils/scaffoldProgress.ts 와 같아야 한다.
+ */
+export function isScaffoldSectionComplete(
+  progress?: (Partial<ScaffoldStateResponse['scaffoldState']['sectionProgress'][number]> & { authoringCompleted?: boolean }) | null
+) {
+  if (!progress) return false;
+  if (progress.recordReviewCompleted && progress.missingInfoReviewCompleted && progress.draftRevealed && progress.draftReviewCompleted) {
+    return true;
+  }
+  return (
+    progress.authoringCompleted === true &&
+    getSectionsByGroup('additional_authoring').some((section) => section.sectionId === progress.sectionId)
+  );
+}
+
 export function getCompletedScaffoldSectionCount(data: ScaffoldStateResponse | null) {
-  return (data?.scaffoldState.sectionProgress || []).filter(
-    (item) =>
-      item.recordReviewCompleted &&
-      item.missingInfoReviewCompleted &&
-      item.draftRevealed &&
-      item.draftReviewCompleted
-  ).length;
+  return (data?.scaffoldState.sectionProgress || []).filter((item) => isScaffoldSectionComplete(item)).length;
 }
 
 export function getScaffoldCurrentStepIndex(data: ScaffoldStateResponse | null) {

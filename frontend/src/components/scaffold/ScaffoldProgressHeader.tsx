@@ -3,6 +3,7 @@ import type { ScaffoldSectionProgress } from '../../services/api';
 import {
   getAllSectionsByGroup,
   getSectionConfig,
+  isScaffoldSectionComplete,
   type SectionConfig,
   type SectionGroup
 } from '../../utils/scaffoldUi';
@@ -33,12 +34,8 @@ type SectionState = {
  * backend state.
  */
 export function deriveSectionState(progress?: ScaffoldSectionProgress): SectionState {
-  const completed = Boolean(
-    progress?.recordReviewCompleted &&
-      progress?.missingInfoReviewCompleted &&
-      progress?.draftRevealed &&
-      progress?.draftReviewCompleted
-  );
+  // AI 초안 검토 완료, 또는 "추가 작성" 섹션의 글 저장 완료 (utils/scaffoldUi.ts isScaffoldSectionComplete)
+  const completed = isScaffoldSectionComplete(progress);
 
   if (completed) {
     return { mark: '✓', markLabel: '완료', stateLabel: '완료', completed: true };

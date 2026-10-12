@@ -30,6 +30,7 @@ import {
   STUDY_SCAFFOLD_V2_SECTION_IDS,
   isLiveAiTestCase
 } from '../config/researchMetadata';
+import { isScaffoldProgressComplete, isWriteOnlySection } from '../utils/scaffoldProgress';
 import {
   ScaffoldInteractionEvent,
   ScaffoldInteractionEventType,
@@ -1391,13 +1392,11 @@ function upsertProgress(
     sectionId
   };
 
-  if (
-    next.recordReviewCompleted &&
-    next.missingInfoReviewCompleted &&
-    next.draftRevealed &&
-    next.draftReviewCompleted
-  ) {
+  if (isScaffoldProgressComplete(next)) {
     next.completedAt = next.completedAt || new Date().toISOString();
+  } else if (providedUpdates.authoringCompleted === false) {
+    // "추가 작성" 섹션의 글을 비워 완료가 풀리면 완료 시각도 지운다
+    delete next.completedAt;
   }
 
   if (existingIndex >= 0) {
@@ -2053,22 +2052,26 @@ router.put('/:caseId/scaffold/sections/:sectionId/progress', async (req: Request
       draftReviewCompleted:
         typeof req.body?.draftReviewCompleted === 'boolean'
           ? req.body.draftReviewCompleted
+          : undefined,
+      // "추가 작성" 섹션만 받는다. 다른 섹션은 AI 초안 검토로만 완료된다.
+      authoringCompleted:
+        isWriteOnlySection(sectionId) && typeof req.body?.authoringCompleted === 'boolean'
+          ? req.body.authoringCompleted
           : undefined
     });
 
     const allSectionIds = (caseData.sectionStates || []).map((item: any) => item.sectionId);
     // Scaffold V2는 실습 대상 섹션(치료 개입)만 끝나면 세션 완료로 본다. V1처럼 12개 섹션을
     // 모두 요구하면 실험 세션의 completedAt이 절대 채워지지 않는다.
-    const allSections = isStudyScaffoldV2Case(caseData)
+    // 2026-10-12: 실험 모드가 아닌 V2 사례(전체 섹션)는 모든 섹션을 요구한다. 개수가 아니라 섹션마다 완료했는지 본다
+    // (예전에는 V2 면 치료 개입 1개만 요구하고 완료 개수로 비교해, 다른 섹션 하나만 끝내도 세션 완료로 찍혔다).
+    const allSections = isStudyScaffoldV2Case(caseData) && studyMode
       ? allSectionIds.filter((id: string) => STUDY_SCAFFOLD_V2_SECTION_IDS.includes(id))
       : allSectionIds;
-    const completedSections = nextProgressItems.filter(
-      (item) =>
-        item.recordReviewCompleted &&
-        item.missingInfoReviewCompleted &&
-        item.draftRevealed &&
-        item.draftReviewCompleted
+    const completedSectionIds = new Set(
+      nextProgressItems.filter((item) => isScaffoldProgressComplete(item)).map((item) => String(item.sectionId))
     );
+    const completedSections = allSections.filter((id: string) => completedSectionIds.has(String(id)));
 
     const nextScaffoldState: ScaffoldState = {
       ...scaffoldState,

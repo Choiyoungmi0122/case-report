@@ -28,6 +28,7 @@ import {
   type ScaffoldV2Phase
 } from '../services/api';
 import {
+  isScaffoldSectionComplete,
   SECTION_GROUP_DESCRIPTIONS,
   SCAFFOLD_SECTIONS,
   getSectionsByGroup,
@@ -77,12 +78,7 @@ const GROUP_TITLES: Record<SectionGroup, string> = {
 
 function getStudentStatus(progress: any): StudentSectionStatus {
   if (!progress) return 'not_started';
-  if (
-    progress.recordReviewCompleted &&
-    progress.missingInfoReviewCompleted &&
-    progress.draftRevealed &&
-    progress.draftReviewCompleted
-  ) {
+  if (isScaffoldSectionComplete(progress)) {
     return 'completed';
   }
   if (progress.draftRevealed) return 'ai_review';
@@ -278,10 +274,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
       (data?.scaffoldState.sectionProgress || []).filter(
         (progress) =>
           (!studyMode || studySectionIds.includes(progress.sectionId)) &&
-          progress.recordReviewCompleted &&
-          progress.missingInfoReviewCompleted &&
-          progress.draftRevealed &&
-          progress.draftReviewCompleted
+          isScaffoldSectionComplete(progress)
       ).length,
     [data, studyMode, studySectionIds]
   );
@@ -1363,7 +1356,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
             <div className="scaffold-v2__review-grid">
               <section><span>근거 연결</span><strong>{validClaims.length} / {claims.filter((claim) => claim.text.trim()).length}</strong><p>근거와 사용 섹션이 모두 지정된 주장</p></section>
               <section><span>추가 확인</span><strong>{unresolvedClaims.length}</strong><p>판단 보류 또는 부족 정보가 남은 주장</p></section>
-              <section><span>CARE 작성</span><strong>{completedCount} / {totalSections}</strong><p>AI 초안 검토까지 완료한 섹션</p></section>
+              <section><span>CARE 작성</span><strong>{completedCount} / {totalSections}</strong><p>AI 초안 검토까지 끝낸 섹션과 글을 저장한 추가 작성 섹션</p></section>
             </div>
 
             {unresolvedClaims.length > 0 ? (

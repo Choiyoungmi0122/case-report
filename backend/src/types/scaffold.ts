@@ -63,6 +63,8 @@ export interface ScaffoldSectionProgress {
   missingInfoReviewCompleted: boolean;
   draftRevealed: boolean;
   draftReviewCompleted: boolean;
+  /** "추가 작성" 섹션(AI 비교 단계 없음)에 글을 저장해 끝낸 경우 (2026-10-12, utils/scaffoldProgress.ts) */
+  authoringCompleted?: boolean;
   completedAt?: string;
 }
 

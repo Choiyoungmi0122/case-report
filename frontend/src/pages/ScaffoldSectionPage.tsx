@@ -1400,6 +1400,15 @@ export default function ScaffoldSectionPage() {
 
     try {
       await persistSectionReflection({ learnerNotes: authoringNotes });
+      // "추가 작성" 섹션은 글을 저장하면 완료로 센다(비우면 완료를 푼다). AI 검토 플래그는 건드리지 않는다.
+      if (isAdditionalAuthoring) {
+        // authoringCompleted 는 api.ts 요청 타입에 아직 없어 이 호출에서만 넓혀 보낸다.
+        const progressUpdate = { authoringCompleted: authoringNotes.trim().length > 0 } as Parameters<
+          typeof caseApi.updateScaffoldSectionProgress
+        >[2];
+        const progressState = await caseApi.updateScaffoldSectionProgress(caseId, sectionId, progressUpdate);
+        patchScaffoldState(progressState.scaffoldState);
+      }
       setFeedback('작성 내용이 저장되었습니다.');
       setTimeout(() => setFeedback(null), 2000);
     } catch (err: any) {

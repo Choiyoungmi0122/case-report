@@ -18,6 +18,7 @@ import {
 import { renderClinicalAnonymizedText } from '../deid/publicationRenderer';
 import { isStudyScaffoldV2Case } from '../config/researchMetadata';
 import { DEFAULT_STUDY_CARE_ELEMENT_MAP, isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
+import { WRITE_ONLY_SECTION_IDS } from '../utils/scaffoldProgress';
 import { Case, CareSection, SectionEvidenceLink, UnsupportedClaim } from '../types';
 import { normalizeUnicodeText, normalizeUnicodeWhitespace } from '../utils/unicode';
 import { ExportLayout, ExportMode, TimelineTableData, TraceabilityAppendixRow } from './types';
@@ -742,8 +743,8 @@ const V2_FLAG_FILL: Record<string, string> = {
   want_to_add: 'C6F6D5'
 };
 
-/** AI 비교 단계 없이 글만 쓰는 "추가 작성" 항목 (frontend utils/scaffoldUi.ts 의 additional_authoring 그룹과 같다). */
-const V2_WRITE_ONLY_SECTION_IDS = new Set(['PATIENT_PERSPECTIVE', 'INFORMED_CONSENT', 'DISCUSSION_CONCLUSION', 'INTRODUCTION', 'TITLE', 'ABSTRACT']);
+/** AI 비교 단계 없이 글만 쓰는 "추가 작성" 항목 (utils/scaffoldProgress.ts). */
+const V2_WRITE_ONLY_SECTION_IDS = WRITE_ONLY_SECTION_IDS;
 
 const v2NoteTypeLabel = (type: string) => V2_NOTE_TYPE_LABELS[type] || '눈에 띈 점';
 const v2SufficiencyLabel = (judgment: string) => V2_SUFFICIENCY_LABELS[judgment] || scaffoldJudgmentLabelKo(judgment);

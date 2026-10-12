@@ -10,7 +10,12 @@ import ScaffoldPanel from '../components/scaffold/ScaffoldPanel';
 import ScaffoldStatGrid from '../components/scaffold/ScaffoldStatGrid';
 import { caseApi, ExportLayout, ScaffoldPreRevealSnapshot, ScaffoldStateResponse } from '../services/api';
 import { renderClinicalAnonymizedText } from '../utils/publicationRenderer';
-import { getCompletedScaffoldSectionCount, getSectionsByGroup, sortBySufficiencyQuestionOrder } from '../utils/scaffoldUi';
+import {
+  getCompletedScaffoldSectionCount,
+  getSectionsByGroup,
+  isScaffoldSectionComplete,
+  sortBySufficiencyQuestionOrder
+} from '../utils/scaffoldUi';
 import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import StageGuide from '../components/scaffold/StageGuide';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
@@ -224,12 +229,7 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
     () =>
       (data?.sectionStates || []).filter((sectionState) => {
         const progress = progressBySection.get(sectionState.sectionId);
-        return !(
-          progress?.recordReviewCompleted &&
-          progress?.missingInfoReviewCompleted &&
-          progress?.draftRevealed &&
-          progress?.draftReviewCompleted
-        );
+        return !isScaffoldSectionComplete(progress);
       }),
     [data, progressBySection]
   );
