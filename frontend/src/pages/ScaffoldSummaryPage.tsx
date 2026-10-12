@@ -15,6 +15,7 @@ import { getStudySectionIds, isScaffoldV2Data } from '../utils/scaffoldVersion';
 import StageGuide from '../components/scaffold/StageGuide';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
 import { V2_STAGE_GUIDES } from '../utils/scaffoldV2Guide';
+import ScaffoldSummaryV2 from '../components/scaffold/ScaffoldSummaryV2';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const objectUrl = window.URL.createObjectURL(blob);
@@ -319,7 +320,11 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
       {isScaffoldV2Data(data) ? <StageGuide guide={V2_STAGE_GUIDES.summary} /> : null}
       <ScaffoldHero
         title="내 학습 기록"
-        description="AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다."
+        description={
+          isScaffoldV2Data(data)
+            ? '기록을 어떻게 읽었는지(메모), AI를 보기 전에 무엇을 판단하고 썼는지(내 초안), AI 초안과 견주어 무엇을 알아차렸는지(표시한 문장, 돌아보기)를 차례로 모았습니다. 교수자는 위의 "교수자가 먼저 볼 것"부터 보면 됩니다.'
+            : 'AI 초안을 보기 전 내 정리, AI 초안에서 표시한 문장과 이유, 초안에 빠졌다고 본 내용, AI를 보고 달라진 점을 CARE 항목별로 모았습니다.'
+        }
         actions={
           <>
             {!studyMode ? (
@@ -337,6 +342,25 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
         }
       />
 
+      {/* V2: 교수자가 학생의 작성 방식과 부족한 점을 보기 쉽게 정리한 본문(components/scaffold/ScaffoldSummaryV2.tsx). V1 은 아래 기존 본문 그대로. */}
+      {isScaffoldV2Data(data) ? (
+        workedSections.length > 0 ? (
+          <ScaffoldSummaryV2
+            data={data}
+            sectionIds={workedSections.map((section) => section.sectionId)}
+            sectionName={sectionName}
+            judgmentName={judgmentName}
+            sufficiencyName={(judgment) => sufficiencyJudgmentName(judgment, true)}
+          />
+        ) : (
+          <ScaffoldPanel compact title="CARE 항목별 기록">
+            <div style={{ color: '#4a5d73', fontSize: 16, lineHeight: 1.7 }}>
+              아직 작업한 CARE 항목이 없습니다. CARE 항목을 하나 골라 시작해 보세요.
+            </div>
+          </ScaffoldPanel>
+        )
+      ) : (
+      <>
       <ScaffoldPanel compact title="요약">
         <ScaffoldStatGrid
           items={[
@@ -553,6 +577,8 @@ export default function ScaffoldSummaryPage({ studyMode = false }: { studyMode?:
       <ScaffoldPanel compact title="모아 보기: 기록과 다르거나 추가 확인이 필요한 것">
         <ScaffoldBulletList items={confirmationListItems} emptyMessage="표시한 항목이 없습니다." />
       </ScaffoldPanel>
+      </>
+      )}
     </ScaffoldPageFrame>
   );
 }

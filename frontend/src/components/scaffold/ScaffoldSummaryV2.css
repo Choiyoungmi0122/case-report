@@ -1,0 +1,293 @@
+/* Scaffold V2 "내 학습 기록" 본문 (2026-10-12). 교수자가 학생의 작성 방식과 부족한 점을 보기 쉽게. */
+.scaffold-summary-v2 {
+  display: grid;
+  gap: 18px;
+  color: #243b53;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.scaffold-summary-v2__panel {
+  padding: 18px 20px;
+  border: 1px solid #d7e0e8;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.scaffold-summary-v2__panel h2 {
+  margin: 0 0 10px;
+  color: #17324d;
+  font-size: 18px;
+}
+
+.scaffold-summary-v2__panel h2:not(:first-child) {
+  margin-top: 24px;
+}
+
+.scaffold-summary-v2__panel h3 {
+  margin: 0 0 6px;
+  color: #32647f;
+  font-size: 15px;
+}
+
+.scaffold-summary-v2__lead {
+  margin: 0 0 12px;
+  color: #52606d;
+  font-size: 14px;
+}
+
+.scaffold-summary-v2__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.scaffold-summary-v2__stats > div {
+  padding: 10px 12px;
+  border: 1px solid #e3e9ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.scaffold-summary-v2__stats dt {
+  color: #52606d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scaffold-summary-v2__stats dd {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+}
+
+.scaffold-summary-v2__stats dd strong {
+  color: #17324d;
+  font-size: 16px;
+}
+
+.scaffold-summary-v2__stats dd span {
+  color: #52606d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scaffold-summary-v2__panel.is-attention {
+  border-color: #e3c27a;
+  background: #fffaf0;
+}
+
+.scaffold-summary-v2__attention-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+}
+
+.scaffold-summary-v2__attention-grid > div {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #f0dfb5;
+}
+
+.scaffold-summary-v2__attention-grid p {
+  margin: 0;
+}
+
+.scaffold-summary-v2__bullets {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.scaffold-summary-v2__bullets li + li {
+  margin-top: 4px;
+}
+
+.scaffold-summary-v2__empty {
+  margin: 0;
+  color: #7b8794;
+}
+
+.scaffold-summary-v2__table-wrap {
+  overflow-x: auto;
+}
+
+.scaffold-summary-v2__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14.5px;
+}
+
+.scaffold-summary-v2__table th,
+.scaffold-summary-v2__table td {
+  padding: 8px 10px;
+  border: 1px solid #d7e0e8;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+.scaffold-summary-v2__table th {
+  background: #f3f6fa;
+  color: #17324d;
+  font-size: 13.5px;
+}
+
+.scaffold-summary-v2__table ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.scaffold-summary-v2__badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8efff;
+  color: #2f5d9e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.scaffold-summary-v2__judgment {
+  font-weight: 700;
+}
+
+.scaffold-summary-v2__judgment.is-available_in_record {
+  color: #276749;
+}
+
+.scaffold-summary-v2__judgment.is-needs_additional_confirmation,
+.scaffold-summary-v2__judgment.is-unavailable {
+  color: #9a5b00;
+}
+
+.scaffold-summary-v2__judgment.is-needs_instructor_review {
+  color: #6b46c1;
+}
+
+.scaffold-summary-v2__judgment.is-differs_from_record {
+  color: #b42318;
+}
+
+.scaffold-summary-v2__sub {
+  margin-top: 12px;
+}
+
+.scaffold-summary-v2__compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.scaffold-summary-v2__draft {
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+
+.scaffold-summary-v2__draft p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.scaffold-summary-v2__draft.is-own {
+  border-left: 4px solid #2f855a;
+  background: #f3faf5;
+}
+
+.scaffold-summary-v2__draft.is-ai {
+  border-left: 4px solid #3b6fd4;
+  background: #eef4ff;
+}
+
+.scaffold-summary-v2__flag {
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: #fde68a;
+  color: inherit;
+}
+
+.scaffold-summary-v2__flag.is-differs_from_record {
+  background: #fecaca;
+}
+
+.scaffold-summary-v2__flag.is-needs_additional_confirmation {
+  background: #fde68a;
+}
+
+.scaffold-summary-v2__flag.is-needs_instructor_review {
+  background: #e9d8fd;
+}
+
+.scaffold-summary-v2__flag.is-want_to_add {
+  background: #c6f6d5;
+}
+
+.scaffold-summary-v2__flag sup {
+  margin-left: 3px;
+  color: #52606d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.scaffold-summary-v2__evidence {
+  margin-top: 4px;
+  color: #52606d;
+}
+
+.scaffold-summary-v2__reflection {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.scaffold-summary-v2__reflection dt {
+  color: #32647f;
+  font-weight: 700;
+}
+
+.scaffold-summary-v2__reflection dd {
+  margin: 2px 0 0;
+}
+
+.scaffold-summary-v2__reference {
+  margin-top: 20px;
+  padding: 10px 12px;
+  border: 1px solid #e3d9a8;
+  border-radius: 8px;
+  background: #fffdf2;
+}
+
+.scaffold-summary-v2__reference > summary {
+  color: #5c3d0a;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scaffold-summary-v2__reference .scaffold-summary-v2__table-wrap {
+  margin-top: 10px;
+}
+
+.scaffold-summary-v2__muted {
+  color: #7b8794;
+  font-size: 12.5px;
+}
+
+@media (max-width: 899px) {
+  .scaffold-summary-v2__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scaffold-summary-v2__attention-grid,
+  .scaffold-summary-v2__compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .scaffold-summary-v2__stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
