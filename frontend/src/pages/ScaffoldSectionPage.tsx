@@ -1010,6 +1010,23 @@ export default function ScaffoldSectionPage() {
     selectedEvidenceItems.length > 0 ||
     keyInformationItems.length > 0 ||
     noRelevantEvidenceConfirmed;
+  // V2: "AI 초안 보기" 버튼이 왜 안 눌리는지 한 줄로 알린다(공개 전 확인 목록 대신, 2026-10-12).
+  const unansweredQuestionCount = confirmationQuestions.filter((question) => !confirmationQuestionJudgments[question.id]).length;
+  const revealBlockedReasons = [
+    ...(!(
+      authoringNotes.trim().length > 0 ||
+      selectedEvidenceItems.length > 0 ||
+      keyInformationItems.length > 0 ||
+      noRelevantEvidenceConfirmed
+    )
+      ? ['내 초안을 먼저 써 주세요.']
+      : []),
+    ...(unansweredQuestionCount > 0
+      ? [`Step 2 질문 ${unansweredQuestionCount}개에 아직 답하지 않았습니다.`]
+      : savingConfirmationQuestionIds.size > 0
+        ? ['판단을 저장하는 중입니다.']
+        : [])
+  ];
   const step2Complete = confirmationQuestions.every(
     (question) => Boolean(confirmationQuestionJudgments[question.id])
   ) && savingConfirmationQuestionIds.size === 0;
@@ -2702,30 +2719,32 @@ export default function ScaffoldSectionPage() {
                 ))}
               </div>
 
-              {/* Checklist */}
-              <div
-                style={{
-                  marginTop: 20,
-                  padding: 16,
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  border: '1px solid #d7e0e8'
-                }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 600, color: '#17324d', marginBottom: 12 }}>
-                  AI 초안을 보기 전에 다음을 확인해주세요
-                </div>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
-                    <span>{step1Complete ? '✓' : '○'}</span>
-                    <span>정보 선택 및 정리</span>
+              {/* Checklist. V2 는 보이지 않는다(2026-10-12 연구자 요청). 대신 버튼 아래에 빠진 것만 한 줄로 알린다. */}
+              {!isV2 ? (
+                <div
+                  style={{
+                    marginTop: 20,
+                    padding: 16,
+                    borderRadius: 8,
+                    background: '#f8fafc',
+                    border: '1px solid #d7e0e8'
+                  }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 600, color: '#17324d', marginBottom: 12 }}>
+                    AI 초안을 보기 전에 다음을 확인해주세요
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
-                    <span>{step2Complete ? '✓' : '○'}</span>
-                    <span>정보 충분성 확인</span>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
+                      <span>{step1Complete ? '✓' : '○'}</span>
+                      <span>정보 선택 및 정리</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, color: '#17324d' }}>
+                      <span>{step2Complete ? '✓' : '○'}</span>
+                      <span>정보 충분성 확인</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : null}
 
               {/* Action Buttons */}
               <div style={{ marginTop: 20, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2740,6 +2759,11 @@ export default function ScaffoldSectionPage() {
                     : '내 정리 저장하고 AI 초안 보기'}
                 </ScaffoldActionButton>
               </div>
+              {isV2 && revealBlockedReasons.length > 0 ? (
+                <p className="scaffold-reveal-blocked" role="status">
+                  {revealBlockedReasons.join(' ')}
+                </p>
+              ) : null}
               <p className="scaffold-reveal-note">
                 AI 초안을 열면 내 초안은 더 이상 고칠 수 없습니다. 고칠 부분이 있으면 먼저 돌아가 고쳐 주세요.
               </p>
