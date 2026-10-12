@@ -224,6 +224,29 @@ export default function StudyWriteDraftPage() {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight });
   }, [section?.chat.length, revising]);
 
+  // ── 수정 요청 채팅의 "질문 받기" ──
+  const [askingQuestion, setAskingQuestion] = useState(false);
+  // 건너뛴 질문 (이 화면에서만. 다시 질문 받기를 누르면 새 질문)
+  const [skippedQuestionIds, setSkippedQuestionIds] = useState<string[]>([]);
+  // 답을 기다리는 AI 질문: 마지막 AI 질문이 아직 답이 없고 건너뛰지 않았으면
+  const pendingQuestion = (() => {
+    const last = [...(section?.chat || [])].reverse().find((entry) => entry.kind === 'question');
+    return last && !last.answeredAt && !skippedQuestionIds.includes(last.id) ? last : null;
+  })();
+  const askQuestion = async () => {
+    if (!caseId || !section || askingQuestion) return;
+    setAskingQuestion(true);
+    setError(null);
+    try {
+      setData(await caseApi.askStudyWriteChatQuestion(caseId, section.sectionId));
+      setFocusComposerAt(Date.now());
+    } catch (nextError: any) {
+      setError(nextError?.response?.data?.error || nextError?.message || '질문을 받지 못했습니다.');
+    } finally {
+      setAskingQuestion(false);
+    }
+  };
+
   const sendInstruction = async () => {
     if (!caseId || !section || revising) return;
     const text = instruction.trim();
@@ -231,7 +254,11 @@ export default function StudyWriteDraftPage() {
     setRevising(true);
     setError(null);
     try {
-      setData(await caseApi.reviseStudyWriteSection(caseId, section.sectionId, text));
+      setData(
+        pendingQuestion
+          ? await caseApi.answerStudyWriteChatQuestion(caseId, section.sectionId, pendingQuestion.id, text)
+          : await caseApi.reviseStudyWriteSection(caseId, section.sectionId, text)
+      );
       setInstruction('');
     } catch (nextError: any) {
       setError(nextError?.response?.data?.error || nextError?.message || '고치지 못했습니다.');
@@ -740,19 +767,54 @@ export default function StudyWriteDraftPage() {
                   이 섹션을 어떻게 고칠지 적어 주세요. 예: "용량과 복용법을 넣어 줘", "둘째 문장은 빼 줘", "더 간결하게".
                   기록에 없는 내용을 넣으라고 하면 그 문장에 표시가 붙습니다.
                 </div>
-                {section.chat.map((entry) => (
-                  <div key={entry.id} className={`sw-chat sw-chat--${entry.role}`}>
-                    {entry.role === 'user' || entry.role === 'assistant' ? (
-                      <span className="sw-chat__role">{entry.role === 'user' ? '나' : 'AI'}</span>
-                    ) : null}
-                    {entry.role === 'assistant' ? renderClinicalAnonymizedText(dated(entry.text)) : entry.text}
-                    {entry.resultVersion ? <small>초안 버전 {entry.resultVersion}</small> : null}
-                  </div>
-                ))}
-                {revising ? <div className="sw-chat sw-chat--system">고쳐 쓰는 중…</div> : null}
+                {section.chat.map((entry) =>
+                  entry.kind === 'question' ? (
+                    // "질문 받기"로 AI 가 한 질문
+                    <div key={entry.id} className={`sw-chat sw-chat--assistant sw-chat--question${entry.answeredAt ? ' is-answered' : ''}`}>
+                      <span className="sw-chat__role">AI 질문{entry.answeredAt ? ' · 답함' : skippedQuestionIds.includes(entry.id) ? ' · 건너뜀' : ''}</span>
+                      <div className="sw-chat__question">{renderClinicalAnonymizedText(dated(entry.text))}</div>
+                      {entry.hint ? <small>답에 들어가면 좋은 것: {entry.hint}</small> : null}
+                      {entry.reason ? <small className="sw-chat__reason">{dated(entry.reason)}</small> : null}
+                    </div>
+                  ) : (
+                    <div key={entry.id} className={`sw-chat sw-chat--${entry.role}`}>
+                      {entry.role === 'user' || entry.role === 'assistant' ? (
+                        <span className="sw-chat__role">{entry.role === 'user' ? '나' : 'AI'}</span>
+                      ) : null}
+                      {entry.role === 'assistant' ? renderClinicalAnonymizedText(dated(entry.text)) : entry.text}
+                      {entry.resultVersion ? <small>초안 버전 {entry.resultVersion}</small> : null}
+                    </div>
+                  )
+                )}
+                {askingQuestion ? <div className="sw-chat sw-chat--system">무엇을 여쭤볼지 고르는 중…</div> : null}
+                {revising ? <div className="sw-chat sw-chat--system">{pendingQuestion ? '답을 저장하고 이 섹션에 반영하는 중…' : '고쳐 쓰는 중…'}</div> : null}
               </div>
               {!locked ? (
                 <div className="sw-draft__chat-composer">
+                  {pendingQuestion ? (
+                    <div className="sw-draft__ask is-answering">
+                      <span>AI 질문에 답하는 중입니다. 보내면 답이 "내 답변"에 저장되고 이 섹션에 반영됩니다.</span>
+                      <button
+                        type="button"
+                        className="is-secondary"
+                        disabled={revising}
+                        onClick={() => setSkippedQuestionIds((prev) => [...prev, pendingQuestion.id])}
+                      >
+                        건너뛰기
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="sw-draft__ask">
+                      <span>무엇을 더 써야 할지 모르겠으면 AI가 이 섹션을 자세히 쓰기 위한 질문을 드립니다.</span>
+                      <button
+                        type="button"
+                        disabled={askingQuestion || revising || !section.draftText}
+                        onClick={() => void askQuestion()}
+                      >
+                        {askingQuestion ? '질문 고르는 중…' : '질문 받기'}
+                      </button>
+                    </div>
+                  )}
                   <div className="sw-draft__chat-box">
                     <textarea
                       ref={composerRef}
@@ -764,7 +826,7 @@ export default function StudyWriteDraftPage() {
                         event.target.style.height = `${event.target.scrollHeight}px`;
                       }}
                       rows={1}
-                      placeholder="이 섹션을 어떻게 고칠까요?"
+                      placeholder={pendingQuestion ? 'AI 질문에 답해 주세요' : '이 섹션을 어떻게 고칠까요?'}
                       disabled={revising || !section.draftText}
                       onKeyDown={(event) => {
                         // Enter 보내기, Shift+Enter 줄바꿈 (일반 채팅과 같게)

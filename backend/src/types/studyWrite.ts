@@ -31,6 +31,8 @@ export interface StudyWriteQuestion {
   targetSectionIds: string[];
   /** CARE 세부 항목 (예: 11d, 9b). 고정 질문은 비울 수 있다 */
   careItem?: string;
+  /** 수정 요청 채팅의 "질문 받기"에서 온 답이면 그 채팅 항목 id */
+  chatEntryId?: string;
   /** 필수 항목 빈칸이면 'required', 선택 항목이면 'optional', 사례 전체 질문이면 'case' */
   priority: 'required' | 'optional' | 'case';
   /** 왜 이 질문을 골랐는지 (체인 출력). 참여자에게는 보이지 않는다 */
@@ -138,6 +140,13 @@ export interface StudyWriteChatEntry {
   at: string;
   /** assistant 가 초안을 바꿨으면 그 버전 */
   resultVersion?: number;
+  /** 'question': "질문 받기"로 AI 가 한 질문 (SW-Q4). 답은 질의응답에 저장되고 섹션을 고쳐 쓴다 */
+  kind?: 'question';
+  /** 질문일 때: 답에 들어가면 좋은 요소, 채우려는 CARE 항목·하위 요소, 고른 이유, 답한 시각 */
+  hint?: string;
+  targetCode?: string;
+  reason?: string;
+  answeredAt?: string;
 }
 
 export interface StudyWriteSectionState {

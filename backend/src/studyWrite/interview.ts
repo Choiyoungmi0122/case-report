@@ -221,7 +221,16 @@ export async function generateCareItemQuestion(params: {
 
 export function addCareInfoAnswer(
   state: StudyWriteState,
-  params: { sectionId: string; code: string; label: string; required: boolean; answer: string; question?: string }
+  params: {
+    sectionId: string;
+    code: string;
+    label: string;
+    required: boolean;
+    answer: string;
+    question?: string;
+    /** 수정 요청 채팅의 "질문 받기"에서 온 답이면 그 채팅 항목 id (같은 항목끼리만 덮어쓴다) */
+    chatEntryId?: string;
+  }
 ): StudyWriteState {
   if (state.answersLockedAt) {
     throw new Error('최종 수정 단계에 들어가 정보를 더 넣을 수 없습니다.');
@@ -237,7 +246,11 @@ export function addCareInfoAnswer(
   }
   // 점검에서 보여 준 질문을 함께 남긴다 (없으면 항목 이름)
   const questionText = String(params.question || '').trim().slice(0, 500) || `[CARE 점검 추가 입력] ${params.code} ${params.label}`;
-  const existing = round.questions.find((question) => question.careItem === params.code && question.targetSectionIds.includes(params.sectionId));
+  const existing = params.chatEntryId
+    ? round.questions.find((question) => question.chatEntryId === params.chatEntryId)
+    : round.questions.find(
+        (question) => !question.chatEntryId && question.careItem === params.code && question.targetSectionIds.includes(params.sectionId)
+      );
   if (existing) {
     existing.editHistory = [...existing.editHistory, { previousAnswer: existing.answer, previousStatus: existing.status, editedAt: now }];
     existing.text = questionText;
@@ -254,6 +267,7 @@ export function addCareInfoAnswer(
       source: 'care_check',
       targetSectionIds: [params.sectionId],
       careItem: params.code,
+      ...(params.chatEntryId ? { chatEntryId: params.chatEntryId } : {}),
       priority: params.required ? 'required' : 'optional',
       status: 'answered',
       answer,

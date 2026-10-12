@@ -15,9 +15,10 @@ import {
   startInterview,
   toParticipantView
 } from '../studyWrite/interview';
-import { StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
+import { StudyWriteChatEntry, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
 import { findSubElement } from '../studyWrite/careSubElements';
+import { generateSectionChatQuestion } from '../studyWrite/chatQuestion';
 import { mergeRegeneratedPart, parseTitleDraft, TitlePart } from '../studyWrite/titleKeywords';
 import { promptMeta } from '../llm/promptRegistry';
 import { CARE_ITEMS_BY_SECTION, CARE_SECTION_NAMES, CARE_SECTION_ORDER } from '../studyWrite/careItems';
@@ -378,14 +379,20 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     const regeneratePart: TitlePart | null =
       req.body?.regeneratePart === 'title' || req.body?.regeneratePart === 'keywords' ? req.body.regeneratePart : null;
     if (regeneratePart && req.params.sectionId !== 'TITLE') return res.status(400).json({ error: '제목 섹션에서만 쓸 수 있습니다.' });
+    // 수정 요청 채팅의 "질문 받기"에 대한 답: 질의응답에 저장하고 그 답으로 고쳐 쓴다
+    const chatAnswer =
+      req.body?.chatAnswer && typeof req.body.chatAnswer.entryId === 'string'
+        ? { entryId: String(req.body.chatAnswer.entryId), answer: String(req.body.chatAnswer.answer || '').trim().slice(0, 3000) }
+        : null;
+    if (chatAnswer && !chatAnswer.answer) return res.status(400).json({ error: '답을 적어 주세요.' });
     const instruction = reviewAfterEdit
       ? '임상의가 이 섹션을 직접 고쳤다. [직접 수정 전 초안]과 [현재 초안]을 비교해 임상의가 바꾼 곳(추가·삭제·수정)을 찾는다. 임상의가 바꾼 내용은 임상의가 넣은 사실로 보고 그대로 둔다. 기록에 없는 내용이어도 지우거나 되돌리지 않는다(기록에 없는 새 사실이면 그 문장 끝에 "[기록 외 내용: 직접 수정]"만 붙인다). 그 변경 때문에 나머지 문장과 어긋나게 된 곳(같은 내용의 중복, 앞뒤 모순, 용어·시제·표기 불일치, 끊긴 흐름)만 최소한으로 다듬는다. 새 사실을 더하지 않는다. 어긋나는 곳이 없으면 초안을 한 글자도 바꾸지 않고 changeSummary 에 "직접 고친 내용과 나머지가 어긋나는 곳이 없어 그대로 두었다"고 쓴다. 바꿨으면 무엇을 바꿨는지 구체적으로 쓴다.'
-      : regeneratePart
-        ? '' // 아래에서 현재 초안을 보고 정한다
+      : regeneratePart || chatAnswer
+        ? '' // 아래에서 현재 초안·질문을 보고 정한다
         : String(req.body?.instruction || '').trim();
-    if (!instruction && !regeneratePart) return res.status(400).json({ error: '지시를 적어 주세요.' });
+    if (!instruction && !regeneratePart && !chatAnswer) return res.status(400).json({ error: '지시를 적어 주세요.' });
     // 초안에서 드래그한 부분 (선택). 너무 길면 자른다
-    let selectedText = reviewAfterEdit || regeneratePart ? undefined : String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
+    let selectedText = reviewAfterEdit || regeneratePart || chatAnswer ? undefined : String(req.body?.selectedText || '').trim().slice(0, 2000) || undefined;
     const { caseId, sectionId } = req.params;
     if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
 
@@ -396,6 +403,13 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
     const section = state.sections?.[sectionId];
     if (!section || !section.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
     let effectiveInstruction = instruction;
+    const askedEntry = chatAnswer ? section.chat.find((entry) => entry.id === chatAnswer.entryId && entry.kind === 'question') : undefined;
+    if (chatAnswer) {
+      if (!askedEntry) return res.status(400).json({ error: '답할 질문을 찾지 못했습니다.' });
+      if (askedEntry.answeredAt) return res.status(400).json({ error: '이미 답한 질문입니다.' });
+      if (state.answersLockedAt) return res.status(400).json({ error: '최종 수정 단계에 들어가 답을 더할 수 없습니다.' });
+      effectiveInstruction = `임상의에게 이 섹션을 더 자세히 쓰기 위해 "${askedEntry.text}"라고 물었고, 임상의가 이렇게 답했다: "${chatAnswer.answer}". 이 답에 담긴 사실을 이 섹션의 알맞은 자리에 반영한다. 답 가운데 "모른다", "적지 않았다", "기록하지 않았다"처럼 정보가 없다는 부분은 본문에 쓰지 않는다(부재 문장 금지). 답에 없는 내용은 더하지 않고, 답과 무관한 문장은 글자 그대로 둔다. 반영할 사실이 없으면 초안을 바꾸지 않는다.`;
+    }
     if (regeneratePart) {
       const parsed = parseTitleDraft(section.draftText);
       // 같은 것이 다시 나오지 않게 지금까지 나온 제목·핵심 단어를 함께 준다
@@ -421,7 +435,20 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
 
     const result = await serialize(caseId, async () => {
       const latest = await loadCase(caseId);
-      const latestState = normalizeStudyWriteState(latest.studyWrite);
+      const loadedState = normalizeStudyWriteState(latest.studyWrite);
+      // 질문 받기의 답은 질의응답(care_check 회차)에 질문과 함께 남긴다. 나중에 다시 쓸 때도 쓰인다
+      const latestState =
+        chatAnswer && askedEntry
+          ? addCareInfoAnswer(loadedState, {
+              sectionId,
+              code: askedEntry.targetCode || '',
+              label: '',
+              required: Boolean(askedEntry.targetCode && careTargetDef(sectionId, askedEntry.targetCode)?.required),
+              answer: chatAnswer.answer,
+              question: askedEntry.text,
+              chatEntryId: askedEntry.id
+            })
+          : loadedState;
       const current = latestState.sections?.[sectionId] || section;
       const now = new Date().toISOString();
       const version = changed ? current.version + 1 : current.version;
@@ -448,18 +475,20 @@ router.post('/cases/:caseId/sections/:sectionId/revise', async (req: Request, re
             ]
           : current.history,
         chat: [
-          ...current.chat,
+          ...current.chat.map((entry) => (askedEntry && entry.id === askedEntry.id ? { ...entry, answeredAt: now } : entry)),
           {
             id: `swc-${randomUUID()}`,
             role: 'user',
             // 드래그로 고른 부분이 있으면 채팅에 함께 남긴다. 전체 점검은 짧은 표시로
             text: reviewAfterEdit
               ? '[직접 수정 후 전체 점검] 고친 내용은 지키고, 나머지와 어긋나는 곳만 다듬어 줘.'
-              : regeneratePart
-                ? regeneratePart === 'title'
-                  ? '[제목 다시 만들기]'
-                  : '[핵심 단어 다시 고르기]'
-                : selectedText
+              : chatAnswer
+                ? chatAnswer.answer
+                : regeneratePart
+                  ? regeneratePart === 'title'
+                    ? '[제목 다시 만들기]'
+                    : '[핵심 단어 다시 고르기]'
+                  : selectedText
                 ? `「${selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}」 ${instruction}`
                 : instruction,
             at: now
@@ -678,6 +707,76 @@ function careTargetDef(sectionId: string, code: string): { label: string; requir
   const condition = sub.condition ? ` (조건: ${sub.condition})` : '';
   return { label: `${sub.itemCode} ${group}하위 요소 "${sub.label}": ${sub.criterion}${condition}`, required: sub.required };
 }
+
+/**
+ * 수정 요청 채팅의 "질문 받기" (SW-Q4): 이 섹션을 더 자세히 쓰기 위한 질문 하나를 만들어 채팅에 AI 질문으로 남긴다.
+ * 답은 revise 의 chatAnswer 로 받는다.
+ */
+router.post('/cases/:caseId/sections/:sectionId/chat-question', async (req: Request, res: Response) => {
+  try {
+    const { caseId, sectionId } = req.params;
+    if (!(CARE_SECTION_ORDER as readonly string[]).includes(sectionId)) return res.status(400).json({ error: '알 수 없는 섹션입니다.' });
+    const caseData = await loadCase(caseId);
+    if (!caseData) return res.status(404).json({ error: 'Case not found' });
+    const state = normalizeStudyWriteState(caseData.studyWrite);
+    if (state.submittedAt || state.answersLockedAt) return res.status(400).json({ error: '최종 수정 단계에서는 질문을 받을 수 없습니다.' });
+    const sectionBefore = state.sections?.[sectionId];
+    if (!sectionBefore?.draftText) return res.status(400).json({ error: '이 섹션의 초안이 아직 없습니다.' });
+    // 빠진 CARE 항목을 알아야 질문을 고를 수 있다. 점검이 없거나 하위 요소 기준 전 결과면 먼저 다시 점검한다
+    const freshCheck =
+      sectionBefore.careCheck?.checklistVersion === 'care-checklist:v2'
+        ? null
+        : await runCareCheck({ caseData, state, sectionId, draftText: sectionBefore.draftText });
+    const stateForQuestion: StudyWriteState = freshCheck
+      ? { ...state, sections: { ...(state.sections || {}), [sectionId]: { ...sectionBefore, careCheck: freshCheck } } }
+      : state;
+    const generated = await generateSectionChatQuestion({ caseData, state: stateForQuestion, sectionId });
+    const result = await serialize(caseId, async () => {
+      const latest = await loadCase(caseId);
+      if (!latest) return null;
+      const latestState = normalizeStudyWriteState(latest.studyWrite);
+      const current = latestState.sections?.[sectionId];
+      if (!current) throw new Error('이 섹션의 초안이 아직 없습니다.');
+      const now = new Date().toISOString();
+      const entry: StudyWriteChatEntry = generated.question
+        ? {
+            id: `swc-${randomUUID()}`,
+            role: 'assistant',
+            text: generated.question,
+            at: now,
+            kind: 'question',
+            hint: generated.hint,
+            targetCode: generated.targetCode,
+            reason: generated.reason
+          }
+        : {
+            id: `swc-${randomUUID()}`,
+            role: 'assistant',
+            text: `지금은 더 여쭤볼 것이 없습니다. ${generated.reason || '기록과 답변으로 이 섹션의 CARE 항목을 쓸 수 있습니다.'}`,
+            at: now
+          };
+      const merged: StudyWriteState = {
+        ...latestState,
+        sections: {
+          ...(latestState.sections || {}),
+          [sectionId]: {
+            ...current,
+            chat: [...current.chat, entry],
+            // 점검하는 사이 초안이 바뀌지 않았을 때만 새 점검 결과를 남긴다
+            ...(freshCheck && current.draftText === sectionBefore.draftText ? { careCheck: freshCheck } : {})
+          }
+        },
+        updatedAt: now
+      };
+      await saveState(latest.id, merged);
+      return buildDraftsResponse(latest, merged, await listAttachments(latest.id));
+    });
+    if (!result) return res.status(404).json({ error: 'Case not found' });
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(400).json({ error: error?.message || '질문을 만들지 못했습니다.' });
+  }
+});
 
 router.post('/cases/:caseId/sections/:sectionId/care-question', async (req: Request, res: Response) => {
   try {

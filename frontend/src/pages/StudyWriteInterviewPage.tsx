@@ -257,7 +257,11 @@ export default function StudyWriteInterviewPage() {
             return (
               <div key={item.id} className="sw-msg sw-msg--bot">
                 <span className="sw-msg__label">
-                  {item.question.source === 'care_check' ? `CARE 점검 · 추가 입력 (${item.question.careItem || ''})` : `AI · 질문 ${item.question.order}`}
+                  {item.question.chatEntryId
+                    ? `수정 요청 · AI 질문${item.question.careItem ? ` (${item.question.careItem})` : ''}`
+                    : item.question.source === 'care_check'
+                      ? `CARE 점검 · 추가 입력 (${item.question.careItem || ''})`
+                      : `AI · 질문 ${item.question.order}`}
                 </span>
                 <div className="sw-bubble sw-bubble--bot">{item.question.text}</div>
               </div>

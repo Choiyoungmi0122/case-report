@@ -1277,3 +1277,68 @@
 .sw-draft__nav-record:hover {
   background: #eef5fb;
 }
+
+/* 수정 요청 채팅: "질문 받기" 줄과 AI 질문 말풍선 */
+.sw-draft__ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: #5a6c81;
+}
+
+.sw-draft__ask button {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #8fb0d3;
+  background: #eef5fb;
+  color: #1f5f8b;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sw-draft__ask button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.sw-draft__ask.is-answering {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #7a4b00;
+}
+
+.sw-draft__ask.is-answering button {
+  border-color: #d6dde6;
+  background: #fff;
+  color: #3d4b5c;
+  font-weight: 600;
+}
+
+.sw-chat--question {
+  border-left: 3px solid #8fb0d3;
+  padding-left: 10px;
+}
+
+.sw-chat--question .sw-chat__question {
+  font-weight: 600;
+  color: #17324d;
+}
+
+.sw-chat--question small {
+  display: block;
+  margin-top: 4px;
+}
+
+.sw-chat--question .sw-chat__reason {
+  color: #8492a3;
+}
+
+.sw-chat--question.is-answered {
+  border-left-color: #b8c2cf;
+}

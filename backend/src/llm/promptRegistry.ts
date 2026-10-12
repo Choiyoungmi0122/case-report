@@ -29,6 +29,7 @@ import {
 } from './prompts/studyWrite_draft';
 import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPrompt } from './prompts/studyWrite_questions';
 import { STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION, studyWriteCareQuestionSystemPrompt } from './prompts/studyWrite_careQuestion';
+import { STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION, studyWriteChatQuestionSystemPrompt } from './prompts/studyWrite_chatQuestion';
 import { getModelForChain } from './models';
 import { PromptSet, SharedChainKey, SHARED_CHAIN_KEYS } from './promptSets';
 import { chain1SystemPrompt as scaffoldChain1SystemPrompt } from './prompts/scaffold/chain1_splitTag';
@@ -61,6 +62,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-D v5 / SW-R v5: 2026-10-12 섹션별 쓰기 규칙(studyWrite/careItems.ts)을 CARE 설명 문서 원문(Riley 2017)과 대조해 빠진 요소를 더함.
  *  - SW-D v6 / SW-R v6: 2026-10-12 초록 분량을 국내 관례(6~10문장)에서 CARE 기준(영문 100~250단어 수준, 학술지 규정 우선)으로 바꿈.
  *  - SW-D v7 / SW-R v7: 2026-10-12 우선순위 블록 추가: 제1조건 CARE 세부 항목 완수, 제2조건 그 안에서 국내 증례보고 형식(사용자 결정).
+ *  - SW-Q4 v1: 2026-10-12 수정 요청 채팅의 "질문 받기" (새 체인). CARE 점검의 빠진 필수 → 선택 → 세부 사항 순으로 질문 하나.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',
@@ -83,7 +85,8 @@ export const PROMPT_VERSIONS = {
   SW_D: STUDY_WRITE_DRAFT_PROMPT_VERSION.split(':')[1],
   SW_R: STUDY_WRITE_REVISE_PROMPT_VERSION.split(':')[1],
   SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1],
-  SW_Q3: STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION.split(':')[1]
+  SW_Q3: STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION.split(':')[1],
+  SW_Q4: STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION.split(':')[1]
 } as const;
 
 export type PromptKey = keyof typeof PROMPT_VERSIONS;
@@ -110,7 +113,8 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   SW_D: studyWriteDraftSystemPrompt,
   SW_R: studyWriteReviseSystemPrompt,
   SW_C: studyWriteCareCheckSystemPrompt,
-  SW_Q3: studyWriteCareQuestionSystemPrompt
+  SW_Q3: studyWriteCareQuestionSystemPrompt,
+  SW_Q4: studyWriteChatQuestionSystemPrompt
 };
 
 /** getModelForChain 의 키. */
@@ -134,7 +138,8 @@ const MODEL_KEYS: Record<PromptKey, string> = {
   SW_D: 'chain6',
   SW_R: 'chain6',
   SW_C: 'chain4',
-  SW_Q3: 'chain4'
+  SW_Q3: 'chain4',
+  SW_Q4: 'chain4'
 };
 
 /** 기존 generationMetadata.promptTemplateHash 와 같은 방식: sha256(version + system prompt, 구분자 포함). */

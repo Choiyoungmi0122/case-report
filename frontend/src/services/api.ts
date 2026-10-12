@@ -802,6 +802,8 @@ export interface StudyWriteQuestion {
   source: 'fixed' | 'generated' | 'care_check';
   targetSectionIds: string[];
   careItem?: string;
+  /** 수정 요청 채팅의 "질문 받기"에서 온 답이면 그 채팅 항목 id */
+  chatEntryId?: string;
   priority: 'required' | 'optional' | 'case';
   status: StudyWriteAnswerStatus;
   skipReason?: StudyWriteSkipReason;
@@ -902,6 +904,12 @@ export interface StudyWriteChatEntry {
   text: string;
   at: string;
   resultVersion?: number;
+  /** 'question': "질문 받기"로 AI 가 한 질문 */
+  kind?: 'question';
+  hint?: string;
+  targetCode?: string;
+  reason?: string;
+  answeredAt?: string;
 }
 
 export interface StudyWriteAttachment {
@@ -1656,6 +1664,20 @@ export const caseApi = {
     const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/revise`, {
       instruction,
       ...(selectedText ? { selectedText } : {})
+    });
+    return response.data;
+  },
+
+  /** 수정 요청 채팅의 "질문 받기": 이 섹션을 더 자세히 쓰기 위한 AI 질문을 채팅에 남긴다 */
+  askStudyWriteChatQuestion: async (caseId: string, sectionId: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/chat-question`);
+    return response.data;
+  },
+
+  /** "질문 받기"의 답: 질의응답에 저장하고 그 답으로 섹션을 고쳐 쓴다 */
+  answerStudyWriteChatQuestion: async (caseId: string, sectionId: string, entryId: string, answer: string) => {
+    const response = await api.post<StudyWriteDraftsResponse>(`/study-write/cases/${caseId}/sections/${sectionId}/revise`, {
+      chatAnswer: { entryId, answer }
     });
     return response.data;
   },
