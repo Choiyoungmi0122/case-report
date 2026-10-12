@@ -67,7 +67,22 @@ export const TI_ERRORS: Array<{ id: string; label: string; pattern?: RegExp; tes
   { id: 'err-meta', label: '본문에 "기록" 같은 자료 설명', pattern: /용량\s*기록|기록에\s*따르|기록되어|기재/ },
   // v3.1 평가에서 사람이 찾은 오류 (2026-10-12)
   { id: 'err-actor-exercise', label: '환자가 스스로 한 운동(헬스·산책)을 의료진이 지도한 것으로 씀', pattern: /헬스[^.]*(지도|권유|권고|교육|하도록)/ },
-  { id: 'err-donepezil-instruct', label: '"신경과에 문의하라고 안내"를 "변경하도록 안내/지시"로 씀', pattern: /도네페질[^.]*변경하도록|도네페질[^.]*변경을\s*(지시|권유)/ }
+  { id: 'err-donepezil-instruct', label: '"신경과에 문의하라고 안내"를 "변경하도록 안내/지시"로 씀', pattern: /도네페질[^.]*변경하도록|도네페질[^.]*변경을\s*(지시|권유)/ },
+  // 시험 사례 V2-LIVE-01 실시간 생성에서 사람이 찾은 오류 (2026-10-12)
+  {
+    id: 'err-pharmaco-visit6',
+    label: '약침을 6회차까지 시행했다고 씀 (기록: 6회차는 안와부 멍 뒤 환자가 원치 않아 약침 안 함)',
+    test: (text) =>
+      sentencesOf(text).some(
+        (sentence) => /약침/.test(sentence) && /(6\s*(차|회차)?\s*(방문)?\s*까지|모든\s*방문|매\s*방문)/.test(sentence) && !/(중단|하지\s*않|안\s*함|원치)/.test(sentence)
+      )
+  },
+  {
+    id: 'err-taiyang-visit5',
+    label: '태양 추가를 5회차(4/15)로 씀 (기록: 태양은 6회차에 침 혈위로 추가)',
+    test: (text) =>
+      sentencesOf(text).some((sentence) => /태양/.test(sentence) && /(5\s*(차|회차)|4월\s*15일|4\s*\/\s*15)/.test(sentence) && !/6\s*(차|회차)/.test(sentence))
+  }
 ];
 
 export const TI_SCOPE: Array<{ id: string; label: string; pattern: RegExp }> = [

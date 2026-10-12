@@ -173,6 +173,13 @@
 - Scaffold CHAIN3가 새로 만든 초안에서 "기록되어 있지 않다"류 문장, 붙인 단위 g, "1회 3회" 오기, 마무리 요약 문장을 코드로 거른다. 고친 내용은 초안의 `postFilter`에 남는다.
 - V2 참가자와 테스트 사례는 고정 초안이라 거르지 않는다. AI 초안은 그대로다.
 
+## 2026-10-12 — 시험용 표시 `studyConfig.liveAiForTesting`
+
+- 고정 연구 사례 기록으로 만든 사례도, 이 표시가 있으면 저장된 AI 결과를 쓰지 않고 지금 프롬프트로 처리·초안 생성한다. 처리(`/process`), 재처리, 공개 단계 고정 초안 세 곳이 모두 건너뛴다(`isLiveAiTestCase`, `backend/src/config/researchMetadata.ts`).
+- API 로는 켤 수 없다(`normalizeStudyConfig`가 버린다). 연구자가 시험 사례 문서에 직접 넣는다. V2 참가자 사례에는 없으므로 참가자가 보는 AI 초안은 그대로 고정 초안이다.
+- 시험 사례: V2-LIVE-01 `case_1791773143087_nn42xjixn`(연구자가 끝까지 진행), V2-LIVE-02 `case_1791773145444_29dhsaicr`(연구자 직접 확인용). 둘 다 `scaffoldVersion 'v3.0'`. 분석에서 제외한다.
+- 결과: `docs/scaffold_prompt_improvement_phase1.md` §12.
+
 ## V1 자료와 함께 분석할 때 주의
 - V1: `scaffoldVersion 'v2.0'`, 섹션 2개(추적 관찰은 연구자가 생략), 게이트 꺼짐, 메모에 회차·출처 필드 없음, 충분성 판단 이유 없음.
 - V2: `scaffoldVersion 'v3.0'`, 섹션 1개, 게이트 켬(own_draft 인정), 메모 회차·분류·출처 있음(없으면 미지정), 판단 이유 선택 입력.

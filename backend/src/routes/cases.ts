@@ -55,6 +55,7 @@ import {
   DEFAULT_SCAFFOLD_VERSION,
   getVersionMetadata,
   hashPromptParts,
+  isLiveAiTestCase,
   STUDENT_V1_CODE_PATTERN,
   STUDY_SCAFFOLD_V2_VERSION
 } from '../config/researchMetadata';
@@ -1197,7 +1198,8 @@ export async function reprocessCaseFromStoredTerms(params: {
     !params.dependencies?.runEvidenceSplit &&
     !params.dependencies?.runSectionAssessment &&
     !hasTermDecisions &&
-    (params.caseData.timelineEvents || []).length === 0
+    (params.caseData.timelineEvents || []).length === 0 &&
+    !isLiveAiTestCase(params.caseData)
       ? getFixedStudyCaseAnalysis(visitsForChain1)
       : null;
 
@@ -2605,7 +2607,9 @@ router.post('/:id/process', async (req: Request, res: Response) => {
     const frozenStudyResult =
       (anyCase.mode || 'write') === 'scaffold' &&
       (anyCase.timelineEvents || []).length === 0 &&
-      !hasTermDecisionsForFrozen
+      !hasTermDecisionsForFrozen &&
+      // 시험용 표시가 있는 사례는 저장된 결과 대신 지금 프롬프트로 새로 처리한다
+      !isLiveAiTestCase(anyCase)
         ? getFrozenStudyCaseResult(visitsForChain1.map((visit: any) => visit.text))
         : null;
 

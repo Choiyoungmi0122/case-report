@@ -26,7 +26,8 @@ import {
   buildGenerationMetadata,
   hashPromptParts,
   isStudyScaffoldV2Case,
-  STUDY_SCAFFOLD_V2_SECTION_IDS
+  STUDY_SCAFFOLD_V2_SECTION_IDS,
+  isLiveAiTestCase
 } from '../config/researchMetadata';
 import {
   ScaffoldInteractionEvent,
@@ -859,7 +860,8 @@ export async function generateStudyScaffoldDraftAfterSnapshot(
   // participant judges the same text. Those drafts carry the batch CHAIN3
   // version label, so without this guard the reveal step treated them as stale
   // and replaced them with a freshly generated (different) draft.
-  const frozenDraft = (
+  // 시험용 표시가 있는 사례는 고정 초안을 쓰지 않고 지금 프롬프트로 생성한다 (config/researchMetadata.ts isLiveAiTestCase)
+  const frozenDraft = isLiveAiTestCase(caseData) ? undefined : (
     (getFrozenStudyCaseResult(
       (caseData.visits || []).map((visit: any) => visit.soapText ?? visit.sanitizedText ?? '')
     )?.sectionDrafts as any[]) || []

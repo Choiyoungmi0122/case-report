@@ -763,6 +763,45 @@ async function run() {
     }
   );
   assert.equal(generatedDraft.draftText, '스냅샷 이후 생성된 초안');
+
+  // 시험용 표시(studyConfig.liveAiForTesting): 고정 사례 기록이어도 고정 초안 대신 지금 프롬프트로 생성한다 (2026-10-12)
+  {
+    const { DEFAULT_STUDY_CASE } = await import('../../src/study/cases/defaultStudyCase');
+    const fixedVisitsCase: any = {
+      ...generationCase,
+      id: 'case_live_flag_test',
+      visits: DEFAULT_STUDY_CASE.visits.map((visit: any) => ({ ...visit })),
+      sectionDrafts: [],
+      scaffoldState: { preRevealSnapshots: [{ sectionId: CareSection.THERAPEUTIC_INTERVENTIONS }] }
+    };
+    let liveCalls = 0;
+    let restored: any = null;
+    const deps = {
+      runInitialSectionDrafts: async () => {
+        liveCalls += 1;
+        return [
+          { sectionId: CareSection.THERAPEUTIC_INTERVENTIONS, evidenceCardIdsUsed: [], timelineEventIdsUsed: [], draftText: '새로 생성한 치료 개입 초안', openIssues: [], evidenceLinks: [], unsupportedClaims: [] }
+        ];
+      },
+      updateCase: async (_caseId: string, updates: any) => {
+        restored = updates;
+      }
+    };
+    // 표시 없음: 고정 초안을 돌려주고 LLM 을 부르지 않는다
+    const frozen = await generateStudyScaffoldDraftAfterSnapshot(fixedVisitsCase, CareSection.THERAPEUTIC_INTERVENTIONS, deps as any);
+    assert.equal(liveCalls, 0);
+    assert.ok(String(frozen.draftText).startsWith('환자는 기존 정신과에서'), '고정 초안');
+    assert.ok(restored?.sectionDrafts);
+    // 표시 있음: 지금 프롬프트로 생성한다
+    const live = await generateStudyScaffoldDraftAfterSnapshot(
+      { ...fixedVisitsCase, studyConfig: { ...(fixedVisitsCase.studyConfig || {}), studyMode: true, liveAiForTesting: true } },
+      CareSection.THERAPEUTIC_INTERVENTIONS,
+      deps as any
+    );
+    assert.equal(liveCalls, 1);
+    assert.equal(live.draftText, '새로 생성한 치료 개입 초안');
+    assert.equal(live.generationMetadata.promptVersion, promptVersionLabel('CHAIN3_STUDY_REVEAL'));
+  }
   assert.equal(generatedDraft.generationMetadata.promptVersion, promptVersionLabel('CHAIN3_STUDY_REVEAL'));
   assert.equal(generatedUpdates.sectionDrafts.length, 1);
   assert.equal(generatedUpdates.chainPerformanceLogs.at(-1).llmCallCount, 1);

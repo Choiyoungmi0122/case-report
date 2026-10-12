@@ -10,6 +10,15 @@ export const DEFAULT_SECTION_CONFIG_VERSION = process.env.SECTION_CONFIG_VERSION
  * 학생 V1(S1~S10) 기록이 이미 scaffoldVersion 'v2.0'으로 저장되어 있어 같은 값을 쓸 수 없다.
  * 변경 이력: docs/scaffold_v2_changelog.md
  */
+/**
+ * 시험용 표시: 고정 연구 사례의 저장된 AI 결과(처리·공개 단계)를 건너뛰고 지금 프롬프트로 새로 생성한다 (2026-10-12).
+ * `studyConfig.liveAiForTesting === true` 인 사례에만 적용된다. API 로는 설정할 수 없고(normalizeStudyConfig 가 버린다)
+ * 연구자가 시험 사례 문서에 직접 넣는다. 학생 V1·V2 참가자 문서에는 없으므로 고정 결과를 그대로 쓴다.
+ */
+export function isLiveAiTestCase(caseData: any): boolean {
+  return caseData?.studyConfig?.liveAiForTesting === true;
+}
+
 export const STUDY_SCAFFOLD_V2_VERSION = 'v3.0';
 
 /** Scaffold V2 실습 범위. 교수 평가는 치료 개입 섹션만 실습한다. */
