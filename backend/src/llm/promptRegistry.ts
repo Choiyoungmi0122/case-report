@@ -58,6 +58,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-Q2 v4 / SW-D v4 / SW-R v4: 2026-10-12 `3d6e831` 국내 한의 증례보고 5편의 서술 관례 반영(docs/case_report_style_basis_v1.md).
  *  - SW-Q3 v1: 2026-10-12 CARE 점검의 "없음" 항목 하나를 쓰기 위한 질문 (새 체인).
  *  - SW-C v3: 2026-10-12 하위 요소 판정(subItems) 추가. 환자 정보·진단 평가·치료 개입·추적 관찰만 (docs/care_subelements_v1.md).
+ *  - SW-D v5 / SW-R v5: 2026-10-12 섹션별 쓰기 규칙(studyWrite/careItems.ts)을 CARE 설명 문서 원문(Riley 2017)과 대조해 빠진 요소를 더함.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',

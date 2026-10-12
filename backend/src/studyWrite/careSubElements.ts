@@ -138,7 +138,7 @@ export const CARE_SUB_ELEMENTS: Record<string, CareSubGroupDef[]> = {
         e('9b-H6', '출전', false, '원방이 실린 의서', 'CHM'),
         e('9b-H7', '가감 내용과 이유', false, '원방에서 더하거나 뺀 약재와 그 이유', 'CHM', '가감방일 때'),
         e('9b-H8', '조제·제조', false, '원내 탕전, 원외 탕전실, 제약사 제품명', 'CHM, 국내'),
-        e('9b-H9', '학명', false, '약재 학명(라틴명)', 'CARE, CHM'),
+        e('9b-H9', '학명·사용 부위', false, '약재 학명(라틴명)과 사용 부위', 'CARE, CHM'),
         e('9b-H10', '약재 품질·인증', false, '규격품 사용 여부 등', 'CHM')
       ]
     },
@@ -251,7 +251,7 @@ export const CARE_SUB_ELEMENTS: Record<string, CareSubGroupDef[]> = {
   ]),
   '10d': base([
     e('10d-1', '이상반응 유무', true, '있었는지 없었는지가 명시됨', 'CARE'),
-    e('10d-2', '이상반응의 내용·시점·정도', true, '증상, 날짜, 정도', 'CARE', '이상반응이 있었을 때'),
+    e('10d-2', '이상반응의 내용·시점·빈도·정도', true, '증상(가능하면 환자의 표현), 날짜, 빈도, 정도', 'CARE', '이상반응이 있었을 때'),
     e('10d-3', '조치와 경과', true, '무엇을 했고 어떻게 되었는지', 'CARE', '이상반응이 있었을 때'),
     e('10d-4', '이상반응 확인 방법', false, '문진, 검사(간기능 등)', 'CARE')
   ]),
