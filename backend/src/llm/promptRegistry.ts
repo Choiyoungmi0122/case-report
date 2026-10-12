@@ -65,6 +65,7 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-Q4 v1: 2026-10-12 수정 요청 채팅의 "질문 받기" (새 체인). CARE 점검의 빠진 필수 → 선택 → 세부 사항 순으로 질문 하나.
  *  - SW-Q4 v2: 2026-10-12 빠진 CARE 요소 목록 안에서만 질문(세부 사항 순서 삭제), 기전·이론적 근거·"기록에 있나요?" 질문 금지. 제목·초록·문헌 요소·빠진 것 없음은 코드가 거름.
  *  - SW-D v8 / SW-R v8: 2026-10-12 타임라인 진단 검사 칸 규칙(질의응답의 모든 답에서 검사·과거력, 타 기관 검사는 과거력 행). 타임라인은 섹션과 상관없이 모든 답을 받음(drafting.buildQaText, SW-C 입력도 같음).
+ *  - SW-D v9 / SW-R v9: 2026-10-12 작업 규칙 1-1(다른 섹션용 답은 이 섹션 규칙에 맞는 사실만). 환자 정보·임상 소견·진단 평가·초록도 모든 답을 받음. 임상 소견에 타 기관 과거 검사·주소 중복 금지.
  */
 export const PROMPT_VERSIONS = {
   CHAIN1: 'v2',

@@ -56,14 +56,21 @@ async function deidentifyText(text: string, context: OutboundContext): Promise<s
 }
 
 /** 질의응답을 체인 입력용 텍스트로. 답은 비식별 처리한다. */
+/**
+ * 섹션과 상관없이 질의응답의 모든 답을 받는 섹션. 질문 생성기가 정한 "쓰이는 섹션"이 틀리는 일이 있어
+ * (예: 1년 전 타 기관 진단 이력을 임상 소견·진단 평가용으로만 분류해 환자 정보·타임라인에서 빠짐, 임교수 테스트 6),
+ * 여러 섹션에 걸치는 사실을 쓰는 섹션은 모든 답을 보고 그 섹션 규칙에 맞는 것만 쓴다(SW-D·SW-R 작업 규칙 1-1).
+ * 2026-10-12 사용자 결정: 타임라인 먼저, 이어 환자 정보·임상 소견·진단 평가·초록.
+ */
+export const ALL_QA_SECTIONS = new Set(['TIMELINE', 'PATIENT_INFORMATION', 'CLINICAL_FINDINGS', 'DIAGNOSTIC_ASSESSMENT', 'ABSTRACT']);
+
 export async function buildQaText(state: StudyWriteState, forSectionId?: string, context: OutboundContext = createOutboundDeidContext()): Promise<string> {
   const lines: string[] = [];
   for (const question of allQuestions(state)) {
     if (question.status === 'pending') continue;
-    // 타임라인은 모든 섹션의 사건을 시간 순으로 모으는 표라 섹션과 상관없이 모든 답을 받는다
-    // (다른 섹션용 답의 과거력·검사가 빠지던 문제, 임교수 테스트 6, 2026-10-12)
+    // 질문의 "쓰이는 섹션" 분류에 기대지 않고 모든 답을 받는 섹션 (ALL_QA_SECTIONS 설명)
     const relevant =
-      !forSectionId || forSectionId === 'TIMELINE' || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
+      !forSectionId || ALL_QA_SECTIONS.has(forSectionId) || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
     if (!relevant) continue;
     // 글로 답하지 않은 질문은 선택지별 처리 지시를 그대로 넣는다 (자료 확인 필요 = 정보 부재 아님)
     const answer = question.status === 'answered' ? await deidentifyText(question.answer, context) : answerTextForPrompt(question) || '(아직 답하지 않음)';
