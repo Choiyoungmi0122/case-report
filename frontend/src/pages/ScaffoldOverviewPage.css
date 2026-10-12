@@ -658,6 +658,10 @@
   padding: 13px 14px;
   font-size: 16px;
   line-height: 1.65;
+  /* 메모 길이에 맞춰 높이가 늘어난다(지원하지 않는 브라우저는 CaseNotesV2 의 fitMemoTextarea 가 맞춘다) */
+  field-sizing: content;
+  min-height: 0;
+  overflow-y: hidden;
 }
 
 .scaffold-v2 .scaffold-v2__memo-composer textarea {

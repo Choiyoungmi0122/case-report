@@ -93,6 +93,17 @@ type CaseNotesV2Props = {
   readOnly?: boolean;
 };
 
+/**
+ * 메모 칸 높이를 글 길이에 맞춘다(긴 메모가 세 줄에서 잘려 보이던 문제, 2026-10-12).
+ * CSS field-sizing 을 지원하는 브라우저는 CSS 가 맞추고, 아니면 여기서 높이를 정한다.
+ */
+const supportsFieldSizing = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content');
+function fitMemoTextarea(element: HTMLTextAreaElement | null) {
+  if (!element || supportsFieldSizing) return;
+  element.style.height = 'auto';
+  element.style.height = `${element.scrollHeight + 2}px`;
+}
+
 export default function CaseNotesV2({
   notes,
   visits,
@@ -321,9 +332,13 @@ export default function CaseNotesV2({
               </div>
               <textarea
                 rows={3}
+                ref={fitMemoTextarea}
                 value={note.text}
                 readOnly={readOnly}
-                onChange={(event) => onUpdate(note.id, { text: event.target.value, updatedAt: new Date().toISOString() }, false)}
+                onChange={(event) => {
+                  fitMemoTextarea(event.currentTarget);
+                  onUpdate(note.id, { text: event.target.value, updatedAt: new Date().toISOString() }, false);
+                }}
                 aria-label={`메모 ${noteNumber} 내용`}
               />
               <div className="scaffold-v2__memo-item-meta">
