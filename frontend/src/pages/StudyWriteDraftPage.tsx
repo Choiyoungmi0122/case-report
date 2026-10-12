@@ -79,6 +79,8 @@ function missingRequiredCount(section: StudyWriteSection) {
   );
 }
 
+const RECORD_PINNED_KEY = 'swDraftRecordPinned';
+
 export default function StudyWriteDraftPage() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -86,8 +88,24 @@ export default function StudyWriteDraftPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string>('TITLE');
   const [tab, setTab] = useState<'chat' | 'care' | 'answers'>('chat');
-  // 원문 EMR 보기 (왼쪽 목록 맨 아래)
-  const [recordOpen, setRecordOpen] = useState(false);
+  // 원문 EMR 보기 (왼쪽 목록 맨 아래). "유지하기"를 누르면 목록 오른쪽 칸에 계속 띄운다 (이 브라우저에만 기억)
+  const [recordPinned, setRecordPinned] = useState(() => {
+    try {
+      return window.localStorage.getItem(RECORD_PINNED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [recordOpen, setRecordOpen] = useState(recordPinned);
+  const changeRecordPinned = (next: boolean) => {
+    setRecordPinned(next);
+    try {
+      if (next) window.localStorage.setItem(RECORD_PINNED_KEY, '1');
+      else window.localStorage.removeItem(RECORD_PINNED_KEY);
+    } catch {
+      // 저장하지 못해도 이 화면에서는 그대로 유지된다
+    }
+  };
   // 원고 검사 (코드 검사)
   const [checkOpen, setCheckOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -565,7 +583,7 @@ export default function StudyWriteDraftPage() {
         </div>
       ) : null}
 
-      <div className="sw-draft__body">
+      <div className={`sw-draft__body${recordPinned && recordOpen ? ' is-record-pinned' : ''}`}>
         <nav className="sw-draft__nav">
           {data?.sections.map((item) => {
             const missing = missingRequiredCount(item);
@@ -618,9 +636,14 @@ export default function StudyWriteDraftPage() {
           <RecordViewer
             caseId={caseId}
             isOpen={recordOpen}
-            onClose={() => setRecordOpen(false)}
+            onClose={() => {
+              setRecordOpen(false);
+              changeRecordPinned(false);
+            }}
             relativeDates={Boolean(data?.relativeDates)}
             formatDate={dated}
+            pinned={recordPinned}
+            onPinnedChange={changeRecordPinned}
           />
         ) : null}
 

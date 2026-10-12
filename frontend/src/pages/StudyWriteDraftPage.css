@@ -1102,9 +1102,47 @@
   cursor: pointer;
 }
 
+/* 원문 EMR 유지하기: 목록과 초안 사이에 원문 칸을 넣는다 (RecordViewer 가 목록 다음 칸에 그려진다) */
+.sw-draft__body.is-record-pinned {
+  grid-template-columns: 200px minmax(300px, 24%) minmax(0, 1fr) minmax(380px, 30%);
+}
+
+.sw-draft__body .sw-record--pinned {
+  position: sticky;
+  top: 16px;
+  /* 초안 칸 높이를 따르되 화면보다 작게: 위 16px + 페이지 아래 여백 40px 을 빼야 끝까지 내려도 위가 잘리지 않는다 */
+  align-self: stretch;
+  height: auto;
+  min-height: min(640px, calc(100vh - 56px));
+  max-height: calc(100vh - 56px);
+}
+
+/* 네 칸이 좁으면 목록을 위 한 줄로 올린다 */
+@media (max-width: 1400px) {
+  .sw-draft__body.is-record-pinned {
+    grid-template-columns: minmax(300px, 30%) minmax(0, 1fr) minmax(380px, 34%);
+  }
+  .sw-draft__body.is-record-pinned .sw-draft__nav {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+  .sw-draft__body.is-record-pinned .sw-draft__nav-divider {
+    display: none;
+  }
+}
+
 @media (max-width: 1100px) {
-  .sw-draft__body {
+  .sw-draft__body,
+  .sw-draft__body.is-record-pinned {
     grid-template-columns: 1fr;
+  }
+  .sw-draft__body .sw-record--pinned {
+    position: static;
+    height: 55vh;
+    min-height: 0;
+    max-height: none;
   }
   .sw-draft__nav {
     flex-direction: row;
