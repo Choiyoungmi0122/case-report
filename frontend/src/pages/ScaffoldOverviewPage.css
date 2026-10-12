@@ -302,6 +302,20 @@
   max-height: max(200px, calc(100vh - 540px));
 }
 
+/* V2: 메모 목록이 왼쪽 방문 기록 열과 같은 높이까지 내려오게 한다 (2026-10-12).
+   목록 자체 크기는 열 높이에 영향을 주지 않고(contain: size), 남는 높이를 채운다. */
+.scaffold-v2__memo-workspace .scaffold-v2__memo-column:has(> .scaffold-v2__memo-list--v2) {
+  display: flex;
+  flex-direction: column;
+}
+
+.scaffold-v2__memo-workspace .scaffold-v2__memo-column > .scaffold-v2__memo-list--v2 {
+  flex: 1 1 auto;
+  min-height: 240px;
+  max-height: none;
+  contain: size;
+}
+
 .scaffold-v2__record-column,
 .scaffold-v2__evidence-column,
 .scaffold-v2__memo-column {
