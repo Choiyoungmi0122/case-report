@@ -316,6 +316,36 @@
   contain: size;
 }
 
+/* V2 1단계: 섹션 화면과 같이 두 열이 화면 높이를 꽉 채운다 (2026-10-12). 열 바깥에서 스크롤하면
+   페이지 전체가 내려가 위쪽 안내가 밀려나고, 목록 끝에 닿으면 페이지 스크롤로 이어진다. */
+@media (min-width: 900px) {
+  .scaffold-v2__memo-workspace:has(.scaffold-v2__memo-list--v2) {
+    height: 100vh;
+    min-height: 560px;
+  }
+
+  .scaffold-v2__memo-workspace:has(.scaffold-v2__memo-list--v2) > .scaffold-v2__record-column {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .scaffold-v2__memo-workspace:has(.scaffold-v2__memo-list--v2) .scaffold-v2__visit-list {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overscroll-behavior: auto;
+  }
+
+  .scaffold-v2__memo-workspace:has(.scaffold-v2__memo-list--v2) > .scaffold-v2__memo-column {
+    min-height: 0;
+  }
+
+  .scaffold-v2__memo-workspace .scaffold-v2__memo-column > .scaffold-v2__memo-list--v2 {
+    overscroll-behavior: auto;
+  }
+}
+
 .scaffold-v2__record-column,
 .scaffold-v2__evidence-column,
 .scaffold-v2__memo-column {
