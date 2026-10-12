@@ -60,7 +60,10 @@ export async function buildQaText(state: StudyWriteState, forSectionId?: string,
   const lines: string[] = [];
   for (const question of allQuestions(state)) {
     if (question.status === 'pending') continue;
-    const relevant = !forSectionId || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
+    // 타임라인은 모든 섹션의 사건을 시간 순으로 모으는 표라 섹션과 상관없이 모든 답을 받는다
+    // (다른 섹션용 답의 과거력·검사가 빠지던 문제, 임교수 테스트 6, 2026-10-12)
+    const relevant =
+      !forSectionId || forSectionId === 'TIMELINE' || question.targetSectionIds.includes(forSectionId) || question.priority === 'case';
     if (!relevant) continue;
     // 글로 답하지 않은 질문은 선택지별 처리 지시를 그대로 넣는다 (자료 확인 필요 = 정보 부재 아님)
     const answer = question.status === 'answered' ? await deidentifyText(question.answer, context) : answerTextForPrompt(question) || '(아직 답하지 않음)';

@@ -32,7 +32,7 @@ async function run() {
       ids.add(element.id);
     }
   }
-  assert.equal(ids.size, 132, '전체 하위 요소 수 (문서 표 합계)');
+  assert.equal(ids.size, 133, '전체 하위 요소 수 (문서 표 합계)');
   for (const [sectionId, items] of Object.entries(CARE_ITEMS_BY_SECTION)) {
     for (const item of items) assert.ok(CARE_SUB_ELEMENTS[item.code]?.length, `${sectionId} ${item.code} 에 하위 요소가 있음`);
   }
@@ -69,6 +69,12 @@ async function run() {
   assert.equal(conditionByEvidence(ea, '풍지, 내관 자침 후 15분 유침'), false);
   assert.equal(conditionByEvidence(findSubElement('PATIENT_INFORMATION', '5a-5')!, '68세 여자, 주부'), false);
   assert.equal(conditionByEvidence(findSubElement('PATIENT_INFORMATION', '5a-1')!, '아무 글'), null, '조건 낱말이 없는 요소는 모델이 정함');
+
+  // 타임라인: 진단 검사와 치료 개입을 나눔
+  assert.equal(findSubElement('TIMELINE', '7-3')?.label, '진단 검사 칸');
+  assert.match(findSubElement('TIMELINE', '7-3')!.criterion, /모두 "-"이면 present 가 아님/);
+  assert.equal(findSubElement('TIMELINE', '7-4')?.label, '치료 개입 칸');
+  assert.equal(findSubElement('TIMELINE', '7-6')?.condition, '다른 의료진·기관의 치료가 있을 때');
 
   // ---------------------------------------------------------------- id 정규화
   assert.equal(normalizeSubElementId(' 9b-h4 '), '9B-H4');
