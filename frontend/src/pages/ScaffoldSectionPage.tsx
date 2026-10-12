@@ -13,7 +13,7 @@ import {
   useEmrSearch,
   type EmrAnchor
 } from '../components/scaffold/emrSearch';
-import { PaneCollapseButton, PaneResizeHandle, usePaneResize } from '../components/scaffold/PaneResizer';
+import { PaneCollapseButton, PaneHeightHandle, PaneResizeHandle, usePaneHeights, usePaneResize } from '../components/scaffold/PaneResizer';
 import { getCaseNoteTypeLabel } from '../components/scaffold/CaseNotesV2';
 import StageGuide from '../components/scaffold/StageGuide';
 import {
@@ -981,6 +981,8 @@ export default function ScaffoldSectionPage() {
   // V2: 3열 폭 조절 (이 브라우저에만 기억, 연구 데이터 아님)
   const workspaceGridRef = useRef<HTMLDivElement | null>(null);
   const paneResize = usePaneResize(isV2, workspaceGridRef);
+  // V2: 좁은 화면(세로로 쌓임)에서는 원기록·내 정리 열의 높이를 끌어서 조절한다.
+  const paneHeights = usePaneHeights();
   // V2: 양쪽 열 접기·펼치기. 접은 열은 띠로 남고 가운데 작업 칸이 넓어진다. 행동 로그에 남긴다.
   const sourceCollapsed = isV2 && paneResize.collapsed.left;
   const summaryCollapsed = isV2 && paneResize.collapsed.right;
@@ -1818,7 +1820,11 @@ export default function ScaffoldSectionPage() {
         style={paneResize.gridStyle}
       >
       {/* PANEL 1: SOURCE RECORD */}
-      <section className={`scaffold-pane scaffold-pane--source${sourceCollapsed ? ' is-collapsed' : ''}`} aria-label="환자 원기록">
+      <section
+        className={`scaffold-pane scaffold-pane--source${sourceCollapsed ? ' is-collapsed' : ''}${isV2 ? ' is-height-resizable' : ''}`}
+        aria-label="환자 원기록"
+        style={isV2 ? paneHeights.styleFor('left') : undefined}
+      >
         <div className="scaffold-pane__head">
           {sourceCollapsed ? (
             <PaneCollapseButton side="left" collapsed paneLabel="환자 원기록" controlsId="scaffold-pane-source-body" onToggle={() => toggleSidePane('left')} />
@@ -1981,6 +1987,9 @@ export default function ScaffoldSectionPage() {
             </div>
           )}
         </div>
+        {isV2 && !sourceCollapsed ? (
+          <PaneHeightHandle side="left" label="원기록 영역 높이 조절" onPointerDown={paneHeights.startDrag} onNudge={paneHeights.nudge} />
+        ) : null}
       </section>
 
       {paneResize.showHandle('left') ? (
@@ -3202,7 +3211,8 @@ export default function ScaffoldSectionPage() {
 
       {/* PANEL 3: THE LEARNER'S OWN SUMMARY - read-only, never AI-generated */}
       <section
-        className={`scaffold-pane scaffold-pane--summary${summaryCollapsed ? ' is-collapsed' : ''}`}
+        className={`scaffold-pane scaffold-pane--summary${summaryCollapsed ? ' is-collapsed' : ''}${isV2 ? ' is-height-resizable' : ''}`}
+        style={isV2 ? paneHeights.styleFor('right') : undefined}
         aria-label={sectionProgress.draftRevealed ? 'AI 공개 전 내가 정리한 내용' : '내가 정리한 내용'}
       >
         <div className="scaffold-pane__head">
@@ -3243,6 +3253,9 @@ export default function ScaffoldSectionPage() {
             }
           />
         </div>
+        {isV2 && !summaryCollapsed ? (
+          <PaneHeightHandle side="right" label="내가 정리한 내용 영역 높이 조절" onPointerDown={paneHeights.startDrag} onNudge={paneHeights.nudge} />
+        ) : null}
       </section>
       </div>
     </div>

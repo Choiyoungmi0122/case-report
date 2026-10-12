@@ -1702,3 +1702,71 @@ body.scaffold-pane-resizing textarea {
   font-size: 13.5px;
   font-weight: 600;
 }
+
+/* 열 크기 조절 (2026-10-12)
+ * 넓은 화면: 폭 손잡이를 더 잘 보이게 한다.
+ * 좁은 화면(세로로 쌓임): 원기록·내 정리 열 아래에 높이 손잡이를 둔다. */
+.scaffold-pane-handle > span {
+  width: 4px;
+  height: 48px;
+  background: repeating-linear-gradient(to bottom, #7b8da1 0 4px, transparent 4px 8px);
+}
+
+.scaffold-pane-handle:hover > span,
+.scaffold-pane-handle:focus-visible > span {
+  background: repeating-linear-gradient(to bottom, #2f6ea5 0 4px, transparent 4px 8px);
+}
+
+.scaffold-pane-height-handle {
+  display: none;
+}
+
+body.scaffold-pane-resizing-y {
+  cursor: row-resize;
+  user-select: none;
+}
+
+@media (max-width: 899px) {
+  .scaffold-pane.is-height-resizable:not(.is-collapsed) .scaffold-pane__body {
+    height: var(--pane-body-height, 420px);
+    overflow-y: auto;
+  }
+
+  .scaffold-pane-height-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 18px;
+    cursor: row-resize;
+    touch-action: none;
+    user-select: none;
+    background: #eef2f6;
+    border-top: 1px solid #d7e0e8;
+    border-bottom: 1px solid #d7e0e8;
+  }
+
+  .scaffold-pane-height-handle > span {
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background: #7b8da1;
+  }
+
+  .scaffold-pane-height-handle > em {
+    color: #5a6c81;
+    font-size: 11.5px;
+    font-style: normal;
+  }
+
+  .scaffold-pane-height-handle:hover,
+  .scaffold-pane-height-handle:focus-visible {
+    background: #dbe7f3;
+    outline: none;
+  }
+
+  .scaffold-pane-height-handle:hover > span,
+  .scaffold-pane-height-handle:focus-visible > span {
+    background: #2f6ea5;
+  }
+}

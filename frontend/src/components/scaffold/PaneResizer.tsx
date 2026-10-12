@@ -106,7 +106,13 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
   const [isWide, setIsWide] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(WIDE_QUERY).matches : true
   );
-  const dragRef = useRef<{ side: 'left' | 'right'; pointerId: number } | null>(null);
+  // 끄는 동안 쓰는 값은 ref 로 읽는다. 예전에는 폭이 바뀔 때마다 핸들러가 새로 만들어지고, 정리 effect 가
+  // 옛 stopDrag 를 불러 첫 이동 뒤에 끌기가 끊겼다(한 번에 조금만 움직임). 2026-10-12 고침.
+  const widthsRef = useRef(widths);
+  widthsRef.current = widths;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
@@ -119,63 +125,59 @@ export function usePaneResize(enabled: boolean, gridRef: RefObject<HTMLElement |
   const applyWidths = useCallback(
     (next: PaneWidths) => {
       const gridWidth = gridRef.current?.getBoundingClientRect().width || 0;
-      const clamped = clampWidths(next, gridWidth, collapsed);
+      const clamped = clampWidths(next, gridWidth, collapsedRef.current);
       setStoredWidths(clamped);
       writeStoredWidths(clamped);
     },
-    [gridRef, collapsed]
+    [gridRef]
   );
-
-  const onPointerMove = useCallback(
-    (event: PointerEvent) => {
-      const drag = dragRef.current;
-      const grid = gridRef.current;
-      if (!drag || !grid) return;
-      const rect = grid.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      if (drag.side === 'left') {
-        const leftPercent = ((event.clientX - rect.left) / rect.width) * 100;
-        applyWidths({ left: leftPercent, right: widths.right });
-      } else {
-        const rightPercent = ((rect.right - event.clientX) / rect.width) * 100;
-        applyWidths({ left: widths.left, right: rightPercent });
-      }
-    },
-    [applyWidths, gridRef, widths.left, widths.right]
-  );
-
-  const stopDrag = useCallback(() => {
-    dragRef.current = null;
-    document.body.classList.remove('scaffold-pane-resizing');
-    window.removeEventListener('pointermove', onPointerMove);
-    window.removeEventListener('pointerup', stopDrag);
-    window.removeEventListener('pointercancel', stopDrag);
-  }, [onPointerMove]);
 
   const startDrag = useCallback(
     (side: 'left' | 'right', event: ReactPointerEvent<HTMLElement>) => {
       if (!enabled || !isWide) return;
       event.preventDefault();
-      dragRef.current = { side, pointerId: event.pointerId };
+      dragCleanupRef.current?.();
       document.body.classList.add('scaffold-pane-resizing');
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', stopDrag);
-      window.addEventListener('pointercancel', stopDrag);
+      const onMove = (moveEvent: PointerEvent) => {
+        const grid = gridRef.current;
+        if (!grid) return;
+        const rect = grid.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const current = widthsRef.current;
+        if (side === 'left') {
+          applyWidths({ left: ((moveEvent.clientX - rect.left) / rect.width) * 100, right: current.right });
+        } else {
+          applyWidths({ left: current.left, right: ((rect.right - moveEvent.clientX) / rect.width) * 100 });
+        }
+      };
+      const stop = () => {
+        document.body.classList.remove('scaffold-pane-resizing');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', stop);
+        window.removeEventListener('pointercancel', stop);
+        dragCleanupRef.current = null;
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', stop);
+      window.addEventListener('pointercancel', stop);
+      dragCleanupRef.current = stop;
     },
-    [enabled, isWide, onPointerMove, stopDrag]
+    [enabled, isWide, applyWidths, gridRef]
   );
 
-  useEffect(() => stopDrag, [stopDrag]);
+  // 화면을 떠날 때 끌던 중이면 정리한다
+  useEffect(() => () => dragCleanupRef.current?.(), []);
 
   const nudge = useCallback(
     (side: 'left' | 'right', deltaPercent: number) => {
+      const current = widthsRef.current;
       applyWidths(
         side === 'left'
-          ? { left: widths.left + deltaPercent, right: widths.right }
-          : { left: widths.left, right: widths.right + deltaPercent }
+          ? { left: current.left + deltaPercent, right: current.right }
+          : { left: current.left, right: current.right + deltaPercent }
       );
     },
-    [applyWidths, widths.left, widths.right]
+    [applyWidths]
   );
 
   const reset = useCallback(() => {
@@ -280,6 +282,110 @@ export function PaneResizeHandle({ side, label, onPointerDown, onNudge }: PaneRe
       }}
     >
       <span aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * 좁은 화면(900px 미만, 세 열이 세로로 쌓임)에서 원기록·내 정리 열의 높이를 끌어서 조절한다 (2026-10-12).
+ * 넓은 화면에서는 폭 손잡이를 쓰고 이 높이는 쓰지 않는다(CSS 에서 좁은 화면에만 적용).
+ * 높이는 이 브라우저에만 기억한다. 연구 데이터로 저장하지 않는다.
+ */
+const HEIGHT_STORAGE_KEY = 'scaffold-v2-pane-heights';
+const DEFAULT_HEIGHTS: Record<PaneSide, number> = { left: 420, right: 280 };
+const MIN_HEIGHT_PX = 160;
+const MAX_HEIGHT_PX = 1600;
+
+function readStoredHeights(): Record<PaneSide, number> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HEIGHT_STORAGE_KEY) || 'null');
+    const left = Number(parsed?.left);
+    const right = Number(parsed?.right);
+    return {
+      left: Number.isFinite(left) ? left : DEFAULT_HEIGHTS.left,
+      right: Number.isFinite(right) ? right : DEFAULT_HEIGHTS.right
+    };
+  } catch {
+    return DEFAULT_HEIGHTS;
+  }
+}
+
+const clampHeight = (value: number) => Math.min(MAX_HEIGHT_PX, Math.max(MIN_HEIGHT_PX, Math.round(value)));
+
+export function usePaneHeights() {
+  const [heights, setHeights] = useState<Record<PaneSide, number>>(() => readStoredHeights());
+  const heightsRef = useRef(heights);
+  heightsRef.current = heights;
+
+  const save = useCallback((next: Record<PaneSide, number>) => {
+    setHeights(next);
+    try {
+      window.localStorage.setItem(HEIGHT_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* 저장소를 쓸 수 없으면 이번 화면에서만 유지한다 */
+    }
+  }, []);
+
+  const startDrag = useCallback(
+    (side: PaneSide, event: ReactPointerEvent<HTMLElement>) => {
+      event.preventDefault();
+      const startY = event.clientY;
+      const startHeight = heightsRef.current[side];
+      document.body.classList.add('scaffold-pane-resizing-y');
+      const onMove = (moveEvent: PointerEvent) => {
+        save({ ...heightsRef.current, [side]: clampHeight(startHeight + moveEvent.clientY - startY) });
+      };
+      const onUp = () => {
+        document.body.classList.remove('scaffold-pane-resizing-y');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    },
+    [save]
+  );
+
+  const nudge = useCallback(
+    (side: PaneSide, delta: number) => save({ ...heightsRef.current, [side]: clampHeight(heightsRef.current[side] + delta) }),
+    [save]
+  );
+
+  /** 열 section 에 붙이는 스타일. CSS 가 좁은 화면에서만 이 값을 본문 높이로 쓴다. */
+  const styleFor = (side: PaneSide) => ({ ['--pane-body-height' as string]: `${heights[side]}px` }) as CSSProperties;
+
+  return { heights, startDrag, nudge, styleFor };
+}
+
+type PaneHeightHandleProps = {
+  side: PaneSide;
+  label: string;
+  onPointerDown: (side: PaneSide, event: ReactPointerEvent<HTMLElement>) => void;
+  onNudge: (side: PaneSide, delta: number) => void;
+};
+
+/** 좁은 화면에서 열 아래쪽에 붙는 가로 손잡이. 끌거나, 포커스한 뒤 ↑/↓ 키로 40px씩 바꾼다. */
+export function PaneHeightHandle({ side, label, onPointerDown, onNudge }: PaneHeightHandleProps) {
+  return (
+    <div
+      className="scaffold-pane-height-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label={label}
+      tabIndex={0}
+      title={`${label} (끌어서 조절, 키보드 ↑/↓)`}
+      onPointerDown={(event) => onPointerDown(side, event)}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          event.preventDefault();
+          onNudge(side, event.key === 'ArrowDown' ? 40 : -40);
+        }
+      }}
+    >
+      <span aria-hidden="true" />
+      <em>끌어서 높이 조절</em>
     </div>
   );
 }
