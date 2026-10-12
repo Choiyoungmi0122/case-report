@@ -204,6 +204,60 @@ async function run() {
   const emptyText = await extractRawText(emptyExport.buffer);
   assert.match(emptyText, /No content available yet\./);
 
+  // Scaffold V2 학습 기록 Word: 화면과 같은 구조, 표시한 문장은 AI 초안의 문장 번호로 (2026-10-12)
+  const v2Case: any = {
+    id: 'case_v2_docx',
+    title: 'V2 학습 기록',
+    mode: 'scaffold',
+    experiment_code: 'V2-TEST',
+    versionMetadata: { scaffoldVersion: 'v3.0' },
+    visits: [{ index: 1, type: '초진', date: '2026-03-11', soapText: '침 치료. 한약 처방.' }],
+    evidenceCards: [{ id: 'ev-1', sourceText: '황련해독탕 2주 처방' }],
+    sectionStates: [{ sectionId: CareSection.THERAPEUTIC_INTERVENTIONS }],
+    sectionDrafts: [
+      {
+        sectionId: CareSection.THERAPEUTIC_INTERVENTIONS,
+        draftText: '첫째 문장이다. 둘째 문장은 표시했다. 셋째 문장이다.'
+      }
+    ],
+    scaffoldState: {
+      caseMap: {
+        caseNotes: [
+          { id: 'n1', type: 'observation', text: '한약 용량이 적혀 있다.', visitIndex: 1, careItems: ['9b'], createdAt: '2026-10-12T00:00:00Z' },
+          { id: 'n2', type: 'literature', text: '다른 증례보고를 찾아보고 싶다.', createdAt: '2026-10-12T00:01:00Z' }
+        ]
+      },
+      sectionProgress: [{ sectionId: CareSection.THERAPEUTIC_INTERVENTIONS, recordReviewCompleted: true, draftRevealed: true }],
+      sectionReflections: [
+        {
+          sectionId: CareSection.THERAPEUTIC_INTERVENTIONS,
+          learnerNotes: '내 초안 문장이다.',
+          postAiReflection: { changedJudgment: '용량을 빠뜨렸다.', missingInDraft: '재처방이 없다.', unresolvedQuestion: '어디에 쓰는지 묻고 싶다.' }
+        }
+      ],
+      preRevealSnapshots: [],
+      reviewItems: [
+        { id: 'THERAPEUTIC_INTERVENTIONS-custom-0-ti-002', sectionId: CareSection.THERAPEUTIC_INTERVENTIONS, sourceType: 'custom', sourceText: '두 번째 질문', judgment: 'available_in_record' },
+        { id: 'THERAPEUTIC_INTERVENTIONS-custom-0-ti-001', sectionId: CareSection.THERAPEUTIC_INTERVENTIONS, sourceType: 'custom', sourceText: '첫 번째 질문', judgment: 'needs_additional_confirmation', note: '약 이름이 없다.' },
+        { id: 'flag-1', sectionId: CareSection.THERAPEUTIC_INTERVENTIONS, sourceType: 'draft_sentence', sourceText: '둘째 문장은 표시했다.', judgment: 'differs_from_record', note: '기록과 다르다.', evidenceIds: ['ev-1'] }
+      ]
+    }
+  };
+  const v2Export = await exportCaseToDocx(v2Case, 'scaffold_review');
+  const v2Text = await extractRawText(v2Export.buffer);
+  for (const heading of ['한눈에 보기', '주요 특징', '스스로 돌아본 내 초안', 'AI 초안에서 짚은 점', '궁금한 점', '더 확인하려는 정보', '1. 기록 읽기', '2. AI 초안을 보기 전 판단', '3. 내 초안과 AI 초안', '4. 돌아보기', '교수 코멘트']) {
+    assert.ok(v2Text.includes(heading), `V2 Word 에 "${heading}" 가 있어야 한다`);
+  }
+  assert.ok(!v2Text.includes('교수자가 먼저 볼 것'), '순화 전 이름은 쓰지 않는다');
+  assert.ok(v2Text.indexOf('첫 번째 질문') < v2Text.indexOf('두 번째 질문'), 'Step 2 판단은 질문 순서로');
+  assert.match(v2Text, /\[2 기록과 다름\]/, '표시한 문장은 AI 초안의 문장 번호(2)로');
+  assert.match(v2Text, /\[기록\] 황련해독탕 2주 처방/);
+  assert.match(v2Text, /문헌 확인 필요/);
+  // V1 사례는 기존 구조 그대로
+  const v1Export = await exportCaseToDocx({ ...v2Case, versionMetadata: { scaffoldVersion: 'v2.0' } }, 'scaffold_review');
+  const v1Text = await extractRawText(v1Export.buffer);
+  assert.ok(v1Text.includes('모아 보기: 교수님께 확인할 것') && !v1Text.includes('주요 특징'), 'V1 Word 는 바뀌지 않는다');
+
   console.log('docx export tests passed');
 }
 

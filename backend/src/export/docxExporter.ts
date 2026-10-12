@@ -6,6 +6,7 @@ import {
   Packer,
   Paragraph,
   SectionType,
+  ShadingType,
   Table,
   TableCell,
   TableRow,
@@ -14,6 +15,7 @@ import {
 } from 'docx';
 import { renderClinicalAnonymizedText } from '../deid/publicationRenderer';
 import { isStudyScaffoldV2Case } from '../config/researchMetadata';
+import { DEFAULT_STUDY_CARE_ELEMENT_MAP, isFixedStudyCaseText } from '../study/cases/defaultStudyCase';
 import { Case, CareSection, SectionEvidenceLink, UnsupportedClaim } from '../types';
 import { normalizeUnicodeText, normalizeUnicodeWhitespace } from '../utils/unicode';
 import { ExportLayout, ExportMode, TimelineTableData, TraceabilityAppendixRow } from './types';
@@ -707,6 +709,499 @@ function buildScaffoldSummaryChildren(caseData: Case) {
   return children;
 }
 
+/* ------------------------------------------------------------------------------------------------
+ * Scaffold V2 학습 기록 Word (2026-10-12). 화면 frontend/src/components/scaffold/ScaffoldSummaryV2.tsx 와 같은 구조:
+ *  한눈에 보기 → 주요 특징 → 1. 기록 읽기 → 2. AI 보기 전 판단 → 3. 내 초안과 AI 초안 → 4. 돌아보기 → 교수 코멘트 → 참고표
+ * 저장된 값만 쓴다. 개수만 세고 점수를 매기지 않는다. V1 사례는 buildScaffoldSummaryChildren 을 그대로 쓴다.
+ * ---------------------------------------------------------------------------------------------- */
+
+const V2_NOTE_TYPE_LABELS: Record<string, string> = {
+  observation: '눈에 띈 점',
+  question: '더 확인할 점',
+  literature: '문헌 확인 필요'
+};
+const V2_CARE_ITEM_LABELS: Record<string, string> = {
+  '9a': '9a 치료 종류',
+  '9b': '9b 용량·기간·빈도',
+  '9c': '9c 치료 변경·이유'
+};
+const V2_SUFFICIENCY_LABELS: Record<string, string> = {
+  available_in_record: '기록에서 확인 가능',
+  needs_additional_confirmation: '추가 확인 필요',
+  needs_instructor_review: '교수자에게 확인 필요',
+  unavailable: '현재 기록으로 확인할 수 없음'
+};
+const V2_FLAG_ORDER = ['differs_from_record', 'needs_additional_confirmation', 'needs_instructor_review', 'want_to_add'];
+const V2_SUFFICIENCY_ORDER = ['available_in_record', 'needs_additional_confirmation', 'needs_instructor_review', 'unavailable'];
+const V2_FLAG_FILL: Record<string, string> = {
+  differs_from_record: 'FECACA',
+  needs_additional_confirmation: 'FDE68A',
+  needs_instructor_review: 'E9D8FD',
+  want_to_add: 'C6F6D5'
+};
+
+const v2NoteTypeLabel = (type: string) => V2_NOTE_TYPE_LABELS[type] || '눈에 띈 점';
+const v2SufficiencyLabel = (judgment: string) => V2_SUFFICIENCY_LABELS[judgment] || scaffoldJudgmentLabelKo(judgment);
+const v2IsAiNote = (note: any) => note?.origin === 'ai_suggestion' || String(note?.id || '').startsWith('case-note-ai-');
+
+/** 작성 화면(frontend utils/scaffoldUi.ts splitScaffoldDraftSentences)과 같은 문장 나누기. 문장 번호를 맞추려고 쓴다. */
+function v2SplitDraftSentences(text: string) {
+  return String(text || '')
+    .split(/\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?])\s+/))
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+const v2SentenceCount = (text: string) =>
+  String(text || '')
+    .split(/(?<=[.다])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean).length;
+
+function v2QuestionOrderKey(id: unknown) {
+  const match = String(id || '').match(/([a-z]{2})-(\d{3})$/i);
+  return match ? `${match[1].toLowerCase()}-${match[2]}` : '~';
+}
+
+function v2Tally(keys: string[]) {
+  const map = new Map<string, number>();
+  keys.forEach((key) => map.set(key, (map.get(key) || 0) + 1));
+  return map;
+}
+
+function v2CountParts(entries: Array<[string, number]>, render: (key: string) => string) {
+  const parts = entries.filter(([, count]) => count > 0).map(([key, count]) => `${render(key)} ${count}`);
+  return parts.length > 0 ? parts.join(' · ') : '없음';
+}
+
+function v2Cell(lines: string[], options: { bold?: boolean; fill?: string } = {}) {
+  const content = lines.length > 0 ? lines : ['-'];
+  return new TableCell({
+    children: content.map(
+      (line) =>
+        new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { after: 60, line: 280 },
+          children: [makeTextRun(line || '-', options.bold ? { bold: true } : {})]
+        })
+    ),
+    ...(options.fill ? { shading: { fill: options.fill } } : {})
+  });
+}
+
+function v2Table(headers: string[], rows: string[][][], widths?: number[]) {
+  return new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: tableBorders(),
+    ...(widths ? { columnWidths: widths } : {}),
+    rows: [
+      new TableRow({ tableHeader: true, children: headers.map((header) => makeHeaderCell(header)) }),
+      ...rows.map((cells) => new TableRow({ children: cells.map((lines) => v2Cell(lines)) }))
+    ]
+  });
+}
+
+/** AI 초안 문단에서 학생이 표시한 문장을 색으로 칠하고 [번호 종류]를 붙인다. */
+function v2HighlightedParagraphs(text: string, flagged: Array<{ sentence: string; kind: string; number: number }>) {
+  const paragraphs = safeText(text)
+    .split(/\n{2,}|\n/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return [makeBodyParagraph('AI 초안이 없습니다.')];
+  return paragraphs.map((paragraph) => {
+    const runs: TextRun[] = [];
+    let rest = paragraph;
+    while (rest.length > 0) {
+      let best: { index: number; item: (typeof flagged)[number] } | null = null;
+      for (const item of flagged) {
+        if (!item.sentence) continue;
+        const index = rest.indexOf(item.sentence);
+        if (index >= 0 && (!best || index < best.index)) best = { index, item };
+      }
+      if (!best) {
+        runs.push(makeTextRun(rest));
+        break;
+      }
+      if (best.index > 0) runs.push(makeTextRun(rest.slice(0, best.index)));
+      runs.push(
+        makeTextRun(best.item.sentence, {
+          shading: { type: ShadingType.CLEAR, color: 'auto', fill: V2_FLAG_FILL[best.item.kind] || 'FDE68A' }
+        })
+      );
+      runs.push(makeTextRun(` [${best.item.number} ${scaffoldJudgmentLabelKo(best.item.kind)}]`, { bold: true, size: 18, color: '475569' }));
+      rest = rest.slice(best.index + best.item.sentence.length);
+    }
+    return new Paragraph({ alignment: AlignmentType.LEFT, spacing: { after: 100, line: 300 }, children: runs });
+  });
+}
+
+function buildScaffoldSummaryChildrenV2(caseData: Case) {
+  const scaffoldState: any = caseData.scaffoldState || {};
+  const sectionStates: any[] = caseData.sectionStates || [];
+  const sectionDrafts: any[] = caseData.sectionDrafts || [];
+  const evidenceCards: any[] = caseData.evidenceCards || [];
+  const reviewItems: any[] = scaffoldState.reviewItems || [];
+  const snapshots: any[] = scaffoldState.preRevealSnapshots || [];
+  const reflections: any[] = scaffoldState.sectionReflections || [];
+  const progressItems: any[] = scaffoldState.sectionProgress || [];
+  const notes: any[] = scaffoldState.caseMap?.caseNotes || [];
+  const evidenceTextById = new Map<string, string>(
+    evidenceCards.map((card: any) => [String(card.id), safeText(card.sourceText || card.normalizedText || '')])
+  );
+  const fixedCase = isFixedStudyCaseText((caseData.visits || []).map((visit: any) => visit?.soapText || ''));
+
+  const workedSectionIds = sectionStates
+    .map((item: any) => item.sectionId)
+    .filter((sectionId: string) => {
+      const progress = progressItems.find((item: any) => item.sectionId === sectionId);
+      return (
+        Boolean(progress?.recordReviewCompleted || progress?.draftRevealed) ||
+        snapshots.some((item: any) => item.sectionId === sectionId) ||
+        reviewItems.some((item: any) => item.sectionId === sectionId)
+      );
+    });
+  const multiSection = workedSectionIds.length > 1;
+  const tag = (sectionId: string) => (multiSection ? `[${scaffoldSectionLabelKo(sectionId)}] ` : '');
+
+  const sections = workedSectionIds.map((sectionId: string) => {
+    const snapshot = snapshots.find((item: any) => item.sectionId === sectionId);
+    const reflection = reflections.find((item: any) => item.sectionId === sectionId) || {};
+    const progress = progressItems.find((item: any) => item.sectionId === sectionId) || {};
+    const preAi = snapshot || reflection;
+    const ownDraft = safeText(preAi.learnerNotes);
+    const missingItems: string[] = Array.from(
+      new Set(((preAi.learnerIdentifiedMissingItems || []) as string[]).map((item) => safeText(item)).filter(Boolean))
+    );
+    const keyItems: string[] = Array.from(
+      new Set(
+        ((preAi.learnerKeyInformationItems || preAi.learnerIdentifiedKeyInfo || []) as string[])
+          .map((item) => safeText(item))
+          .filter(Boolean)
+      )
+    );
+    const selectedEvidence: any[] = preAi.selectedEvidence || [];
+    const sufficiency = reviewItems
+      .filter((item: any) => item.sectionId === sectionId && item.sourceType !== 'draft_sentence')
+      .sort((a: any, b: any) => v2QuestionOrderKey(a.id).localeCompare(v2QuestionOrderKey(b.id)));
+    const aiDraft = safeText(sectionDrafts.find((item: any) => item.sectionId === sectionId)?.draftText);
+    const aiSentenceList = v2SplitDraftSentences(aiDraft);
+    const flagged = reviewItems
+      .filter(
+        (item: any) =>
+          item.sectionId === sectionId &&
+          item.sourceType === 'draft_sentence' &&
+          item.judgment !== 'supported_by_record' &&
+          item.judgment !== 'pending'
+      )
+      .map((item: any, index: number) => {
+        const position = aiSentenceList.findIndex((sentence) => sentence === safeText(item.sourceText));
+        return { item, number: position >= 0 ? position + 1 : aiSentenceList.length + index + 1 };
+      })
+      .sort((a: any, b: any) => a.number - b.number);
+    const post = reflection.postAiReflection || {};
+    return { sectionId, progress, ownDraft, missingItems, keyItems, selectedEvidence, sufficiency, aiDraft, aiSentenceList, flagged, post };
+  });
+
+  const children: Array<Paragraph | Table> = [
+    new Paragraph({
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240, line: 360 },
+      children: [makeTextRun('증례보고 작성 학습 기록', { bold: true, size: TITLE_FONT_SIZE })]
+    }),
+    makeBodyParagraph(
+      '기록을 어떻게 읽었는지(메모), AI를 보기 전에 무엇을 판단하고 썼는지(내 초안), AI 초안과 견주어 무엇을 알아차렸는지(표시한 문장, 돌아보기)를 차례로 모았습니다. "주요 특징"에 핵심을 먼저 모아 두었습니다. AI 초안은 최종 원고가 아닙니다.'
+    )
+  ];
+
+  // ------------------------------------------------------------------ 한눈에 보기
+  const noteTypeCounts = v2Tally(notes.map((note: any) => note.type || 'observation'));
+  const aiNoteCount = notes.filter(v2IsAiNote).length;
+  const careCounts = v2Tally(notes.flatMap((note: any) => (note.careItems && note.careItems.length > 0 ? note.careItems : ['none'])));
+  const visitCounts = v2Tally(notes.map((note: any) => (note.visitIndex ? String(note.visitIndex) : 'none')));
+  const visitKeys = Array.from(visitCounts.keys()).sort((a, b) => (a === 'none' ? 1 : b === 'none' ? -1 : Number(a) - Number(b)));
+  const allSufficiency = sections.flatMap((section) => section.sufficiency);
+  const sufficiencyCounts = v2Tally(allSufficiency.map((item: any) => item.judgment));
+  const allFlagged = sections.flatMap((section) => section.flagged.map(({ item }: any) => item));
+  const flagCounts = v2Tally(allFlagged.map((item: any) => item.judgment));
+  const draftChars = sections.reduce((sum, section) => sum + section.ownDraft.length, 0);
+  const draftSentenceCount = sections.reduce((sum, section) => sum + v2SentenceCount(section.ownDraft), 0);
+  const aiSentenceCount = sections.reduce((sum, section) => sum + section.aiSentenceList.length, 0);
+
+  children.push(makeSectionHeading('한눈에 보기'));
+  children.push(
+    makeBodyParagraph(
+      `실험번호 ${safeText((caseData as any).experiment_code || '-')} · 방문 기록 ${(caseData.visits || []).length}회 · 실습 항목 ${
+        workedSectionIds.map(scaffoldSectionLabelKo).join(', ') || '-'
+      }. 개수와 분포만 셉니다. 맞고 틀림은 아래 기록을 보고 판단합니다.`
+    )
+  );
+  children.push(
+    v2Table(
+      ['항목', '내용'],
+      [
+        [
+          ['기록 읽기 메모'],
+          [
+            `${notes.length}개 (${v2CountParts(
+              ['observation', 'question', 'literature'].map((type) => [type, noteTypeCounts.get(type) || 0] as [string, number]),
+              v2NoteTypeLabel
+            )})${aiNoteCount > 0 ? `, 그중 AI 추천에서 가져옴 ${aiNoteCount}` : ''}`
+          ]
+        ],
+        [
+          ['메모가 다룬 세부 항목'],
+          [
+            `${v2CountParts(['9a', '9b', '9c'].map((code) => [code, careCounts.get(code) || 0] as [string, number]), (code) => code)}${
+              (careCounts.get('none') || 0) > 0 ? ` (항목을 붙이지 않은 메모 ${careCounts.get('none')})` : ''
+            }`
+          ]
+        ],
+        [
+          ['메모를 남긴 회차'],
+          [v2CountParts(visitKeys.map((key) => [key, visitCounts.get(key) || 0] as [string, number]), (key) => (key === 'none' ? '미지정' : `${key}회차`))]
+        ],
+        [['내 초안'], [draftChars > 0 ? `${draftChars}자 · ${draftSentenceCount}문장` : '쓰지 않음']],
+        [
+          ['AI 보기 전 정보 충분성 판단'],
+          [
+            `${allSufficiency.length}개 질문 (${v2CountParts(
+              V2_SUFFICIENCY_ORDER.map((key) => [key, sufficiencyCounts.get(key) || 0] as [string, number]),
+              v2SufficiencyLabel
+            )})`
+          ]
+        ],
+        [
+          ['AI 초안에서 표시한 문장'],
+          [
+            `${allFlagged.length}개${aiSentenceCount > 0 ? ` / 전체 ${aiSentenceCount}문장` : ''} (${v2CountParts(
+              V2_FLAG_ORDER.map((key) => [key, flagCounts.get(key) || 0] as [string, number]),
+              scaffoldJudgmentLabelKo
+            )})`
+          ]
+        ]
+      ],
+      [2600, 6400]
+    )
+  );
+
+  // ------------------------------------------------------------------ 주요 특징
+  const selfGaps = sections
+    .filter((section) => safeText(section.post.changedJudgment))
+    .map((section) => `${tag(section.sectionId)}${safeText(section.post.changedJudgment)}`);
+  const aiPoints = [
+    ...sections
+      .filter((section) => safeText(section.post.missingInDraft))
+      .map((section) => `${tag(section.sectionId)}${safeText(section.post.missingInDraft)}`),
+    ...sections.flatMap((section) =>
+      section.flagged
+        .filter(({ item }: any) => item.judgment === 'differs_from_record')
+        .map(({ item, number }: any) => `${tag(section.sectionId)}AI 문장 ${number} (기록과 다름): ${safeText(item.note || item.sourceText)}`)
+    )
+  ];
+  const curious = [
+    ...sections.flatMap((section) =>
+      section.flagged
+        .filter(({ item }: any) => item.judgment === 'needs_instructor_review')
+        .map(({ item, number }: any) => `${tag(section.sectionId)}AI 문장 ${number}: ${safeText(item.note || item.sourceText)}`)
+    ),
+    ...sections.flatMap((section) =>
+      section.sufficiency
+        .filter((item: any) => item.judgment === 'needs_instructor_review')
+        .map((item: any) => `${tag(section.sectionId)}${safeText(item.sourceText)}${item.note ? ` — ${safeText(item.note)}` : ''}`)
+    ),
+    ...sections
+      .filter((section) => safeText(section.post.unresolvedQuestion))
+      .map((section) => `${tag(section.sectionId)}${safeText(section.post.unresolvedQuestion)}`)
+  ];
+  const toCheck = [
+    ...sections.flatMap((section) => section.missingItems.map((item) => `${tag(section.sectionId)}부족하다고 본 정보: ${item}`)),
+    ...sections.flatMap((section) =>
+      section.sufficiency
+        .filter((item: any) => item.judgment === 'needs_additional_confirmation' || item.judgment === 'unavailable')
+        .map(
+          (item: any) =>
+            `${tag(section.sectionId)}${safeText(item.sourceText)} → ${v2SufficiencyLabel(item.judgment)}${
+              item.note ? ` — ${safeText(item.note)}` : ''
+            }`
+        )
+    ),
+    ...sections.flatMap((section) =>
+      section.flagged
+        .filter(({ item }: any) => item.judgment === 'needs_additional_confirmation')
+        .map(
+          ({ item, number }: any) =>
+            `${tag(section.sectionId)}AI 문장 ${number} (기록만으로 확인하기 어려움): ${safeText(item.note || item.sourceText)}`
+        )
+    ),
+    ...notes
+      .filter((note: any) => note.type === 'question' || note.type === 'literature')
+      .map((note: any) => `${v2NoteTypeLabel(note.type)} 메모${note.visitIndex ? ` (${note.visitIndex}회차)` : ''}: ${safeText(note.text)}`)
+  ];
+  const pushGroup = (title: string, items: string[]) => {
+    children.push(makeSubHeading(title));
+    if (items.length === 0) children.push(makeBodyParagraph('적은 내용이 없습니다.'));
+    else items.forEach((item) => children.push(buildBulletParagraph(item)));
+  };
+  children.push(makeSectionHeading('주요 특징'));
+  pushGroup('스스로 돌아본 내 초안', selfGaps);
+  pushGroup('AI 초안에서 짚은 점', aiPoints);
+  pushGroup('궁금한 점', curious);
+  pushGroup('더 확인하려는 정보', toCheck);
+
+  // ------------------------------------------------------------------ 1. 기록 읽기
+  const sortedNotes = [...notes].sort(
+    (a: any, b: any) => (a.visitIndex ?? 99) - (b.visitIndex ?? 99) || String(a.createdAt).localeCompare(String(b.createdAt))
+  );
+  children.push(makeSectionHeading(`1. 기록 읽기: 남긴 메모 ${notes.length}개`));
+  if (sortedNotes.length === 0) {
+    children.push(makeBodyParagraph('메모가 없습니다.'));
+  } else {
+    children.push(
+      v2Table(
+        ['회차', '종류', '세부 항목', '메모'],
+        sortedNotes.map((note: any) => [
+          [note.visitIndex ? `${note.visitIndex}회차` : '미지정'],
+          [v2NoteTypeLabel(note.type)],
+          [((note.careItems || []) as string[]).map((code) => V2_CARE_ITEM_LABELS[code] || code).join(', ') || '-'],
+          [`${safeText(note.text)}${v2IsAiNote(note) ? ' (AI 추천에서 가져옴)' : ''}`]
+        ]),
+        [900, 1400, 1900, 4800]
+      )
+    );
+  }
+
+  if (sections.length === 0) {
+    children.push(makeSectionHeading('CARE 항목별 기록'));
+    children.push(makeBodyParagraph('아직 작업한 CARE 항목이 없습니다.'));
+    return children;
+  }
+
+  for (const section of sections) {
+    const label = scaffoldSectionLabelKo(section.sectionId);
+    if (multiSection) children.push(makeSectionHeading(label));
+
+    // 2. AI 보기 전 판단
+    children.push(makeSectionHeading(`2. AI 초안을 보기 전 판단${multiSection ? ` (${label})` : ''}`));
+    if (section.sufficiency.length === 0) {
+      children.push(makeBodyParagraph('판단한 질문이 없습니다.'));
+    } else {
+      children.push(
+        v2Table(
+          ['질문', '학생의 판단', '이유'],
+          section.sufficiency.map((item: any) => [[safeText(item.sourceText)], [v2SufficiencyLabel(item.judgment)], [safeText(item.note) || '-']]),
+          [3600, 1900, 3500]
+        )
+      );
+    }
+    if (section.missingItems.length > 0) {
+      children.push(makeSubHeading('초안을 쓰며 부족하다고 본 정보'));
+      section.missingItems.forEach((item) => children.push(buildBulletParagraph(item)));
+    }
+    if (section.selectedEvidence.length > 0 || section.keyItems.length > 0) {
+      children.push(makeSubHeading('기록에서 고른 근거와 핵심 정보'));
+      section.selectedEvidence.forEach((item: any) =>
+        children.push(buildBulletParagraph(safeText(item.label || evidenceTextById.get(String(item.id)) || item.id)))
+      );
+      section.keyItems.forEach((item) => children.push(buildBulletParagraph(item)));
+    }
+
+    // 3. 내 초안과 AI 초안
+    children.push(makeSectionHeading('3. 내 초안과 AI 초안'));
+    const flaggedForHighlight = section.flagged.map(({ item, number }: any) => ({
+      sentence: safeText(item.sourceText),
+      kind: item.judgment,
+      number
+    }));
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: tableBorders(),
+        columnWidths: [4500, 4500],
+        rows: [
+          new TableRow({
+            tableHeader: true,
+            children: [
+              makeHeaderCell('학생이 쓴 초안 (AI 보기 전)'),
+              makeHeaderCell(`AI 초안${section.flagged.length > 0 ? ` (표시한 문장 ${section.flagged.length}개 색 표시)` : ''}`)
+            ]
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                shading: { fill: 'F3FAF5' },
+                children: section.ownDraft
+                  ? buildParagraphsFromText(section.ownDraft)
+                  : [makeBodyParagraph('쓰지 않았습니다.')]
+              }),
+              new TableCell({
+                shading: { fill: 'EEF4FF' },
+                children: section.progress.draftRevealed
+                  ? v2HighlightedParagraphs(section.aiDraft, flaggedForHighlight)
+                  : [makeBodyParagraph('아직 AI 초안을 열지 않았습니다.')]
+              })
+            ]
+          })
+        ]
+      })
+    );
+    if (section.flagged.length > 0) {
+      children.push(makeSubHeading(`표시한 AI 문장 ${section.flagged.length}개`));
+      children.push(
+        v2Table(
+          ['#', '표시한 AI 문장', '종류', '이유와 연결한 기록'],
+          section.flagged.map(({ item, number }: any) => {
+            const linked = (item.evidenceIds || [])
+              .map((id: string) => evidenceTextById.get(String(id)))
+              .filter(Boolean)
+              .map((text: string) => `[기록] ${text}`);
+            return [[String(number)], [safeText(item.sourceText)], [scaffoldJudgmentLabelKo(item.judgment)], [safeText(item.note), ...linked].filter(Boolean)];
+          }),
+          [500, 3700, 1500, 3300]
+        )
+      );
+    } else if (section.progress.draftRevealed) {
+      children.push(makeBodyParagraph('다시 볼 문장으로 표시한 것이 없습니다.'));
+    }
+
+    // 4. 돌아보기
+    children.push(makeSectionHeading('4. 돌아보기 (AI 초안을 읽은 뒤)'));
+    children.push(makeSubHeading('내 초안에서 빠졌거나 부족했던 내용'));
+    children.push(makeBodyParagraph(safeText(section.post.changedJudgment) || '적은 내용이 없습니다.'));
+    children.push(makeSubHeading('AI 초안에서 부족하거나 의심스러운 내용'));
+    children.push(makeBodyParagraph(safeText(section.post.missingInDraft) || '적은 내용이 없습니다.'));
+    children.push(makeSubHeading('교수님이나 전문가에게 묻고 싶은 것'));
+    children.push(makeBodyParagraph(safeText(section.post.unresolvedQuestion) || '적은 내용이 없습니다.'));
+
+    children.push(makeBodyParagraph(' '));
+    children.push(makeCommentBox(`교수 코멘트 (${label})`));
+
+    // 참고: 연구자가 정리한 이 사례 기록의 CARE 세부 항목표 (고정 실험 사례일 때만)
+    const careMap = fixedCase ? DEFAULT_STUDY_CARE_ELEMENT_MAP[section.sectionId] || [] : [];
+    if (careMap.length > 0) {
+      children.push(makeSectionHeading('참고: 이 사례 기록에 있는 정보 (연구자 정리)'));
+      children.push(makeBodyParagraph('학생 초안과 견주어 볼 때 참고하는 표입니다.'));
+      children.push(
+        v2Table(
+          ['CARE 세부 항목', '기록에 있는 정보', '기록에서 찾기 어려운 정보'],
+          careMap.map((element) => [
+            [`${element.code} ${element.label}`, element.required ? '필수' : '선택'],
+            element.inRecord.map((line) => `• ${line}`),
+            element.notInRecord.map((line) => `• ${line}`)
+          ]),
+          [1800, 4200, 3000]
+        )
+      );
+    }
+  }
+
+  children.push(
+    makeBodyParagraph('이 기록은 교육용 자료입니다. AI 초안의 문장은 원기록과 전문가 판단으로 다시 확인한 뒤에 사용해야 합니다.')
+  );
+  return children;
+}
+
 export async function exportCaseToDocx(caseData: Case, mode: ExportMode, layout: ExportLayout = 'one_paragraph') {
   if (mode === 'scaffold_review') {
     const document = new Document({
@@ -733,7 +1228,8 @@ export async function exportCaseToDocx(caseData: Case, mode: ExportMode, layout:
               space: 708
             }
           },
-          children: buildScaffoldSummaryChildren(caseData)
+          // V2 는 화면(내 학습 기록)과 같은 구조로 쓴다. V1 은 기존 구조 그대로.
+          children: isStudyScaffoldV2Case(caseData) ? buildScaffoldSummaryChildrenV2(caseData) : buildScaffoldSummaryChildren(caseData)
         }
       ]
     });
