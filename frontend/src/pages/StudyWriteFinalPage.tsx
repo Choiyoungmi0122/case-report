@@ -217,6 +217,16 @@ export default function StudyWriteFinalPage() {
               )
             ) : (
               <>
+                {/* 타임라인: 표 미리보기를 위에, 그 아래에 표의 원본 글 */}
+                {section.sectionId === 'TIMELINE' && parseTimelineRows(texts[section.sectionId] ?? '') ? (
+                  <div className="sw-final__timeline-preview">
+                    <p>표 미리보기 (Word 에서도 이 표로 나갑니다)</p>
+                    <TimelineTable text={dated(texts[section.sectionId] ?? '')} />
+                  </div>
+                ) : null}
+                {section.sectionId === 'TIMELINE' ? (
+                  <p className="sw-final__source-label">표의 원본 (한 줄 = 한 행, 칸은 "|"로 나눔: 날짜 | 경과 요약 | 진단 검사 | 치료 개입). 여기서 고치면 위 표가 바뀝니다.</p>
+                ) : null}
                 <textarea
                   value={texts[section.sectionId] ?? ''}
                   onChange={(event) => setTexts((prev) => ({ ...prev, [section.sectionId]: event.target.value }))}
@@ -224,12 +234,6 @@ export default function StudyWriteFinalPage() {
                   rows={Math.max(4, Math.min(18, Math.ceil((texts[section.sectionId] ?? '').length / 70) + 2))}
                   spellCheck={false}
                 />
-                {section.sectionId === 'TIMELINE' && parseTimelineRows(texts[section.sectionId] ?? '') ? (
-                  <div className="sw-final__timeline-preview">
-                    <p>표 미리보기 (한 줄에 한 행, 칸은 "|"로 나눔. Word 에서도 이 표로 나갑니다)</p>
-                    <TimelineTable text={dated(texts[section.sectionId] ?? '')} />
-                  </div>
-                ) : null}
               </>
             )}
             {section.attachments.length > 0 ? (

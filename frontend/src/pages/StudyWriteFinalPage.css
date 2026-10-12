@@ -188,5 +188,6 @@
   color: #a93b24;
 }
 
-.sw-final__timeline-preview { margin-top: 8px; }
+.sw-final__timeline-preview { margin: 0 0 10px; }
+.sw-final__source-label { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: #5b6b82; }
 .sw-final__timeline-preview p { margin: 0 0 6px; font-size: 12px; color: #5b6b82; }

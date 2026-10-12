@@ -700,10 +700,17 @@ export default function StudyWriteDraftPage() {
                   }}
                 />
               ) : section.draftText && section.sectionId === 'TIMELINE' && parseTimelineRows(section.draftText) ? (
-                // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입)
-                <div ref={mainTextRef} onMouseUp={captureSelection}>
-                  <TimelineTable text={dated(section.draftText)} />
-                </div>
+                // 타임라인은 CARE 표로 보여 준다 (날짜 | 경과 요약 | 진단 검사 | 치료 개입). 원본 글은 접어 둔다
+                <>
+                  <details className="sw-draft__timeline-source">
+                    <summary>원본 글 보기 (표를 만드는 글: 한 줄 = 한 행, 칸은 "|"로 나눔)</summary>
+                    <pre>{dated(section.draftText)}</pre>
+                    <p>고치려면 위의 "직접 편집"을 누르세요. 최종 수정 화면에서도 이 글을 고칩니다.</p>
+                  </details>
+                  <div ref={mainTextRef} onMouseUp={captureSelection}>
+                    <TimelineTable text={dated(section.draftText)} />
+                  </div>
+                </>
               ) : section.draftText ? (
                 <div className="sw-draft__text" ref={mainTextRef} onMouseUp={captureSelection}>
                   {renderClinicalAnonymizedText(dated(section.draftText))}
