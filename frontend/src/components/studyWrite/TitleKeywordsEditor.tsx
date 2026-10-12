@@ -5,11 +5,14 @@ import { composeTitleDraft, parseTitleDraft, splitKeywords, TitlePart } from '..
 import './TitleKeywordsEditor.css';
 
 /**
- * 제목 섹션: 제목과 핵심 단어를 따로 보여 주고, 각각 ↻(AI 가 다시 만들기)와 ✎(직접 고치기)를 단다.
+ * 제목 섹션: 제목과 핵심 단어를 따로 보여 주고, 각각 ↻(AI 가 다시 만들기), ↶(이전 것으로 되돌리기), ✎(직접 고치기)를 단다.
  * 다시 만들기는 그 줄만 바뀌고 다른 줄은 글자 그대로다(서버가 보장, routes/studyWrite.ts revise 의 regeneratePart).
+ * 되돌리기는 섹션의 버전 기록에서 그 줄의 이전 값을 최근 것부터 보여 주고, 고른 값으로 그 줄만 바꿔 저장한다(새 버전).
  */
 export default function TitleKeywordsEditor(props: {
   text: string;
+  /** 섹션의 버전 기록 (되돌리기 목록을 만든다) */
+  history?: Array<{ version: number; text: string }>;
   /** 제출 뒤 등 고칠 수 없을 때 */
   readOnly?: boolean;
   /** 다른 작업 중이라 버튼을 막을 때 */
@@ -17,17 +20,47 @@ export default function TitleKeywordsEditor(props: {
   onRegenerate: (part: TitlePart) => Promise<void>;
   onSave: (nextText: string) => Promise<void>;
 }) {
-  const { text, readOnly, disabled, onRegenerate, onSave } = props;
+  const { text, history = [], readOnly, disabled, onRegenerate, onSave } = props;
   const parsed = parseTitleDraft(text);
   const [editing, setEditing] = useState<TitlePart | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [keywordsDraft, setKeywordsDraft] = useState('');
   const [busy, setBusy] = useState<{ part: TitlePart; kind: 'regenerate' | 'save' } | null>(null);
+  // ↶ 를 눌러 이전 값 목록을 연 줄
+  const [historyOpen, setHistoryOpen] = useState<TitlePart | null>(null);
 
-  // 다른 곳에서 초안이 바뀌면 편집을 닫는다
+  // 다른 곳에서 초안이 바뀌면 편집과 목록을 닫는다
   useEffect(() => {
     setEditing(null);
+    setHistoryOpen(null);
   }, [text]);
+
+  /** 그 줄의 이전 값들 (최근 것부터, 지금 값·같은 값은 뺀다, 최대 8개) */
+  const previousValues = (part: TitlePart) => {
+    const current = part === 'title' ? parsed.title : parsed.keywords.join(', ');
+    const seen = new Set([current]);
+    const out: Array<{ version: number; label: string; title: string; keywords: string[] }> = [];
+    for (const item of [...history].reverse()) {
+      const old = parseTitleDraft(item.text);
+      const label = part === 'title' ? old.title : old.keywords.join(', ');
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      out.push({ version: item.version, label, title: old.title, keywords: old.keywords });
+      if (out.length >= 8) break;
+    }
+    return out;
+  };
+
+  const restore = async (part: TitlePart, value: { title: string; keywords: string[] }) => {
+    const next = part === 'title' ? composeTitleDraft(parsed, { title: value.title }) : composeTitleDraft(parsed, { keywords: value.keywords });
+    setBusy({ part, kind: 'save' });
+    try {
+      await onSave(next);
+      setHistoryOpen(null);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const blocked = Boolean(disabled || busy);
 
@@ -93,6 +126,17 @@ export default function TitleKeywordsEditor(props: {
         </button>
         <button
           type="button"
+          className={`sw-title-editor__icon${historyOpen === part ? ' is-active' : ''}`}
+          title={previousValues(part).length > 0 ? `이전 ${label}${part === 'title' ? '으로' : '로'} 되돌리기` : `되돌릴 이전 ${label}${part === 'title' ? '이' : '가'} 없습니다`}
+          aria-label={`이전 ${label}${part === 'title' ? '으로' : '로'} 되돌리기`}
+          aria-expanded={historyOpen === part}
+          disabled={blocked || editing !== null || previousValues(part).length === 0}
+          onClick={() => setHistoryOpen(historyOpen === part ? null : part)}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
           className="sw-title-editor__icon"
           title={`${label} 직접 고치기`}
           aria-label={`${label} 직접 고치기`}
@@ -122,6 +166,21 @@ export default function TitleKeywordsEditor(props: {
           <span>제목</span>
           {tools('title', '제목')}
         </div>
+        {historyOpen === 'title' ? (
+          <div className="sw-title-editor__history" role="listbox" aria-label="이전 제목">
+            <p>이전 제목 (최근 것부터). 누르면 이 줄만 그 값으로 바뀌고 새 버전으로 저장됩니다.</p>
+            <ul>
+              {previousValues('title').map((item) => (
+                <li key={`${item.version}-${item.label}`}>
+                  <button type="button" disabled={blocked} onClick={() => void restore('title', item)}>
+                    <span>{item.label}</span>
+                    <em>버전 {item.version}</em>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {editing === 'title' ? (
           <>
             <textarea
@@ -152,6 +211,21 @@ export default function TitleKeywordsEditor(props: {
           <span>핵심 단어</span>
           {tools('keywords', '핵심 단어')}
         </div>
+        {historyOpen === 'keywords' ? (
+          <div className="sw-title-editor__history" role="listbox" aria-label="이전 핵심 단어">
+            <p>이전 핵심 단어 (최근 것부터). 누르면 이 줄만 그 값으로 바뀌고 새 버전으로 저장됩니다.</p>
+            <ul>
+              {previousValues('keywords').map((item) => (
+                <li key={`${item.version}-${item.label}`}>
+                  <button type="button" disabled={blocked} onClick={() => void restore('keywords', item)}>
+                    <span>{item.label}</span>
+                    <em>버전 {item.version}</em>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {editing === 'keywords' ? (
           <>
             <input

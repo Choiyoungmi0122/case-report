@@ -581,7 +581,7 @@ export default function StudyWriteDraftPage() {
               {section.draftText && !locked && !fullEditOpen ? (
                 <p className="sw-draft__drag-hint">
                   {section.sectionId === 'TITLE'
-                    ? '↻ 를 누르면 AI가 그 줄만 다시 만들고, ✎ 를 누르면 직접 고칠 수 있습니다. 이전 판은 버전 기록에 남습니다.'
+                    ? '↻ 를 누르면 AI가 그 줄만 다시 만들고, ↶ 로 이전 것으로 되돌리며, ✎ 로 직접 고칠 수 있습니다.'
                     : '문장을 드래그하면 그 부분만 AI에게 고치게 하거나 직접 고칠 수 있습니다.'}
                 </p>
               ) : null}
@@ -625,6 +625,7 @@ export default function StudyWriteDraftPage() {
                 // 제목·핵심 단어는 따로: ↻ 다시 만들기, ✎ 직접 고치기
                 <TitleKeywordsEditor
                   text={section.draftText}
+                  history={section.history}
                   readOnly={locked}
                   disabled={revising || reviewing || running}
                   onRegenerate={async (part) => {

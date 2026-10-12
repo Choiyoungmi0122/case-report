@@ -177,6 +177,7 @@ export default function StudyWriteFinalPage() {
               // 제목·핵심 단어는 따로: ↻ 다시 만들기, ✎ 직접 고치기 (제출 뒤에는 보기만)
               <TitleKeywordsEditor
                 text={texts.TITLE ?? section.draftText}
+                history={section.history}
                 readOnly={submitted}
                 disabled={submitting || savingId !== null}
                 onRegenerate={async (part) => {
