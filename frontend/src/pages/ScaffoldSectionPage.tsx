@@ -1149,6 +1149,20 @@ export default function ScaffoldSectionPage() {
 
   // CARE 세부 항목 표는 펼친 채로 보여 주고, 접거나 다시 펼치면 기록한다.
   const [careElementMapOpen, setCareElementMapOpen] = useState(true);
+  // 치료 개입 기준 상자의 논문 예시는 처음부터 펼쳐 둔다. 접힘 상태는 요소 코드별로 화면에서만 기억한다.
+  // 펼친 채로 그려질 때도 브라우저가 toggle 이벤트를 보내므로, 상태가 실제로 바뀐 경우만 행동 로그에 남긴다.
+  const [closedPaperExamples, setClosedPaperExamples] = useState<Set<string>>(() => new Set());
+  const handlePaperExamplesToggle = (code: string, open: boolean) => {
+    const wasOpen = !closedPaperExamples.has(code);
+    if (wasOpen === open) return;
+    setClosedPaperExamples((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+    logUiAction('paper_examples_toggled', { code, open });
+  };
 
   // 입력 칸에 머문 시간. 칸에 들어갈 때 시작하고 나올 때 길이와 함께 남긴다.
   const fieldEditRef = useRef<Record<string, { startedAt: number; initial: string }>>({});
@@ -2112,9 +2126,8 @@ export default function ScaffoldSectionPage() {
                         {element.paperExamples.length > 0 ? (
                           <details
                             className="scaffold-care-guide__papers"
-                            onToggle={(event) =>
-                              logUiAction('paper_examples_toggled', { code: element.code, open: event.currentTarget.open })
-                            }
+                            open={!closedPaperExamples.has(element.code)}
+                            onToggle={(event) => handlePaperExamplesToggle(element.code, event.currentTarget.open)}
                           >
                             <summary>논문에서는 이렇게 씁니다 (다른 환자 {element.paperExamples.length}개)</summary>
                             <ul>
