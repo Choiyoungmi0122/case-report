@@ -21,8 +21,8 @@ import { normalizeUnicodeWhitespace } from '../src/utils/unicode';
 // 머리글 앞에 붙은 'ㄴ' 같은 흔적은 NFKC 정규화 뒤 자모(U+1100~)로 바뀌므로 그 범위도 허용한다.
 const HEADER = /^\s*[ᄀ-ᇿ㄰-㆏\-•·\s]*익명\s*진료기록\s*\|\s*(.+?)\s*$/;
 
-// "[1차] 7/2 (초진)" 형식
-const ABS_HEADER = /^\s*\[(\d+)\s*차\]\s*(\d{1,2})\s*\/\s*(\d{1,2})\b.*$/;
+// "[1차] 7/2 (초진)", "[입원 1일차] 6/16 (입원)" 형식
+const ABS_HEADER = /^\s*\[(?:입원\s*)?(\d+)\s*일?\s*차\]\s*(\d{1,2})\s*\/\s*(\d{1,2})\b.*$/;
 
 function parseOffset(label: string): number | null {
   const text = label.replace(/\s+/g, '');
