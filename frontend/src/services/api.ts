@@ -1654,8 +1654,9 @@ export const caseApi = {
     return response.data;
   },
 
-  finishStudyWriteInterview: async (caseId: string) => {
-    const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/finish`);
+  /** reason: 어느 경로로 끝냈는지 (서버 종료 기록·연구 이벤트용, 화면 동작과 무관) */
+  finishStudyWriteInterview: async (caseId: string, reason?: 'participant_button' | 'budget_reached') => {
+    const response = await api.post<StudyWriteInterviewResponse>(`/study-write/cases/${caseId}/interview/finish`, reason ? { reason } : {});
     return response.data;
   },
 

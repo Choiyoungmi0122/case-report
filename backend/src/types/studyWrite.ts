@@ -75,6 +75,28 @@ export interface StudyWriteRound {
   };
 }
 
+/**
+ * 질의응답 종료 기록.
+ * - participant_button: 분석을 기다리는 동안 보이는 "질문은 여기까지" 버튼 (참여자인지 옆의 연구자인지는 알 수 없다)
+ * - budget_reached: 회차·질문 수 상한에 닿아 화면이 자동으로 끝냄
+ * - no_more_questions: 다음 회차를 만들려 했는데 체인이 물을 질문이 없다고 함
+ * - unspecified: 이유 없이 끝내기 요청이 옴 (옛 화면 등)
+ */
+export interface StudyWriteInterviewFinish {
+  reason: 'participant_button' | 'budget_reached' | 'no_more_questions' | 'unspecified';
+  at: string;
+  /** 끝날 때까지 열린 회차 수와 답한 질문 수 */
+  roundCount: number;
+  answeredCount: number;
+  questionCount: number;
+  /** 끝날 때 기록 분석이 끝나 있었는지 (false 면 분석을 기다리던 중) */
+  analysisReady: boolean;
+  /** 마지막 답부터 종료까지 걸린 초 */
+  secondsSinceLastAnswer: number | null;
+  /** no_more_questions 일 때 체인이 적은 이유 */
+  stopReason?: string;
+}
+
 export interface StudyWriteQuestionBudget {
   maxRounds: number;
   perRound: number;
@@ -204,6 +226,8 @@ export interface StudyWriteState {
   interviewStartedAt?: string;
   /** 질의응답을 마치고 초안 단계로 넘어간 시각 */
   interviewCompletedAt?: string;
+  /** 질의응답이 어떻게 끝났는지 (2026-10-13부터 기록. S01·S02 에는 없다) */
+  interviewFinish?: StudyWriteInterviewFinish;
   /** 분석(/process) 요청을 보낸 시각. 중복 요청을 막는 데 쓴다 */
   processingRequestedAt?: string;
   /** 섹션별 초안 상태. 키는 CARE 섹션 id */

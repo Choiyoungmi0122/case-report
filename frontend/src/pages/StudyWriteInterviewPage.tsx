@@ -140,7 +140,7 @@ export default function StudyWriteInterviewPage() {
     if (!data.nextRound.ok) {
       // 상한에 닿았으면 끝낸다.
       if (!finished) {
-        caseApi.finishStudyWriteInterview(caseId).then(setData).catch(() => undefined);
+        caseApi.finishStudyWriteInterview(caseId, 'budget_reached').then(setData).catch(() => undefined);
       }
       return;
     }
@@ -487,7 +487,7 @@ export default function StudyWriteInterviewPage() {
                 <button
                   type="button"
                   className="is-secondary"
-                  onClick={() => caseId && caseApi.finishStudyWriteInterview(caseId).then(setData).catch(() => undefined)}
+                  onClick={() => caseId && caseApi.finishStudyWriteInterview(caseId, 'participant_button').then(setData).catch(() => undefined)}
                 >
                   질문은 여기까지 (남은 질문 없이 초안으로)
                 </button>

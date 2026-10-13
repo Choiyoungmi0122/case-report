@@ -4,6 +4,7 @@ import { CaseModel } from '../models/caseModel';
 import { inspectRecordFile, MAX_FILE_BYTES } from '../studyWrite/recordImport';
 import {
   addCareInfoAnswer,
+  allQuestions,
   generateCareItemQuestion,
   answerQuestion,
   canOpenNextRound,
@@ -15,7 +16,8 @@ import {
   startInterview,
   toParticipantView
 } from '../studyWrite/interview';
-import { StudyWriteChatEntry, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
+import { StudyWriteChatEntry, StudyWriteInterviewFinish, StudyWriteSectionState, StudyWriteState } from '../types/studyWrite';
+import { appendResearchEvent, isResearchTracked, normalizeResearchState } from './cases';
 import { emptySectionState, generateDrafts, runCareCheck, runRevise, STUDY_WRITE_REVISE_PROMPT_VERSION } from '../studyWrite/drafting';
 import { findSubElement } from '../studyWrite/careSubElements';
 import { CHAT_QUESTION_SUMMARY_SECTIONS, generateSectionChatQuestion } from '../studyWrite/chatQuestion';
@@ -87,6 +89,67 @@ async function loadCase(caseId: string) {
 
 async function saveState(caseId: string, state: StudyWriteState) {
   await caseModel.updateCase(caseId, { studyWrite: state } as any);
+}
+
+const FINISH_REASONS: ReadonlyArray<StudyWriteInterviewFinish['reason']> = [
+  'participant_button',
+  'budget_reached',
+  'no_more_questions',
+  'unspecified'
+];
+
+/**
+ * 질의응답을 끝낸 상태에 종료 기록을 붙이고, 연구 세션이 있으면 interview_finished 이벤트도 남긴다.
+ * 이미 끝난 질의응답이면 아무것도 바꾸지 않는다. 참여자 화면과 동작에는 영향이 없다.
+ */
+async function finishWithRecord(
+  caseData: any,
+  state: StudyWriteState,
+  reason: StudyWriteInterviewFinish['reason'],
+  stopReason?: string
+): Promise<StudyWriteState> {
+  if (state.interviewCompletedAt) return state;
+  const finished = finishInterview(state);
+  const questions = allQuestions(finished);
+  const answeredTimes = questions
+    .map((question) => (question.answeredAt ? new Date(question.answeredAt).getTime() : NaN))
+    .filter((value) => !Number.isNaN(value));
+  const at = finished.interviewCompletedAt || new Date().toISOString();
+  const record: StudyWriteInterviewFinish = {
+    reason,
+    at,
+    roundCount: finished.rounds.length,
+    answeredCount: questions.filter((question) => question.status !== 'pending').length,
+    questionCount: questions.length,
+    analysisReady: isAnalysisReady(caseData),
+    secondsSinceLastAnswer: answeredTimes.length
+      ? Math.round((new Date(at).getTime() - Math.max(...answeredTimes)) / 1000)
+      : null,
+    ...(stopReason ? { stopReason } : {})
+  };
+  const next: StudyWriteState = { ...finished, interviewFinish: record };
+  await saveState(caseData.id, next);
+
+  const researchState = normalizeResearchState(caseData.researchState, Boolean(caseData.studyConfig?.studyMode));
+  if (isResearchTracked(researchState)) {
+    try {
+      await caseModel.updateCase(caseData.id, {
+        researchState: appendResearchEvent(researchState, {
+          eventId: randomUUID(),
+          eventType: 'interview_finished',
+          caseId: caseData.id,
+          mode: 'write',
+          sessionId: researchState.sessionId,
+          participantCode: researchState.participantCode,
+          metadata: { ...record }
+        }) as any
+      } as any);
+    } catch (error) {
+      // 이벤트 기록 실패가 질의응답 종료를 막지 않는다 (종료 기록은 studyWrite.interviewFinish 에 이미 있다).
+      console.error(`[studyWrite] interview_finished event not saved for ${caseData.id}`, error);
+    }
+  }
+  return next;
 }
 
 function buildInterviewResponse(caseData: any, state: StudyWriteState) {
@@ -208,10 +271,13 @@ router.post('/cases/:caseId/interview/next-round', async (req: Request, res: Res
       const latest = await loadCase(req.params.caseId);
       if (!latest) return null;
       const latestState = normalizeStudyWriteState(latest.studyWrite);
-      const merged: StudyWriteState = generated.round
-        ? { ...latestState, rounds: [...latestState.rounds, generated.round], updatedAt: new Date().toISOString() }
-        : finishInterview(latestState);
-      await saveState(latest.id, merged);
+      let merged: StudyWriteState;
+      if (generated.round) {
+        merged = { ...latestState, rounds: [...latestState.rounds, generated.round], updatedAt: new Date().toISOString() };
+        await saveState(latest.id, merged);
+      } else {
+        merged = await finishWithRecord(latest, latestState, 'no_more_questions', generated.stopReason);
+      }
       state = merged;
       return { ...buildInterviewResponse(latest, merged), stopReason: generated.stopReason || null };
     });
@@ -228,8 +294,9 @@ router.post('/cases/:caseId/interview/finish', async (req: Request, res: Respons
     const result = await serialize(req.params.caseId, async () => {
       const caseData = await loadCase(req.params.caseId);
       if (!caseData) return null;
-      const state = finishInterview(normalizeStudyWriteState(caseData.studyWrite));
-      await saveState(caseData.id, state);
+      // 화면이 어느 경로로 끝냈는지 보낸다: 버튼(participant_button) 또는 상한 도달(budget_reached)
+      const reason = FINISH_REASONS.includes(req.body?.reason) ? req.body.reason : 'unspecified';
+      const state = await finishWithRecord(caseData, normalizeStudyWriteState(caseData.studyWrite), reason);
       return buildInterviewResponse(caseData, state);
     });
     if (!result) return res.status(404).json({ error: 'Case not found' });

@@ -46,7 +46,9 @@ export type ResearchEventType =
   | 'case_map_saved'
   | 'workflow_phase_changed'
   | 'claim_map_saved'
-  | 'record_review_started';
+  | 'record_review_started'
+  // 실험용 Write 질의응답 종료 (2026-10-13부터). metadata 는 StudyWriteInterviewFinish
+  | 'interview_finished';
 
 export interface ResearchEvent {
   eventId: string;
