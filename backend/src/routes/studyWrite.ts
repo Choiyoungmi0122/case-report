@@ -138,9 +138,13 @@ router.post('/cases/:caseId/interview/start', async (req: Request, res: Response
       if (!caseData) return null;
       let state = normalizeStudyWriteState(caseData.studyWrite || createInitialStudyWriteState(req.body?.inputSource));
       if (req.body?.inputSource && !state.inputSource) state = { ...state, inputSource: req.body.inputSource };
-      // 프리셋 EMR 로 미리 만든 질문이 있으면 1회차에 모두 넣는다 (studyWrite/preparedQuestions.ts)
+      // 프리셋 EMR 로 미리 만든 질문이 있으면 1회차에 모두 넣는다 (studyWrite/preparedQuestions.ts).
+      // 2026-10-13 꺼 둠: 실험 참여자 S01·S02 와 같은 조건(1회차 고정 3개 → 2·3회차 실시간 생성)을 지킨다.
+      // 다시 켜려면 STUDY_WRITE_PREPARED_QUESTIONS=1 (실험 설계를 바꾸는 일이므로 연구자 결정 필요).
       const prepared =
-        state.rounds.length === 0 && state.inputSource?.source === 'preset'
+        process.env.STUDY_WRITE_PREPARED_QUESTIONS === '1' &&
+        state.rounds.length === 0 &&
+        state.inputSource?.source === 'preset'
           ? preparedQuestionsForCase(caseData, state.inputSource.presetId)
           : null;
       state = startInterview(state, prepared);

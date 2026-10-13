@@ -589,7 +589,7 @@ export async function generateNextRound(
     allQuestions(state).map((question) => question.text),
     Math.min(state.questionBudget.perRound, remaining)
   );
-  return buildGapRound(state, caseData, { roundNo, model, summaries, picked, unmappable, stopReason: output.stopReason });
+  return buildGapRound(state, caseData, { roundNo, model, summaries, picked, unmappable, stopReason: output.stopReason, rawQuestions: output.questions });
 }
 
 type GeneratedQuestion = { question: string; targetSectionIds: Array<string | number>; careItem: string; rationale?: string };
@@ -629,10 +629,12 @@ function buildGapRound(
     picked: Array<GeneratedQuestion & { targetSectionIds: string[] }>;
     unmappable: number;
     stopReason?: string;
+    /** 모델이 낸 질문 그대로 (섹션을 못 알아본 경우의 로그용) */
+    rawQuestions: GeneratedQuestion[];
   }
 ): { state: StudyWriteState; round: StudyWriteRound | null; stopReason?: string } {
   const { roundNo, model, summaries, picked, unmappable } = params;
-  const output = { questions: picked, stopReason: params.stopReason };
+  const output = { questions: params.rawQuestions, stopReason: params.stopReason };
   const now = new Date().toISOString();
   if (picked.length === 0 && unmappable > 0) {
     // 모델이 질문은 만들었는데 섹션을 못 알아본 경우다. 인터뷰를 끝내지 말고 다시 시도하게 한다.
