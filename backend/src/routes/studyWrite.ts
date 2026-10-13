@@ -38,6 +38,7 @@ import { buildStudyWriteManuscriptDocx } from '../studyWrite/manuscriptDocx';
 import { parseAnchorDate } from '../studyWrite/relativeDates';
 import { getStudyWritePreset, listStudyWritePresets } from '../studyWrite/presets';
 import { preparedQuestionsForCase } from '../studyWrite/preparedQuestions';
+import { PreparedAnalysis, preparedAnalysisForCase } from '../studyWrite/preparedAnalysis';
 import { buildContentDispositionHeader } from '../utils/unicode';
 
 /**
@@ -89,6 +90,35 @@ async function loadCase(caseId: string) {
 
 async function saveState(caseId: string, state: StudyWriteState) {
   await caseModel.updateCase(caseId, { studyWrite: state } as any);
+}
+
+/**
+ * 미리 돌린 분석 결과를 이 사례에 복사하고, 연구 세션이 있으면 case_processed 이벤트(prepared: true)를 남긴다.
+ * 복사한 뒤의 사례를 돌려준다 (화면이 분석이 끝난 것으로 본다).
+ */
+async function copyPreparedAnalysis(caseData: any, analysis: PreparedAnalysis): Promise<any> {
+  await caseModel.updateCase(caseData.id, { ...analysis.fields } as any);
+  const researchState = normalizeResearchState(caseData.researchState, Boolean(caseData.studyConfig?.studyMode));
+  if (isResearchTracked(researchState) && !researchState.interactionEvents.some((item) => item.eventType === 'case_processed')) {
+    await caseModel.updateCase(caseData.id, {
+      researchState: appendResearchEvent(researchState, {
+        eventId: randomUUID(),
+        eventType: 'case_processed',
+        caseId: caseData.id,
+        mode: 'write',
+        sessionId: researchState.sessionId,
+        participantCode: researchState.participantCode,
+        metadata: {
+          prepared: true,
+          presetId: analysis.presetId,
+          sourceCaseId: analysis.sourceCaseId,
+          sourceExperimentCode: analysis.sourceExperimentCode
+        }
+      }) as any
+    } as any);
+  }
+  console.log(`[studyWrite] ${caseData.id}: copied prepared analysis of ${analysis.presetId} from ${analysis.sourceCaseId}`);
+  return loadCase(caseData.id);
 }
 
 const FINISH_REASONS: ReadonlyArray<StudyWriteInterviewFinish['reason']> = [
@@ -197,10 +227,35 @@ router.get('/cases/:caseId/interview', async (req: Request, res: Response) => {
 router.post('/cases/:caseId/interview/start', async (req: Request, res: Response) => {
   try {
     const result = await serialize(req.params.caseId, async () => {
-      const caseData = await loadCase(req.params.caseId);
+      let caseData = await loadCase(req.params.caseId);
       if (!caseData) return null;
       let state = normalizeStudyWriteState(caseData.studyWrite || createInitialStudyWriteState(req.body?.inputSource));
       if (req.body?.inputSource && !state.inputSource) state = { ...state, inputSource: req.body.inputSource };
+      // 프리셋 EMR 기록 분석을 미리 돌려 둔 결과가 있으면 처음 시작할 때 복사한다 (studyWrite/preparedAnalysis.ts).
+      // 분석을 기다리지 않을 뿐 질문은 그대로 실시간이다. 이미 분석했거나 분석 요청을 보낸 사례에는 하지 않는다.
+      if (
+        state.rounds.length === 0 &&
+        !state.processingRequestedAt &&
+        !state.analysisSource &&
+        state.inputSource?.source === 'preset' &&
+        !(Array.isArray(caseData.sectionDrafts) && caseData.sectionDrafts.length > 0)
+      ) {
+        const analysis = preparedAnalysisForCase(caseData, state.inputSource.presetId);
+        if (analysis) {
+          caseData = await copyPreparedAnalysis(caseData, analysis);
+          state = {
+            ...state,
+            analysisSource: {
+              kind: 'prepared',
+              presetId: analysis.presetId,
+              sourceCaseId: analysis.sourceCaseId,
+              sourceExperimentCode: analysis.sourceExperimentCode,
+              snapshotCreatedAt: analysis.createdAt,
+              copiedAt: new Date().toISOString()
+            }
+          };
+        }
+      }
       // 프리셋 EMR 로 미리 만든 질문이 있으면 1회차에 모두 넣는다 (studyWrite/preparedQuestions.ts).
       // 2026-10-13 꺼 둠: 실험 참여자 S01·S02 와 같은 조건(1회차 고정 3개 → 2·3회차 실시간 생성)을 지킨다.
       // 다시 켜려면 STUDY_WRITE_PREPARED_QUESTIONS=1 (실험 설계를 바꾸는 일이므로 연구자 결정 필요).

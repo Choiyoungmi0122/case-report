@@ -226,6 +226,15 @@ export interface StudyWriteState {
   interviewStartedAt?: string;
   /** 질의응답을 마치고 초안 단계로 넘어간 시각 */
   interviewCompletedAt?: string;
+  /** 기록 분석을 실험 전에 미리 돌린 결과를 복사했으면 그 출처 (2026-10-13부터. 없으면 그 자리에서 분석) */
+  analysisSource?: {
+    kind: 'prepared';
+    presetId: string;
+    sourceCaseId: string;
+    sourceExperimentCode: string;
+    snapshotCreatedAt: string;
+    copiedAt: string;
+  };
   /** 질의응답이 어떻게 끝났는지 (2026-10-13부터 기록. S01·S02 에는 없다) */
   interviewFinish?: StudyWriteInterviewFinish;
   /** 분석(/process) 요청을 보낸 시각. 중복 요청을 막는 데 쓴다 */
