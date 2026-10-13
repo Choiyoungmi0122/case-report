@@ -12,6 +12,8 @@ export default defineConfig({
     host: '0.0.0.0',
     port,
     strictPort: true,
+    // 임시 공개 링크(학교 와이파이 방화벽 우회): Tailscale Funnel, Cloudflare quick tunnel
+    allowedHosts: ['.ts.net', '.trycloudflare.com'],
     proxy: {
       '/api': {
         target: apiTarget,
