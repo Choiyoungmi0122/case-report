@@ -31,6 +31,10 @@ import { STUDY_WRITE_QUESTIONS_PROMPT_VERSION, studyWriteGapQuestionsSystemPromp
 import { STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION, studyWriteCareQuestionSystemPrompt } from './prompts/studyWrite_careQuestion';
 import { STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION, studyWriteChatQuestionSystemPrompt } from './prompts/studyWrite_chatQuestion';
 import {
+  STUDY_WRITE_DISCUSSION_QUESTIONS_PROMPT_VERSION,
+  studyWriteDiscussionQuestionsSystemPrompt
+} from './prompts/studyWrite_discussionQuestions';
+import {
   STUDY_WRITE_VERIFY_CROSS_PROMPT_VERSION,
   STUDY_WRITE_VERIFY_EVIDENCE_PROMPT_VERSION,
   STUDY_WRITE_VERIFY_SECTION_PROMPT_VERSION,
@@ -71,6 +75,8 @@ import { sectionAdequacyReviewSystemPrompt as scaffoldReviewSystemPrompt } from 
  *  - SW-D v6 / SW-R v6: 2026-10-12 초록 분량을 국내 관례(6~10문장)에서 CARE 기준(영문 100~250단어 수준, 학술지 규정 우선)으로 바꿈.
  *  - SW-D v7 / SW-R v7: 2026-10-12 우선순위 블록 추가: 제1조건 CARE 세부 항목 완수, 제2조건 그 안에서 국내 증례보고 형식(사용자 결정).
  *  - SW-Q4 v1: 2026-10-12 수정 요청 채팅의 "질문 받기" (새 체인). CARE 점검의 빠진 필수 → 선택 → 세부 사항 순으로 질문 하나.
+ *  - SW-Q2 v5 / SW-Q5 v1: 2026-10-13 프리셋 EMR 질문 사전 준비. SW-Q2 상한을 사용자 메시지로 받음(사전 준비 최대 4개), SW-Q5 는 질문이 5개 미만일 때 고찰(11a~11c) 질문으로 채우는 새 체인.
+ *  - SW-Q5 v2: 2026-10-13 상한까지 채우지 않고 꼭 필요한 고찰 질문만 (사용자: "꼭 6개일 필요는 없다").
  *  - SW-Q4 v2: 2026-10-12 빠진 CARE 요소 목록 안에서만 질문(세부 사항 순서 삭제), 기전·이론적 근거·"기록에 있나요?" 질문 금지. 제목·초록·문헌 요소·빠진 것 없음은 코드가 거름.
  *  - SW-D v8 / SW-R v8: 2026-10-12 타임라인 진단 검사 칸 규칙(질의응답의 모든 답에서 검사·과거력, 타 기관 검사는 과거력 행). 타임라인은 섹션과 상관없이 모든 답을 받음(drafting.buildQaText, SW-C 입력도 같음).
  *  - SW-D v9 / SW-R v9: 2026-10-12 작업 규칙 1-1(다른 섹션용 답은 이 섹션 규칙에 맞는 사실만). 환자 정보·임상 소견·진단 평가·초록도 모든 답을 받음. 임상 소견에 타 기관 과거 검사·주소 중복 금지.
@@ -99,6 +105,7 @@ export const PROMPT_VERSIONS = {
   SW_C: STUDY_WRITE_CARE_CHECK_PROMPT_VERSION.split(':')[1],
   SW_Q3: STUDY_WRITE_CARE_QUESTION_PROMPT_VERSION.split(':')[1],
   SW_Q4: STUDY_WRITE_CHAT_QUESTION_PROMPT_VERSION.split(':')[1],
+  SW_Q5: STUDY_WRITE_DISCUSSION_QUESTIONS_PROMPT_VERSION.split(':')[1],
   SW_V1: STUDY_WRITE_VERIFY_SECTION_PROMPT_VERSION.split(':')[1],
   SW_V2: STUDY_WRITE_VERIFY_CROSS_PROMPT_VERSION.split(':')[1],
   SW_V3: STUDY_WRITE_VERIFY_EVIDENCE_PROMPT_VERSION.split(':')[1]
@@ -130,6 +137,7 @@ const SYSTEM_PROMPTS: Record<PromptKey, string> = {
   SW_C: studyWriteCareCheckSystemPrompt,
   SW_Q3: studyWriteCareQuestionSystemPrompt,
   SW_Q4: studyWriteChatQuestionSystemPrompt,
+  SW_Q5: studyWriteDiscussionQuestionsSystemPrompt,
   SW_V1: studyWriteVerifySectionSystemPrompt,
   SW_V2: studyWriteVerifyCrossSystemPrompt,
   SW_V3: studyWriteVerifyEvidenceSystemPrompt
@@ -158,6 +166,7 @@ const MODEL_KEYS: Record<PromptKey, string> = {
   SW_C: 'chain4',
   SW_Q3: 'chain4',
   SW_Q4: 'chain4',
+  SW_Q5: 'chain6',
   SW_V1: 'chain6',
   SW_V2: 'chain6',
   SW_V3: 'chain4'

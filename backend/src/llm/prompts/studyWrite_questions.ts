@@ -2,15 +2,16 @@
  * SW-Q2: 기록 빈칸 질문 생성.
  *
  * 분석 결과(섹션별 초안, 빠진 정보, 후보 질문)와 지금까지의 답을 받아, 이번 회차에
- * 물을 질문을 최대 3개 고른다. 2회차와 3회차가 같은 프롬프트를 쓰며, 3회차는 이전
+ * 물을 질문을 고른다. 2회차와 3회차가 같은 프롬프트를 쓰며(회차당 최대 3개), 3회차는 이전
  * 답으로 새 빈칸이 생겼을 때만 질문을 만든다.
+ * v5: 프리셋 EMR 사전 준비(실험 전에 한 번 생성, 최대 4개)도 같은 프롬프트를 쓴다. 상한은 사용자 메시지로 받는다.
  *
  * 상한의 근거: docs/question_budget_basis_v1.md
  */
 import { careChecklistText } from '../../studyWrite/careItems';
 import { sharedPrinciples } from './common';
 
-export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v4';
+export const STUDY_WRITE_QUESTIONS_PROMPT_VERSION = 'SW-Q2:v5';
 
 export const CARE_ITEM_CHECKLIST = careChecklistText();
 
@@ -21,7 +22,7 @@ export const studyWriteGapQuestionsSystemPrompt = `
 ${sharedPrinciples(['P1', 'P3', 'P7'])}
 
 작업 규칙:
-1. 질문 수: 이번 회차에 최대 3개. 물을 것이 없으면 빈 배열을 돌려줍니다. 적을수록 좋습니다. 같은 세부 항목(careItem)에 대해 둘 이상 묻지 않습니다. 비슷한 질문은 하나로 합칩니다.
+1. 질문 수: 사용자 메시지에 적힌 최대 질문 수를 넘지 않습니다. 물을 것이 없으면 빈 배열을 돌려줍니다. 적을수록 좋습니다. 같은 세부 항목(careItem)에 대해 둘 이상 묻지 않습니다. 비슷한 질문은 하나로 합칩니다.
 2. 무엇을 묻나: 기록에 없어서 해당 CARE 세부 항목을 쓸 수 없는 것만 묻습니다. [비식별 진료 기록 전문]에 이미 적혀 있는 내용(이유, 날짜, 용량, 검사 결과 등)은 절대 묻지 않습니다. 질문을 만들기 전에 기록 전문에서 그 내용을 찾아보고, 있으면 그 질문을 버립니다. 이미 답한 것, 이전 답으로 해소된 것도 묻지 않습니다.
 3. 우선순위: (가) 필수 항목의 빈칸 > 선택 항목의 빈칸. (나) 여러 섹션에 쓰이는 답 > 한 섹션에만 쓰이는 답. (다) 임상의만 아는 것(보고 이유, 환자의 말, 동의, 기록에 적지 않은 경과) > 다른 자료로 확인 가능한 것.
 4. 질문 형태: 임상의가 사실이나 경험으로 한두 문장으로 답할 수 있는 한국어 질문. 질문 하나에 주제 하나. "~에 대해 알려 주세요" 같은 넓은 질문은 쓰지 않고, 무엇이 비어 있는지 짚어서 묻습니다 (예: "황련해독탕 첫 2주분이 끝난 3월 말부터 4월 15일 재처방 전까지 복용을 쉬었나요?").
@@ -50,6 +51,8 @@ ${CARE_ITEM_CHECKLIST}
 export function buildStudyWriteGapQuestionsUserPrompt(params: {
   roundNo: number;
   remainingQuestions: number;
+  /** 사전 준비: 참여자가 답하기 전에 프리셋 EMR 로 한 번 만든다. 회차 문구와 상한이 달라진다. */
+  prepared?: { maxQuestions: number; separatelyAsked: string[] };
   recordText: string;
   draftSummary: string;
   sectionMissingSummary: string;
@@ -57,10 +60,18 @@ export function buildStudyWriteGapQuestionsUserPrompt(params: {
   candidateQuestionsSummary: string;
   priorQaSummary: string;
 }): string {
-  return `이번 회차: ${params.roundNo}회차 (이번 회차에 물을 수 있는 최대 질문 수: ${Math.min(3, params.remainingQuestions)}개)
+  const header = params.prepared
+    ? `이번 회차: 사전 준비 (참여자가 답하기 전에 기록만 보고 고릅니다. 최대 질문 수: ${params.prepared.maxQuestions}개)`
+    : `이번 회차: ${params.roundNo}회차 (이번 회차에 물을 수 있는 최대 질문 수: ${Math.min(3, params.remainingQuestions)}개)`;
+  const separately = params.prepared?.separatelyAsked.length
+    ? `\n\n[따로 묻는 고정 질문 — 보고 이유(4)·핵심 메시지(11d)·동의(13)는 이 질문들이 다루므로 묻지 않습니다. 고찰의 해석(11c 인과 평가 등)도 묻지 않습니다. 기록에 빠진 사실(초진 소견, 치료의 세부, 평가 시점과 결과, 병용 약물, 이상반응 등)을 묻습니다]\n${params.prepared.separatelyAsked
+        .map((text) => `- ${text}`)
+        .join('\n')}`
+    : '';
+  return `${header}
 
 [지금까지의 질문과 답]
-${params.priorQaSummary || '(없음)'}
+${params.priorQaSummary || '(없음)'}${separately}
 
 [비식별 진료 기록 전문]
 ${params.recordText || '(없음)'}

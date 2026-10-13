@@ -35,6 +35,7 @@ import { randomUUID } from 'crypto';
 import { buildStudyWriteManuscriptDocx } from '../studyWrite/manuscriptDocx';
 import { parseAnchorDate } from '../studyWrite/relativeDates';
 import { getStudyWritePreset, listStudyWritePresets } from '../studyWrite/presets';
+import { preparedQuestionsForCase } from '../studyWrite/preparedQuestions';
 import { buildContentDispositionHeader } from '../utils/unicode';
 
 /**
@@ -137,7 +138,12 @@ router.post('/cases/:caseId/interview/start', async (req: Request, res: Response
       if (!caseData) return null;
       let state = normalizeStudyWriteState(caseData.studyWrite || createInitialStudyWriteState(req.body?.inputSource));
       if (req.body?.inputSource && !state.inputSource) state = { ...state, inputSource: req.body.inputSource };
-      state = startInterview(state);
+      // 프리셋 EMR 로 미리 만든 질문이 있으면 1회차에 모두 넣는다 (studyWrite/preparedQuestions.ts)
+      const prepared =
+        state.rounds.length === 0 && state.inputSource?.source === 'preset'
+          ? preparedQuestionsForCase(caseData, state.inputSource.presetId)
+          : null;
+      state = startInterview(state, prepared);
       if (req.body?.processingRequested && !state.processingRequestedAt) {
         state = { ...state, processingRequestedAt: new Date().toISOString() };
       }

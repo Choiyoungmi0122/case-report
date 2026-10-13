@@ -819,6 +819,8 @@ export interface StudyWriteRound {
   questions: StudyWriteQuestion[];
   startedAt: string;
   completedAt?: string;
+  /** prepared: 프리셋 EMR 로 실험 전에 미리 만든 질문이 든 회차 (고정 3개 + 기록 빈칸 2~4개를 한 회차에) */
+  generation?: { prepared?: { presetId: string } };
 }
 
 export interface StudyWriteInputSource {

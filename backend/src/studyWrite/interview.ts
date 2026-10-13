@@ -10,6 +10,11 @@ import {
   buildStudyWriteGapQuestionsUserPrompt,
   studyWriteGapQuestionsSystemPrompt
 } from '../llm/prompts/studyWrite_questions';
+import {
+  STUDY_WRITE_DISCUSSION_QUESTIONS_PROMPT_VERSION,
+  buildStudyWriteDiscussionQuestionsUserPrompt,
+  studyWriteDiscussionQuestionsSystemPrompt
+} from '../llm/prompts/studyWrite_discussionQuestions';
 import { StudyWriteGapQuestionsOutputSchema } from '../llm/schemas/studyWrite_questions';
 import { StudyWriteCareQuestionOutputSchema } from '../llm/schemas/studyWrite_careQuestion';
 import { buildStudyWriteCareQuestionUserPrompt, studyWriteCareQuestionSystemPrompt } from '../llm/prompts/studyWrite_careQuestion';
@@ -94,9 +99,71 @@ export function isAnalysisReady(caseData: any): boolean {
   return drafts.length > 0 && (!progress || (!progress.currentStep && remaining.length === 0));
 }
 
-export function startInterview(state: StudyWriteState): StudyWriteState {
+/** 프리셋 EMR 로 미리 만든 기록 빈칸 질문 (studyWrite/preparedQuestions.ts 가 파일에서 읽는다) */
+export interface PreparedQuestionSet {
+  presetId: string;
+  preparedCaseId: string;
+  visitsFingerprint: string;
+  generation: NonNullable<StudyWriteRound['generation']>;
+  /** 빈칸 질문이 적어 고찰 질문(SW-Q5)으로 채웠으면 그 메타. 고찰 질문은 questions 의 뒤쪽(careItem 11a~11c) */
+  discussionGeneration?: { model: string; promptVersion: string; promptTemplateHash?: string; generatedAt: string };
+  questions: Array<{ text: string; targetSectionIds: string[]; careItem: string; rationale?: string }>;
+}
+
+/**
+ * 1회차를 연다. 미리 만든 질문 파일이 있으면(질문이 0개여도) 고정 질문 3개 뒤에 붙여 한 회차로 묻고, 회차는 더 열지 않는다
+ * (실험 중 분석·질문 생성을 기다리지 않게 한다). 파일이 없으면 고정 질문만 묻고 2·3회차를 그때 만든다.
+ */
+export function startInterview(state: StudyWriteState, prepared?: PreparedQuestionSet | null): StudyWriteState {
   if (state.rounds.length > 0) return state;
   const now = new Date().toISOString();
+  if (prepared) {
+    const all = [
+      ...FIXED_CASE_QUESTIONS.map((question) => ({ ...question, source: 'fixed' as const, rationale: undefined as string | undefined })),
+      ...prepared.questions.map((question) => ({ ...question, source: 'generated' as const }))
+    ];
+    const preparedRound: StudyWriteRound = {
+      roundNo: 1,
+      kind: 'case',
+      startedAt: now,
+      generation: {
+        ...prepared.generation,
+        prepared: {
+          presetId: prepared.presetId,
+          preparedCaseId: prepared.preparedCaseId,
+          visitsFingerprint: prepared.visitsFingerprint,
+          ...(prepared.discussionGeneration
+            ? {
+                discussionPromptVersion: prepared.discussionGeneration.promptVersion,
+                discussionPromptTemplateHash: prepared.discussionGeneration.promptTemplateHash
+              }
+            : {})
+        }
+      },
+      questions: all.map((question, index) => ({
+        id: `swq-${randomUUID()}`,
+        roundNo: 1,
+        order: index + 1,
+        text: question.text,
+        source: question.source,
+        targetSectionIds: question.targetSectionIds,
+        careItem: question.careItem,
+        priority: question.source === 'fixed' ? 'case' : priorityForCareItem(question.careItem),
+        ...(question.rationale ? { rationale: question.rationale } : {}),
+        status: 'pending',
+        answer: '',
+        askedAt: now,
+        editHistory: []
+      }))
+    };
+    return {
+      ...state,
+      questionBudget: { maxRounds: 1, perRound: all.length, maxTotal: all.length },
+      rounds: [preparedRound],
+      interviewStartedAt: now,
+      updatedAt: now
+    };
+  }
   const round: StudyWriteRound = {
     roundNo: 1,
     kind: 'case',
@@ -517,12 +584,24 @@ export async function generateNextRound(
     throw new Error('다음 질문을 만들지 못했습니다. 잠시 뒤 "다시 시도"를 눌러 주세요.');
   }
 
-  const asked = new Set(allQuestions(state).map((question) => question.text.trim()));
+  const { picked, unmappable } = pickGeneratedQuestions(
+    output.questions,
+    allQuestions(state).map((question) => question.text),
+    Math.min(state.questionBudget.perRound, remaining)
+  );
+  return buildGapRound(state, caseData, { roundNo, model, summaries, picked, unmappable, stopReason: output.stopReason });
+}
+
+type GeneratedQuestion = { question: string; targetSectionIds: Array<string | number>; careItem: string; rationale?: string };
+
+/** 체인이 낸 질문을 거른다: 섹션을 알아볼 수 없는 것, 이미 물은 것, 같은 세부 항목의 두 번째 질문을 버리고 limit 개까지 */
+function pickGeneratedQuestions(questions: GeneratedQuestion[], alreadyAsked: string[], limit: number) {
+  const asked = new Set(alreadyAsked.map((text) => text.trim()));
   // 같은 세부 항목은 한 회차에 하나만 묻는다 (모델이 8c 를 두 번 묻는 일이 있었다).
   const seenCareItems = new Set<string>();
   // 섹션 id 를 알아볼 수 없으면 careItem 코드로 섹션을 찾는다. 그래도 못 찾으면 그 질문만 버리고 세어 둔다.
   let unmappable = 0;
-  const picked = output.questions
+  const picked = questions
     .map((question) => {
       const normalized = normalizeTargetSectionIds(question.targetSectionIds);
       const targetSectionIds = normalized.length > 0 ? normalized : sectionsForCareItem(question.careItem);
@@ -536,8 +615,24 @@ export async function generateNextRound(
       if (key) seenCareItems.add(key);
       return true;
     })
-    .slice(0, Math.min(state.questionBudget.perRound, remaining));
+    .slice(0, limit);
+  return { picked, unmappable };
+}
 
+function buildGapRound(
+  state: StudyWriteState,
+  caseData: any,
+  params: {
+    roundNo: number;
+    model: string;
+    summaries: ReturnType<typeof buildAnalysisSummaries>;
+    picked: Array<GeneratedQuestion & { targetSectionIds: string[] }>;
+    unmappable: number;
+    stopReason?: string;
+  }
+): { state: StudyWriteState; round: StudyWriteRound | null; stopReason?: string } {
+  const { roundNo, model, summaries, picked, unmappable } = params;
+  const output = { questions: picked, stopReason: params.stopReason };
   const now = new Date().toISOString();
   if (picked.length === 0 && unmappable > 0) {
     // 모델이 질문은 만들었는데 섹션을 못 알아본 경우다. 인터뷰를 끝내지 말고 다시 시도하게 한다.
@@ -579,6 +674,110 @@ export async function generateNextRound(
   };
 
   return { state: { ...state, rounds: [...state.rounds, round], updatedAt: now }, round };
+}
+
+/** 미리 만들 기록 빈칸 질문의 상한. 고정 질문 3개와 합쳐 최대 7개 */
+export const PREPARED_GAP_QUESTION_MAX = 4;
+/** 고정 + 빈칸이 이보다 적으면 고찰 질문으로 채운다 */
+export const PREPARED_TOTAL_MIN = 5;
+/** 미리 만든 질문의 총 상한 (고정 포함). 고찰 질문은 이 안에서 필요한 만큼만 (채우지 않는다) */
+export const PREPARED_TOTAL_MAX = 7;
+
+/**
+ * 프리셋 EMR 사전 준비: 분석이 끝난 사례로 기록 빈칸 질문을 한 번 만든다(참여자 답 없음).
+ * 고정 질문과 같은 내용은 묻지 않게 고정 질문을 함께 보낸다.
+ */
+export async function generatePreparedQuestions(caseData: any): Promise<{
+  questions: PreparedQuestionSet['questions'];
+  generation: PreparedQuestionSet['generation'];
+  discussionGeneration?: PreparedQuestionSet['discussionGeneration'];
+  stopReason?: string;
+}> {
+  if (!isAnalysisReady(caseData)) throw new Error('기록 분석이 아직 끝나지 않았습니다.');
+  const summaries = buildAnalysisSummaries(caseData);
+  // 실험 전에 한 번 만들므로 기다림이 문제가 아니다. 초안(SW-D)과 같은 상위 모델을 쓴다:
+  // 회차용 모델(chain5)은 첫 준비에서 기록에 이미 있는 활력징후·침 규격을 다시 물었다.
+  const model = getModelForChain('chain6');
+  const fixedTexts = FIXED_CASE_QUESTIONS.map((question) => question.text);
+  const output = await callLLMWithSchema(
+    StudyWriteGapQuestionsOutputSchema,
+    studyWriteGapQuestionsSystemPrompt,
+    buildStudyWriteGapQuestionsUserPrompt({
+      roundNo: 0,
+      remainingQuestions: PREPARED_GAP_QUESTION_MAX,
+      prepared: { maxQuestions: PREPARED_GAP_QUESTION_MAX, separatelyAsked: fixedTexts },
+      recordText: buildRecordText(caseData),
+      ...summaries,
+      priorQaSummary: ''
+    }),
+    { model, label: 'SW-Q2 prepared' }
+  );
+  // 고정 질문이 다루는 항목(4 보고 이유, 11d 핵심 메시지, 13 동의)과 해석을 요구하는 11c(인과 평가)는 버린다.
+  // 첫 준비(가상환자)에서 모델이 고정 질문과 같은 동의·핵심 메시지 질문과 인과 평가 질문을 냈다.
+  const excluded = new Set(['4', '11c', '11d', '13']);
+  const kept = output.questions.filter((question) => {
+    const codes = String(question.careItem || '').toLowerCase().match(/\d{1,2}[a-d]?/g) || [];
+    return !codes.some((code) => excluded.has(code));
+  });
+  if (kept.length < output.questions.length) {
+    console.warn(`[SW-Q2 prepared] ${output.questions.length - kept.length} question(s) dropped: covered by fixed questions or interpretive (4/11c/11d/13)`);
+  }
+  const { picked, unmappable } = pickGeneratedQuestions(kept, fixedTexts, PREPARED_GAP_QUESTION_MAX);
+  if (unmappable > 0) console.warn(`[SW-Q2 prepared] ${unmappable} question(s) dropped: unrecognizable section ids`);
+
+  // 기록이 충실해 빈칸 질문이 적으면(고정 포함 5개 미만) 고찰 질문(SW-Q5, 11a~11c)을 더한다. 개수는 맞추지 않고
+  // 총 7개 안에서 모델이 필요한 만큼만 고른다 (사용자: "꼭 6개일 필요는 없다").
+  const discussionMax = FIXED_CASE_QUESTIONS.length + picked.length < PREPARED_TOTAL_MIN
+    ? PREPARED_TOTAL_MAX - FIXED_CASE_QUESTIONS.length - picked.length
+    : 0;
+  let discussion: ReturnType<typeof pickGeneratedQuestions>['picked'] = [];
+  let discussionGeneration: PreparedQuestionSet['discussionGeneration'];
+  if (discussionMax > 0) {
+    const discussionOutput = await callLLMWithSchema(
+      StudyWriteGapQuestionsOutputSchema,
+      studyWriteDiscussionQuestionsSystemPrompt,
+      buildStudyWriteDiscussionQuestionsUserPrompt({
+        maxQuestions: discussionMax,
+        recordText: buildRecordText(caseData),
+        separatelyAsked: [...fixedTexts, ...picked.map((question) => question.question)]
+      }),
+      { model, label: 'SW-Q5 prepared' }
+    );
+    const discussionCodes = new Set(['11a', '11b', '11c']);
+    const onlyDiscussion = discussionOutput.questions.filter((question) =>
+      (String(question.careItem || '').toLowerCase().match(/\d{1,2}[a-d]?/g) || []).some((code) => discussionCodes.has(code))
+    );
+    discussion = pickGeneratedQuestions(
+      onlyDiscussion,
+      [...fixedTexts, ...picked.map((question) => question.question)],
+      discussionMax
+    ).picked;
+    discussionGeneration = {
+      model,
+      promptVersion: STUDY_WRITE_DISCUSSION_QUESTIONS_PROMPT_VERSION,
+      promptTemplateHash: promptMeta('SW_Q5').promptTemplateHash,
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  return {
+    questions: [...picked, ...discussion].map((question) => ({
+      text: question.question.trim(),
+      targetSectionIds: question.targetSectionIds,
+      careItem: question.careItem,
+      rationale: question.rationale
+    })),
+    discussionGeneration,
+    generation: {
+      model,
+      promptVersion: STUDY_WRITE_QUESTIONS_PROMPT_VERSION,
+      promptTemplateHash: promptMeta('SW_Q2').promptTemplateHash,
+      generatedAt: new Date().toISOString(),
+      candidateCount: summaries.candidateCount,
+      recordTruncated: isRecordTruncated(caseData)
+    },
+    stopReason: output.stopReason
+  };
 }
 
 /** 화면에 돌려줄 때 참여자에게 보이지 않아야 하는 필드를 뺀다. */

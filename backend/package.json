@@ -12,6 +12,7 @@
     "usage:summary": "tsx scripts/summarizeLlmUsage.ts",
     "eval:scaffold-prompt": "tsx scripts/evalScaffoldPrompt.ts",
     "study:freeze": "tsx scripts/freezeStudyCase.ts",
+    "study-write:prepare": "tsx scripts/prepareStudyWriteQuestions.ts",
     "test:rag": "tsx tests/rag/termNormalizer.test.ts",
     "test:rag-loader": "tsx tests/rag/terminologyLoader.test.ts",
     "test:rag-hybrid": "tsx tests/rag/hybridRetriever.test.ts",

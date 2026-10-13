@@ -21,6 +21,7 @@ const POLL_MS = 3000;
 
 type ChatItem =
   | { kind: 'system'; id: string; text: string }
+  | { kind: 'overview'; id: string; questions: StudyWriteQuestion[]; currentId?: string }
   | { kind: 'question'; id: string; question: StudyWriteQuestion }
   | { kind: 'answer'; id: string; question: StudyWriteQuestion };
 
@@ -217,11 +218,20 @@ export default function StudyWriteInterviewPage() {
   };
 
   const items: ChatItem[] = [];
+  // 미리 만든 질문(프리셋 EMR): 여쭐 질문 전체를 먼저 보여 주고, 답은 아래 채팅에서 하나씩 받는다.
+  const preparedRound = interview?.rounds.find((round) => round.generation?.prepared);
+  const answerHelp =
+    '한두 문장이면 충분합니다. 답하기 어려우면 입력창 아래 "답하기 어려우면"에서 기록 없음 · 확인할 수 없음 · 추후 확인 필요 · 자료 확인 필요(보류) 중 하나를 고르세요. 보류한 질문은 기록을 본 뒤 다시 답할 수 있습니다.';
   items.push({
     kind: 'system',
     id: 'intro',
-    text: '기록을 바탕으로 증례보고 초안을 쓰기 전에 몇 가지만 여쭙겠습니다. 한두 문장이면 충분합니다. 답하기 어려우면 입력창 아래 "답하기 어려우면"에서 기록 없음 · 확인할 수 없음 · 추후 확인 필요 · 자료 확인 필요(보류) 중 하나를 고르세요. 보류한 질문은 기록을 본 뒤 다시 답할 수 있습니다.'
+    text: preparedRound
+      ? `기록을 미리 살펴보고 초안을 쓰기 전에 여쭐 질문 ${preparedRound.questions.length}개를 준비했습니다. 기록에 충분히 적혀 있는 내용은 묻지 않기 때문에 질문 수는 사례마다 다릅니다. 아래에서 하나씩 여쭙겠습니다. ${answerHelp}`
+      : `기록을 바탕으로 증례보고 초안을 쓰기 전에 몇 가지만 여쭙겠습니다. ${answerHelp}`
   });
+  if (preparedRound) {
+    items.push({ kind: 'overview', id: 'overview', questions: preparedRound.questions, currentId: pendingQuestion?.id });
+  }
   for (const round of interview?.rounds || []) {
     if (round.roundNo > 1) {
       items.push({
@@ -293,6 +303,24 @@ export default function StudyWriteInterviewPage() {
                 <div key={item.id} className="sw-bubble sw-bubble--system">
                   {item.text}
                 </div>
+              );
+            }
+            if (item.kind === 'overview') {
+              return (
+                <section key={item.id} className="sw-overview" aria-label="여쭐 질문 전체">
+                  <p className="sw-overview__title">여쭐 질문 {item.questions.length}개</p>
+                  <ol className="sw-overview__list">
+                    {item.questions.map((question) => {
+                      const state = question.status !== 'pending' ? 'done' : question.id === item.currentId ? 'current' : 'todo';
+                      return (
+                        <li key={question.id} className={`sw-overview__item is-${state}`}>
+                          <span className="sw-overview__status">{state === 'done' ? '답함' : state === 'current' ? '지금' : '남음'}</span>
+                          <span>{question.text}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
               );
             }
             if (item.kind === 'question') {

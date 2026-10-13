@@ -63,6 +63,15 @@ export interface StudyWriteRound {
     candidateCount: number;
     /** 기록 전문이 길어 뒷부분을 잘라 보냈으면 true */
     recordTruncated?: boolean;
+    /** 프리셋 EMR 로 실험 전에 미리 만든 질문이면 그 출처 (2026-10-13부터) */
+    prepared?: {
+      presetId: string;
+      preparedCaseId: string;
+      visitsFingerprint: string;
+      /** 고찰 질문(SW-Q5)으로 채웠으면 그 버전 */
+      discussionPromptVersion?: string;
+      discussionPromptTemplateHash?: string;
+    };
   };
 }
 
