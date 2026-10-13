@@ -116,7 +116,66 @@ CaseSchema.index(
 );
 SectionInteractionSchema.index({ caseId: 1, sectionId: 1 }, { unique: true });
 
+/**
+ * 실험용 Write 사례 전용 컬렉션 (2026-10-13). 학생 Scaffold 기록과 코드 공간을 나눈다:
+ * 같은 참가자 코드(S2 등)를 두 실험이 따로 쓸 수 있다. Write 전용이라 mode 는 'write' 만,
+ * scaffoldState 는 두지 않는다. 사례 id 는 cases 컬렉션과 겹치지 않는다(같은 생성 규칙).
+ */
+const StudyWriteCaseSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    experiment_code: { type: String, required: true },
+    createdAt: { type: Date, required: true, default: Date.now },
+    mode: { type: String, enum: ['write'], default: 'write', required: true },
+    title: { type: String, default: null },
+    studyMetadata: { type: Object, default: null },
+    versionMetadata: { type: Object, default: null },
+    caseInputValidation: { type: Object, default: null },
+    sessionOutcome: { type: Object, default: null },
+    researcherAssistance: { type: Array, default: [] },
+    technicalIssues: { type: Array, default: [] },
+    visits: { type: Array, required: true },
+    timelineEvents: { type: Array, default: [] },
+    deidentifiedEMRs: { type: Array, default: [] },
+    pendingTermConfirmations: { type: Array, default: [] },
+    reviewRequired: { type: Object, default: null },
+    staleState: { type: Object, default: null },
+    processingCache: { type: Object, default: null },
+    chainCache: { type: Object, default: {} },
+    chainProgress: { type: Object, default: null },
+    chainPerformanceLogs: { type: Array, default: [] },
+    exportLogs: { type: Array, default: [] },
+    finalComposeStatus: { type: Object, default: null },
+    sectionEvidenceMap: { type: Object, default: {} },
+    sectionStatusMap: { type: Object, default: {} },
+    draftsBySection: { type: Object, default: {} },
+    evidenceCards: { type: Array, default: [] },
+    sectionStates: { type: Array, default: [] },
+    commonMissingItems: { type: Array, default: [] },
+    commonQuestionSets: { type: Array, default: [] },
+    answerUndoStack: { type: Array, default: [] },
+    sectionDrafts: { type: Array, default: [] },
+    sectionAdequacyReviews: { type: Object, default: {} },
+    studyWrite: { type: Object, default: null },
+    researchState: { type: Object, default: null },
+    studyConfig: { type: Object, default: null },
+    finalDraft: { type: Object, default: null }
+  },
+  {
+    collection: 'study_write_cases'
+  }
+);
+
+StudyWriteCaseSchema.index(
+  { experiment_code: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { experiment_code: { $type: 'string' } }
+  }
+);
+
 export const CaseModel = mongoose.model('Case', CaseSchema);
+export const StudyWriteCaseModel = mongoose.model('StudyWriteCase', StudyWriteCaseSchema);
 export const ExperimentCounterModel = mongoose.model('ExperimentCounter', ExperimentCounterSchema);
 export const SectionInteractionModel = mongoose.model('SectionInteraction', SectionInteractionSchema);
 export const ManuscriptReviewModel = mongoose.model('ManuscriptReview', ManuscriptReviewSchema);
@@ -220,6 +279,7 @@ async function migrateExperimentCodes(): Promise<void> {
   await migrateExperimentCodesForMode('write');
   await migrateExperimentCodesForMode('scaffold');
   await CaseModel.syncIndexes();
+  await StudyWriteCaseModel.syncIndexes();
   await ExperimentCounterModel.syncIndexes();
 }
 

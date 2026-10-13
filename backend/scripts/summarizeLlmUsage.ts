@@ -173,9 +173,10 @@ async function lookupCases(caseIds: string[]): Promise<Map<string, string>> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
   const mongoose = (await import('mongoose')).default;
-  const { CaseModel, initDatabase } = await import('../src/db/schema');
+  const { CaseModel, StudyWriteCaseModel, initDatabase } = await import('../src/db/schema');
   await initDatabase();
   try {
+    // 실험용 Write 사례는 study_write_cases 컬렉션에 따로 있다.
     const docs: any[] = await CaseModel.aggregate([
       { $match: { id: { $in: caseIds } } },
       {
@@ -186,6 +187,15 @@ async function lookupCases(caseIds: string[]): Promise<Map<string, string>> {
           studyMode: '$studyConfig.studyMode',
           scaffoldVersion: '$versionMetadata.scaffoldVersion',
           hasStudyWrite: { $eq: [{ $type: '$studyWrite' }, 'object'] }
+        }
+      },
+      {
+        $unionWith: {
+          coll: StudyWriteCaseModel.collection.name,
+          pipeline: [
+            { $match: { id: { $in: caseIds } } },
+            { $project: { id: 1, experiment_code: 1, mode: 1, hasStudyWrite: { $literal: true } } }
+          ]
         }
       }
     ]).exec();

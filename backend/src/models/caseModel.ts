@@ -1,6 +1,8 @@
+import type { Model as MongooseModel } from 'mongoose';
 import { Case, SectionInteraction, CareSection, ChainCacheEntry, ChainPerformanceLog } from '../types';
 import {
   CaseModel as CaseMongoModel,
+  StudyWriteCaseModel,
   SectionInteractionModel,
   advanceExperimentCounterForCode,
   reserveExperimentCode
@@ -57,9 +59,28 @@ function deriveDraftsBySection(rawSectionDrafts: any[], rawDraftsBySection: Reco
   return merged;
 }
 
+type CaseCollection = MongooseModel<any>;
+
+/**
+ * 사례가 든 컬렉션. 실험용 Write 는 study_write_cases, 나머지(학생 Scaffold·일반 Write)는 cases.
+ * 이동 스크립트로 옮긴 사례도 같은 id 를 쓰므로, 매번 실험용 Write 컬렉션부터 찾는다.
+ */
+async function collectionFor(id: string): Promise<CaseCollection | null> {
+  if (await StudyWriteCaseModel.exists({ id })) return StudyWriteCaseModel;
+  if (await CaseMongoModel.exists({ id })) return CaseMongoModel;
+  return null;
+}
+
 export class CaseModel {
   async getAllCases(mode?: 'write' | 'scaffold'): Promise<Case[]> {
-    const docs = await CaseMongoModel.find(mode ? { mode } : {}).sort({ createdAt: -1 }).exec();
+    const filter = mode ? { mode } : {};
+    const [legacyDocs, studyWriteDocs] = await Promise.all([
+      CaseMongoModel.find(filter).exec(),
+      mode === 'scaffold' ? Promise.resolve([]) : StudyWriteCaseModel.find(filter).exec()
+    ]);
+    const docs = [...legacyDocs, ...studyWriteDocs].sort(
+      (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
     return docs.map((doc) => ({
       id: doc.id,
@@ -152,17 +173,34 @@ export class CaseModel {
     ).exec();
   }
 
-  async createCase(caseData: Omit<Case, 'id' | 'createdAt'>): Promise<string> {
+  /**
+   * 실험 코드로 사례를 찾는다. studyWrite 가 true 면 실험용 Write 컬렉션에서만, false 면 cases 에서만 찾는다
+   * (두 실험이 같은 코드를 따로 쓸 수 있다).
+   */
+  async findByExperimentCode(code: string, options: { studyWrite: boolean }): Promise<Case | null> {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) return null;
+    const Model: CaseCollection = options.studyWrite ? StudyWriteCaseModel : CaseMongoModel;
+    const doc: any = await Model.findOne({ experiment_code: normalized }, { id: 1 }).lean().exec();
+    return doc ? this.getCase(doc.id) : null;
+  }
+
+  async createCase(
+    caseData: Omit<Case, 'id' | 'createdAt'>,
+    options: { studyWrite?: boolean } = {}
+  ): Promise<string> {
     const id = `case_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const createdAt = new Date();
     const mode = ((caseData as any).mode || 'write') as 'write' | 'scaffold';
+    if (options.studyWrite && mode !== 'write') throw new Error('실험용 Write 사례는 write 모드만 쓸 수 있습니다.');
+    const Model: CaseCollection = options.studyWrite ? StudyWriteCaseModel : CaseMongoModel;
     const requestedExperimentCode =
       typeof (caseData as any).experiment_code === 'string'
         ? (caseData as any).experiment_code.trim().toUpperCase()
         : '';
     const experimentCode = requestedExperimentCode || (await reserveExperimentCode(mode));
 
-    const newCase = new CaseMongoModel({
+    const newCase = new Model({
       id,
       experiment_code: experimentCode,
       createdAt,
@@ -199,7 +237,8 @@ export class CaseModel {
   }
 
   async getCase(id: string): Promise<Case | null> {
-    const doc = await CaseMongoModel.findOne({ id }).exec();
+    const doc: any =
+      (await StudyWriteCaseModel.findOne({ id }).exec()) || (await CaseMongoModel.findOne({ id }).exec());
     if (!doc) return null;
 
     const rawDraftsBySection = doc.draftsBySection || {};
@@ -250,8 +289,15 @@ export class CaseModel {
   }
 
   async updateCase(id: string, updates: Partial<Case>): Promise<void> {
-    const doc = await CaseMongoModel.findOne({ id }).exec();
-    if (!doc) throw new Error('Case not found');
+    const Model = await collectionFor(id);
+    if (!Model) throw new Error('Case not found');
+    if (Model === StudyWriteCaseModel) {
+      // 실험용 Write 컬렉션에는 scaffold 필드가 없다. 조용히 버려지지 않게 막는다.
+      if ((updates as any).mode !== undefined && (updates as any).mode !== 'write') {
+        throw new Error('실험용 Write 사례의 모드는 바꿀 수 없습니다.');
+      }
+      if ((updates as any).scaffoldState) throw new Error('실험용 Write 사례에는 scaffoldState 를 저장하지 않습니다.');
+    }
 
     const updateData: any = {};
     if (updates.title !== undefined) updateData.title = updates.title;
@@ -294,7 +340,7 @@ export class CaseModel {
     if ((updates as any).finalDraft !== undefined) updateData.finalDraft = (updates as any).finalDraft;
     if ((updates as any).studyWrite !== undefined) updateData.studyWrite = (updates as any).studyWrite;
 
-    await CaseMongoModel.updateOne({ id }, { $set: updateData }).exec();
+    await Model.updateOne({ id }, { $set: updateData }).exec();
   }
 
   /**
@@ -331,12 +377,13 @@ export class CaseModel {
     if (Object.keys(unset).length > 0) update.$unset = unset;
     if (logs.length > 0) update.$push = { chainPerformanceLogs: { $each: logs, $slice: -200 } };
     if (Object.keys(update).length === 0) return;
+    const Model: CaseCollection = (await collectionFor(id)) || CaseMongoModel;
 
     try {
-      await CaseMongoModel.updateOne({ id }, update).exec();
+      await Model.updateOne({ id }, update).exec();
     } catch (error) {
       // 옛 문서에서 필드가 null 이면 점 경로 갱신이 실패한다. 그때만 읽어서 합친 값으로 쓴다.
-      const doc: any = await CaseMongoModel.findOne({ id }).lean().exec();
+      const doc: any = await Model.findOne({ id }).lean().exec();
       if (!doc) throw error;
       const chainCache = { ...(doc.chainCache || {}) };
       for (const [key, value] of Object.entries(params.cacheEntries || {})) {
@@ -344,7 +391,7 @@ export class CaseModel {
         else if (value !== undefined) chainCache[key] = value;
       }
       const reviews = { ...(doc.sectionAdequacyReviews || {}), ...(params.sectionAdequacyReviews || {}) };
-      await CaseMongoModel.updateOne(
+      await Model.updateOne(
         { id },
         {
           $set: {
@@ -374,5 +421,6 @@ export class CaseModel {
   async deleteCase(id: string): Promise<void> {
     await SectionInteractionModel.deleteMany({ caseId: id }).exec();
     await CaseMongoModel.deleteOne({ id }).exec();
+    await StudyWriteCaseModel.deleteOne({ id }).exec();
   }
 }

@@ -2079,8 +2079,9 @@ router.post('/study/start', async (req: Request, res: Response) => {
 
     const sessionId = buildStudySessionId({ participantCode, mode, studyCaseId });
     const cases = await caseModel.getAllCases(mode);
+    // write 는 실험용 Write 컬렉션, scaffold 는 cases 에서만 코드를 찾는다 (코드 공간이 따로다).
     const existingByExperimentCode = requestedExperimentCode
-      ? cases.find((item) => String((item as any).experiment_code || '').toUpperCase() === requestedExperimentCode)
+      ? await caseModel.findByExperimentCode(requestedExperimentCode, { studyWrite: mode === 'write' })
       : null;
 
     if (existingByExperimentCode) {
@@ -2147,7 +2148,7 @@ router.post('/study/start', async (req: Request, res: Response) => {
         fixedCase: true
       } as any,
       researchState: null
-    } as any);
+    } as any, { studyWrite: mode === 'write' });
 
     const researchState = buildInitialResearchState({
       caseId,
@@ -2191,6 +2192,16 @@ router.post('/study/start', async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message || 'Failed to start study session.' });
   }
 });
+
+/**
+ * 실험용 Write 사례인가: write 모드이면서 연구 세션(sessionId)을 달고 만든 사례.
+ * 이런 사례는 학생 Scaffold 기록과 분리된 study_write_cases 컬렉션에 저장한다.
+ */
+function isStudyWriteCreate(body: any): boolean {
+  if (body?.mode === 'scaffold') return false;
+  const sessionId = body?.metadata?.sessionId;
+  return typeof sessionId === 'string' && sessionId.trim().length > 0;
+}
 
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -2256,7 +2267,7 @@ router.post('/', async (req: Request, res: Response) => {
         metadata?.researchState
           ? normalizeResearchState(metadata.researchState, Boolean(metadata?.studyConfig?.studyMode))
           : null
-    });
+    }, { studyWrite: isStudyWriteCreate(req.body) });
 
     // A research session is attached whenever the caller supplies a sessionId
     // (researcher-run session on the participant's own EMR). This is what links
@@ -2300,8 +2311,9 @@ router.post('/', async (req: Request, res: Response) => {
     if (error?.code === 11000 && error?.keyPattern?.experiment_code) {
       // 같은 코드로 만든 사례가 있으면 어디서 이어서 할지 같이 알려 준다.
       const code = String(error?.keyValue?.experiment_code || req.body?.experimentCode || req.body?.metadata?.experimentCode || '');
+      // 실험용 Write 와 나머지는 코드 공간이 따로다. 이 요청이 들어가려던 컬렉션에서만 찾는다.
       const existing: any = code
-        ? (await caseModel.getAllCases()).find((item: any) => String(item.experiment_code || '').toUpperCase() === code.toUpperCase())
+        ? await caseModel.findByExperimentCode(code, { studyWrite: isStudyWriteCreate(req.body) })
         : null;
       // Scaffold 버전이 다른 기존 기록(예: 학생 V1)으로는 이어서 하지 못하게 한다.
       const requestedMode = req.body?.mode === 'scaffold' ? 'scaffold' : 'write';
