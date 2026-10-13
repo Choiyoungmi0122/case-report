@@ -86,7 +86,7 @@ export default function ReadOnlyStageNavigator({
                 cursor: 'pointer'
               }}
             >
-              {stopIndex + 1}. {stop.label}
+              {stopIndex}. {stop.label}
             </button>
           );
         })}
@@ -103,7 +103,7 @@ export default function ReadOnlyStageNavigator({
   );
 }
 
-/** 기록 읽기 → 개요 → 항목별(공개 전, 공개 후) → 학습 기록 순서의 이동 목록. */
+/** 시작 안내 → 기록 읽기 → 개요 → 항목별(공개 전, 공개 후) → 학습 기록 순서의 이동 목록. 번호는 0부터 붙인다. */
 export function buildReadOnlyStops(params: {
   caseId: string;
   sectionIds: string[];
@@ -116,8 +116,10 @@ export function buildReadOnlyStops(params: {
 }): ReadOnlyStop[] {
   const base = `${params.basePath || '/study/scaffold'}/cases/${params.caseId}`;
   const stops: ReadOnlyStop[] = [
+    // 참가자가 처음 본 시작 안내(오늘 실습의 목적과 진행 방법, CARE 13개 항목) (2026-10-13)
+    { key: 'intro', label: 'CARE 항목 개요', path: `${base}?phase=intro` },
     { key: 'read', label: '기록 읽기 · 메모', path: `${base}?phase=read` },
-    { key: 'overview', label: 'CARE 항목 개요', path: `${base}?phase=write` }
+    { key: 'overview', label: 'CARE 항목 목록', path: `${base}?phase=write` }
   ];
 
   for (const sectionId of params.sectionIds) {
@@ -189,6 +191,8 @@ export function getReadOnlyStage(): ReadOnlyStage {
 }
 
 /** 주소의 `?phase=`로 정해지는, 개요 화면의 다시 보기 단계. */
-export function getReadOnlyOverviewPhase(): 'read' | 'write' {
-  return new URLSearchParams(window.location.search).get('phase') === 'read' ? 'read' : 'write';
+export function getReadOnlyOverviewPhase(): 'intro' | 'read' | 'write' {
+  const phase = new URLSearchParams(window.location.search).get('phase');
+  if (phase === 'intro') return 'intro';
+  return phase === 'read' ? 'read' : 'write';
 }

@@ -183,8 +183,9 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
 
   useEffect(() => {
     if (!data || !readOnlyView) return;
-    setCurrentPhase(readOnlyPhase === 'read' ? 'case_understanding' : 'section_drafting');
-    setIntroDone(true);
+    setCurrentPhase(readOnlyPhase === 'write' ? 'section_drafting' : 'case_understanding');
+    // 'intro' 는 참가자가 처음 본 시작 안내 화면을 보여 준다
+    setIntroDone(readOnlyPhase !== 'intro');
   }, [data, readOnlyView, readOnlyPhase]);
 
   useEffect(() => {
@@ -691,7 +692,7 @@ export default function ScaffoldOverviewPage({ studyMode = false }: { studyMode?
   return (
     <ScaffoldPageFrame>
       {studyMode ? <SessionTimer startedAt={data.scaffoldState.startedAt} /> : null}
-      <ReadOnlyNavigatorBar caseId={caseId} data={data} currentKey={readOnlyPhase === 'read' ? 'read' : 'overview'} />
+      <ReadOnlyNavigatorBar caseId={caseId} data={data} currentKey={readOnlyPhase === 'write' ? 'overview' : readOnlyPhase} />
       <main className="scaffold-v2">
         <header className="scaffold-v2__header">
           <div>

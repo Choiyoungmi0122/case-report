@@ -51,5 +51,6 @@ export function isTelemetryRequest(url: string | undefined): boolean {
 }
 
 export function readOnlyViewPath(caseId: string): string {
-  return `/study/scaffold/cases/${caseId}?readonly=1&phase=read`;
+  // 0번(시작 안내)부터 연다
+  return `/study/scaffold/cases/${caseId}?readonly=1&phase=intro`;
 }
