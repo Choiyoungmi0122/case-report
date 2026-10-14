@@ -38,3 +38,8 @@ Thumbs.db
 
 # ---- local QA / generated artifacts ----
 tmp/
+
+# ---- research data (participants' records, coding sheets, exports) ----
+# 학생·참여자 실험 데이터. git 에 올리지 않는다 (실험 컴퓨터에만 둔다).
+coding/
+exports/
