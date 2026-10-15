@@ -10,6 +10,8 @@ import { DEFAULT_STUDY_CASE } from '../study/cases/defaultStudyCase';
  *   익명 기록이므로 git 에 올리지 않고(docs/study_write_presets_README.md 참고) 실험 컴퓨터에만 둔다.
  *   JSON 은 scripts/buildStudyWritePreset.ts 로 만든다.
  * - 어느 경우든 방문 기록만 돌려준다. 분석 결과·AI 초안은 새로 만든다.
+ * - 같은 폴더의 hidden.txt 에 적은 id(한 줄에 하나, # 뒤는 설명)는 목록에서만 뺀다 (2026-10-14). id 로 직접 부르면 그대로 돌려주므로
+ *   이미 그 사례로 시작한 참여자 기록과 미리 준비한 분석·질문은 영향이 없다. 다시 보이게 하려면 그 줄을 지운다.
  */
 
 export interface StudyWritePresetVisit {
@@ -87,8 +89,24 @@ function readFilePresets(): StudyWritePreset[] {
     .filter((preset): preset is StudyWritePreset => Boolean(preset));
 }
 
+function readHiddenPresetIds(): Set<string> {
+  const file = path.join(PRESET_DIR, 'hidden.txt');
+  if (!fs.existsSync(file)) return new Set();
+  return new Set(
+    fs
+      .readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.replace(/#.*$/, '').trim())
+      .filter(Boolean)
+  );
+}
+
+/** 화면의 "실험 사례 불러오기" 목록. hidden.txt 에 적은 사례는 뺀다 */
 export function listStudyWritePresets(): Array<Omit<StudyWritePreset, 'visits'>> {
-  return [virtualPatientPreset(), ...readFilePresets()].map(({ visits: _visits, ...rest }) => rest);
+  const hidden = readHiddenPresetIds();
+  return [virtualPatientPreset(), ...readFilePresets()]
+    .filter((preset) => !hidden.has(preset.id))
+    .map(({ visits: _visits, ...rest }) => rest);
 }
 
 export function getStudyWritePreset(id: string): StudyWritePreset | null {
